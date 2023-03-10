@@ -1,0 +1,13 @@
+[package]
+name = "ldr_tools_py"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+pyo3 = { version = "0.18.1", features = ["extension-module"] }
+numpy = "0.18.0"
+ldr_tools = { path = "../ldr_tools" }
+
+[lib]
+name = "ldr_tools_py"
+crate-type = ["cdylib"]

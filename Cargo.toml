@@ -1,0 +1,2 @@
+[workspace]
+members = ["ldr_tools", "ldr_tools_py"]
