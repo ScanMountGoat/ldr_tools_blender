@@ -12,6 +12,11 @@ pub struct LDrawGeometry {
     pub face_colors: Vec<u32>, // single element if all faces share a color
 }
 
+struct GeometryContext {
+    current_color: u32,
+    transform: Mat4,
+}
+
 pub fn create_geometry(
     source_file: &weldr::SourceFile,
     source_map: &weldr::SourceMap,
@@ -26,26 +31,18 @@ pub fn create_geometry(
         face_colors: Vec::new(),
     };
 
-    let scale = Mat4::from_scale(vec3(SCALE, SCALE, SCALE));
+    // TODO: Track BFC and inversion.
 
-    // Check if we want to automatically resolve subfile reference commands.
-    if recursive {
-        for (ctx, cmd) in source_file.iter(source_map) {
-            // Account for the recursive iterator also updating the color.
-            // TODO: This iterator is confusing to understand.
-            // Is it easier for weldr to just take a closure to process the current "node" commands?
-            let cmd_color = replace_color(ctx.color, current_color);
-            add_command_geometry(cmd, &mut geometry, scale * ctx.transform, cmd_color);
-        }
-    } else {
-        let ctx = weldr::DrawContext {
+    append_geometry(
+        &mut geometry,
+        source_file,
+        source_map,
+        GeometryContext {
+            current_color,
             transform: Mat4::IDENTITY,
-            color: current_color,
-        };
-        for cmd in &source_file.cmds {
-            add_command_geometry(cmd, &mut geometry, scale * ctx.transform, current_color);
-        }
-    }
+        },
+        recursive,
+    );
 
     // Optimize the case where all face colors are the same.
     // This reduces overhead when processing data in Python.
@@ -59,26 +56,45 @@ pub fn create_geometry(
     geometry
 }
 
-fn add_command_geometry(
-    cmd: &Command,
+fn append_geometry(
     geometry: &mut LDrawGeometry,
-    transform: Mat4,
-    current_color: u32,
+    source_file: &weldr::SourceFile,
+    source_map: &weldr::SourceMap,
+    ctx: GeometryContext,
+    recursive: bool,
 ) {
-    match cmd {
-        Command::Triangle(t) => {
-            add_face(geometry, transform, &t.vertices);
+    // Only apply the scale to the current transform.
+    let scale = Mat4::from_scale(vec3(SCALE, SCALE, SCALE));
+    let current_transform = scale * ctx.transform;
 
-            let color = replace_color(t.color, current_color);
-            geometry.face_colors.push(color);
-        }
-        Command::Quad(q) => {
-            add_face(geometry, transform, &q.vertices);
+    for cmd in &source_file.cmds {
+        match cmd {
+            Command::Triangle(t) => {
+                add_face(geometry, current_transform, &t.vertices);
 
-            let color = replace_color(q.color, current_color);
-            geometry.face_colors.push(color);
+                let color = replace_color(t.color, ctx.current_color);
+                geometry.face_colors.push(color);
+            }
+            Command::Quad(q) => {
+                add_face(geometry, current_transform, &q.vertices);
+
+                let color = replace_color(q.color, ctx.current_color);
+                geometry.face_colors.push(color);
+            }
+            Command::SubFileRef(subfile_cmd) => {
+                if recursive {
+                    if let Some(subfile) = source_map.get(&subfile_cmd.file) {
+                        let child_ctx = GeometryContext {
+                            current_color: replace_color(subfile_cmd.color, ctx.current_color),
+                            transform: ctx.transform * subfile_cmd.matrix(),
+                        };
+
+                        append_geometry(geometry, subfile, source_map, child_ctx, recursive);
+                    }
+                }
+            }
+            _ => {}
         }
-        _ => {}
     }
 }
 
@@ -98,43 +114,33 @@ fn add_face(geometry: &mut LDrawGeometry, transform: Mat4, vertices: &[weldr::Ve
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
 
     use indoc::indoc;
 
-    struct DummyResolver;
+    struct DummyResolver {
+        files: HashMap<&'static str, Vec<u8>>,
+    }
+
+    impl DummyResolver {
+        fn new() -> Self {
+            Self {
+                files: HashMap::new(),
+            }
+        }
+    }
 
     impl weldr::FileRefResolver for DummyResolver {
         fn resolve(&self, filename: &str) -> Result<Vec<u8>, weldr::ResolveError> {
-            // Create a basic MPD file to test transforms and color resolution.
-            // TODO: Also add geometry in the main file.
-            // TODO: Test recursive and non recursive parsing.
-            match filename {
-                "root" => Ok(indoc! {"
-                    0 FILE main.ldr
-                    1 16 0 0 0 1 0 0 0 1 0 0 0 1 a.ldr
-                    1 1 0 0 0 1 0 0 0 1 0 0 0 1 b.ldr
-                    1 16 0 0 0 1 0 0 0 1 0 0 0 1 c.ldr
-                    
-                    0 FILE a.ldr
-                    3 16 1 0 0 0 1 0 0 0 1
-                    4 2 -1 -1 0 -1 1 0 -1 1 0 1 1 0
-                    
-                    0 FILE b.ldr
-                    3 3 1 0 0 0 1 0 0 0 1
-                    3 16 1 0 0 0 1 0 0 0 1
-                    
-                    0 FILE c.ldr
-                    3 4 1 0 0 0 1 0 0 0 1
-                    4 5 -1 -1 0 -1 1 0 -1 1 0 1 1 0
-                "}
-                .as_bytes()
-                .to_vec()),
-                _ => Err(weldr::ResolveError {
+            self.files
+                .get(filename)
+                .cloned()
+                .ok_or(weldr::ResolveError {
                     filename: filename.to_owned(),
                     resolve_error: None,
-                }),
-            }
+                })
         }
     }
 
@@ -142,17 +148,46 @@ mod tests {
     fn create_geometry_mpd() {
         let mut source_map = weldr::SourceMap::new();
 
-        let main_model_name = weldr::parse("root", &DummyResolver, &mut source_map).unwrap();
+        // Create a basic MPD file to test transforms and color resolution.
+        // TODO: Test recursive and non recursive parsing.
+        let document = indoc! {"
+            0 FILE main.ldr
+            1 16 0 0 0 1 0 0 0 1 0 0 0 1 a.ldr
+            1 1 0 0 0 1 0 0 0 1 0 0 0 1 b.ldr
+            1 16 0 0 0 1 0 0 0 1 0 0 0 1 c.ldr
+            3 16 1 0 0 0 1 0 0 0 1
+            4 8 -1 -1 0 -1 1 0 -1 1 0 1 1 0
+            
+            0 FILE a.ldr
+            3 16 1 0 0 0 1 0 0 0 1
+            4 2 -1 -1 0 -1 1 0 -1 1 0 1 1 0
+            
+            0 FILE b.ldr
+            3 3 1 0 0 0 1 0 0 0 1
+            3 16 1 0 0 0 1 0 0 0 1
+            
+            0 FILE c.ldr
+            3 4 1 0 0 0 1 0 0 0 1
+            4 5 -1 -1 0 -1 1 0 -1 1 0 1 1 0
+        "};
+
+        let mut resolver = DummyResolver::new();
+        resolver.files.insert("root", document.as_bytes().to_vec());
+
+        let main_model_name = weldr::parse("root", &resolver, &mut source_map).unwrap();
         let source_file = source_map.get(&main_model_name).unwrap();
 
         let geometry = create_geometry(&source_file, &source_map, 7, true);
 
         // TODO: Also test vertex positions and transforms.
-        let vertex_count = 3 + 4 + 3 + 3 + 3 + 4;
+        let vertex_count = 3 + 4 + 3 + 3 + 3 + 4 + 3 + 4;
         assert_eq!(vertex_count, geometry.vertices.len());
         assert_eq!(vertex_count, geometry.vertex_indices.len());
-        assert_eq!(vec![3, 4, 3, 3, 3, 4], geometry.face_sizes);
-        assert_eq!(vec![0, 3, 7, 10, 13, 16], geometry.face_start_indices);
-        assert_eq!(vec![7, 2, 3, 1, 4, 5], geometry.face_colors);
+        assert_eq!(vec![3, 4, 3, 3, 3, 4, 3, 4], geometry.face_sizes);
+        assert_eq!(
+            vec![0, 3, 7, 10, 13, 16, 20, 23],
+            geometry.face_start_indices
+        );
+        assert_eq!(vec![7, 2, 3, 1, 4, 5, 7, 8,], geometry.face_colors);
     }
 }
