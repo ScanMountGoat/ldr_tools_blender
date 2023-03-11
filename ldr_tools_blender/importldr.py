@@ -2,11 +2,14 @@ import bpy
 import numpy as np
 import mathutils
 import math
+import bmesh
 
 # TODO: Create a pyi type stub file?
 from . import ldr_tools_py
 
 from .ldr_tools_py import LDrawNode, LDrawGeometry, LDrawColor
+
+from .material import get_material
 
 # TODO: Add type hints for all functions.
 
@@ -180,26 +183,6 @@ def assign_materials(mesh: bpy.types.Mesh, current_color: int, color_by_code: di
             face.material_index = mesh.materials.find(material.name)
 
 
-def get_material(color_by_code: dict[int, LDrawColor], color: int):
-    # Cache materials by name.
-    # This loads materials lazily to avoid creating unused colors.
-    material = bpy.data.materials.get(str(color))
-    if material is None:
-        material = bpy.data.materials.new(str(color))
-        material.use_nodes = True
-        bsdf = material.node_tree.nodes["Principled BSDF"]
-
-        ldraw_color = color_by_code.get(color)
-        if color in color_by_code:
-            # LDraw colors don't specify an alpha value.
-            r, g, b = ldraw_color.value
-            bsdf.inputs['Base Color'].default_value = [r, g, b, 1.0]
-            # Set the color in the viewport.
-            material.diffuse_color = [r, g, b, 1.0]
-
-    return material
-
-
 def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
     mesh = bpy.data.meshes.new(name)
     if geometry.vertices.shape[0] > 0:
@@ -219,4 +202,18 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
 
     mesh.validate()
     mesh.update()
+
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+
+    # TODO: Faster to move this to Rust?
+    bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=0.0001)
+
+    # TODO: This won't be necessary once BFC is implemented.
+    # TODO: Calculate normals using the edge information in Rust?
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+
+    bm.to_mesh(mesh)
+    bm.free()
+
     return mesh

@@ -4,7 +4,7 @@ use numpy::IntoPyArray;
 use pyo3::prelude::*;
 
 // TODO: Is it worth supporting mutability in lists using PyList?
-#[pyclass(get_all, set_all)]
+#[pyclass(get_all)]
 #[derive(Debug, Clone)]
 pub struct LDrawNode {
     name: String,
@@ -27,7 +27,7 @@ impl From<ldr_tools::LDrawNode> for LDrawNode {
 }
 
 // Use numpy arrays for reduced overhead.
-#[pyclass(get_all, set_all)]
+#[pyclass(get_all)]
 #[derive(Debug, Clone)]
 pub struct LDrawGeometry {
     vertices: PyObject,
@@ -61,18 +61,22 @@ impl LDrawGeometry {
     }
 }
 
-#[pyclass(get_all, set_all)]
+#[pyclass(get_all)]
 #[derive(Debug, Clone)]
 pub struct LDrawColor {
     name: String,
-    value: [f32; 3],
+    rgba_linear: [f32; 3],
+    is_metallic: bool,
+    is_transmissive: bool,
 }
 
 impl From<ldr_tools::LDrawColor> for LDrawColor {
-    fn from(color: ldr_tools::LDrawColor) -> Self {
+    fn from(c: ldr_tools::LDrawColor) -> Self {
         Self {
-            name: color.name,
-            value: color.value,
+            name: c.name,
+            rgba_linear: c.rgba_linear,
+            is_metallic: c.is_metallic,
+            is_transmissive: c.is_transmissive,
         }
     }
 }
