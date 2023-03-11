@@ -208,10 +208,7 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
 
     # TODO: Faster to move this to Rust?
     bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=0.0001)
-
-    # TODO: This won't be necessary once BFC is implemented.
     # TODO: Calculate normals using the edge information in Rust?
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
 
     bm.to_mesh(mesh)
     bm.free()
