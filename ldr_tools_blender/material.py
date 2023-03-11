@@ -28,36 +28,40 @@ def get_material(color_by_code: dict[int, LDrawColor], color: int):
             bsdf.inputs['Transmission'].default_value = 1.0 if ldraw_color.is_transmissive else 0.0
             bsdf.inputs['Transmission Roughness'].default_value = 0.2
 
-            # Set up node groups for procedural surface detail.
-            # TODO: How to reuse node groups?
-            roughness_node_group = create_roughness_node_group(
-                material.node_tree)
-            material.node_tree.links.new(
-                roughness_node_group.outputs['Roughness'], bsdf.inputs['Roughness'])
+            # Procedural roughness.
+            roughness_node_tree = bpy.data.node_groups.get('ldr_tools_roughness')
+            if roughness_node_tree is None:
+                roughness_node_tree = create_roughness_node_group()
 
-            normals_node_group = create_normals_node_group(material.node_tree)
-            material.node_tree.links.new(
-                normals_node_group.outputs['Normal'], bsdf.inputs['Normal'])
+            roughness_node = material.node_tree.nodes.new(type='ShaderNodeGroup')
+            roughness_node.node_tree = roughness_node_tree
+
+            material.node_tree.links.new(roughness_node.outputs['Roughness'], bsdf.inputs['Roughness'])
+
+            # Procedural normals.
+            normals_node_tree = bpy.data.node_groups.get('ldr_tools_normal')
+            if normals_node_tree is None:
+                normals_node_tree = create_normals_node_group()
+
+            normals_node = material.node_tree.nodes.new(type='ShaderNodeGroup')
+            normals_node.node_tree = normals_node_tree
+
+            material.node_tree.links.new(normals_node.outputs['Normal'], bsdf.inputs['Normal'])
 
             # Set the color in the viewport.
             material.diffuse_color = [r, g, b, 1.0]
 
     return material
 
-# TODO: Separate module for materials.
 
-
-def create_roughness_node_group(node_tree: bpy.types.NodeTree) -> bpy.types.Node:
-    node_group_node = node_tree.nodes.new('ShaderNodeGroup')
-    node_group_node.name = 'ldr_tools_roughness'
+def create_roughness_node_group() -> bpy.types.NodeTree:
     node_group_node_tree = bpy.data.node_groups.new(
         'ldr_tools_roughness', 'ShaderNodeTree')
-    node_group_node.node_tree = node_group_node_tree
 
     node_group_node_tree.outputs.new('NodeSocketFloat', 'Roughness')
 
     inner_nodes = node_group_node_tree.nodes
-    inner_links = node_group_node.node_tree.links
+    inner_links = node_group_node_tree.links
 
     # TODO: Create frame called "smudges" or at least name the nodes.
     noise = inner_nodes.new('ShaderNodeTexNoise')
@@ -75,20 +79,17 @@ def create_roughness_node_group(node_tree: bpy.types.NodeTree) -> bpy.types.Node
     inner_links.new(noise.outputs['Fac'], ramp.inputs['Fac'])
     inner_links.new(ramp.outputs['Color'], output_node.inputs['Roughness'])
 
-    return node_group_node
+    return node_group_node_tree
 
 
-def create_normals_node_group(node_tree: bpy.types.NodeTree) -> bpy.types.Node:
-    node_group_node = node_tree.nodes.new('ShaderNodeGroup')
-    node_group_node.name = 'ldr_tools_normal'
+def create_normals_node_group() -> bpy.types.NodeTree:
     node_group_node_tree = bpy.data.node_groups.new(
         'ldr_tools_normal', 'ShaderNodeTree')
-    node_group_node.node_tree = node_group_node_tree
 
     node_group_node_tree.outputs.new('NodeSocketVector', 'Normal')
 
     inner_nodes = node_group_node_tree.nodes
-    inner_links = node_group_node.node_tree.links
+    inner_links = node_group_node_tree.links
 
     output_node = inner_nodes.new('NodeGroupOutput')
 
@@ -132,4 +133,4 @@ def create_normals_node_group(node_tree: bpy.types.NodeTree) -> bpy.types.Node:
     inner_links.new(micro_noise.outputs['Fac'], micro_bump.inputs['Height'])
     inner_links.new(micro_bump.outputs['Normal'], output_node.inputs['Normal'])
 
-    return node_group_node
+    return node_group_node_tree
