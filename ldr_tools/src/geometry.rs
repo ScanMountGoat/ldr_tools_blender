@@ -1,4 +1,5 @@
 use glam::{vec3, Mat4, Vec3};
+use rstar::{primitives::GeomWithData, RTree};
 use weldr::Command;
 
 use crate::{replace_color, SCALE};
@@ -24,6 +25,37 @@ enum Winding {
     CW,
 }
 
+struct VertexMap {
+    rtree: RTree<rstar::primitives::GeomWithData<[f32; 3], u32>>,
+}
+
+impl VertexMap {
+    fn new() -> Self {
+        Self {
+            rtree: RTree::new(),
+        }
+    }
+
+    fn insert(&mut self, i: u32, v: [f32; 3]) -> Option<u32> {
+        // Return the value already in the map or None.
+        // Dimensions in LDUs tend to be large, so use a large threshold.
+        let epsilon = 0.001;
+        let existing_point = self
+            .rtree
+            .locate_within_distance(v, epsilon * epsilon)
+            .next();
+
+        match existing_point {
+            Some(point) => Some(point.data),
+            None => {
+                // This vertex isn't in the map yet, so add it.
+                self.rtree.insert(GeomWithData::new(v, i));
+                None
+            }
+        }
+    }
+}
+
 pub fn create_geometry(
     source_file: &weldr::SourceFile,
     source_map: &weldr::SourceMap,
@@ -46,7 +78,16 @@ pub fn create_geometry(
         inverted: false,
     };
 
-    append_geometry(&mut geometry, source_file, source_map, ctx, recursive);
+    let mut vertex_map = VertexMap::new();
+
+    append_geometry(
+        &mut geometry,
+        &mut vertex_map,
+        source_file,
+        source_map,
+        ctx,
+        recursive,
+    );
 
     // Optimize the case where all face colors are the same.
     // This reduces overhead when processing data in Python.
@@ -57,11 +98,18 @@ pub fn create_geometry(
         }
     }
 
+    // Apply the scale last to use LDUs as the unit for vertex welding.
+    // This avoids small floating point comparisons for small scene scales.
+    for vertex in &mut geometry.vertices {
+        *vertex *= vec3(SCALE, SCALE, SCALE);
+    }
+
     geometry
 }
 
 fn append_geometry(
     geometry: &mut LDrawGeometry,
+    vertex_map: &mut VertexMap,
     source_file: &weldr::SourceFile,
     source_map: &weldr::SourceMap,
     ctx: GeometryContext,
@@ -81,9 +129,6 @@ fn append_geometry(
 
     let mut invert_next = false;
 
-    let scale = Mat4::from_scale(vec3(SCALE, SCALE, SCALE));
-    let current_transform = scale * ctx.transform;
-
     for cmd in &source_file.cmds {
         match cmd {
             Command::Comment(c) => {
@@ -100,9 +145,10 @@ fn append_geometry(
             Command::Triangle(t) => {
                 add_face(
                     geometry,
-                    current_transform,
-                    &t.vertices,
+                    ctx.transform,
+                    t.vertices,
                     invert_winding(current_winding, current_inverted),
+                    vertex_map,
                 );
 
                 let color = replace_color(t.color, ctx.current_color);
@@ -111,9 +157,10 @@ fn append_geometry(
             Command::Quad(q) => {
                 add_face(
                     geometry,
-                    current_transform,
-                    &q.vertices,
+                    ctx.transform,
+                    q.vertices,
                     invert_winding(current_winding, current_inverted),
+                    vertex_map,
                 );
 
                 let color = replace_color(q.color, ctx.current_color);
@@ -122,8 +169,8 @@ fn append_geometry(
             Command::SubFileRef(subfile_cmd) => {
                 if recursive {
                     if let Some(subfile) = source_map.get(&subfile_cmd.file) {
-                        // The global scale and determinant are checked in each file.
-                        // They should not be included in the child's context.
+                        // The determinant is checked in each file.
+                        // It should not be included in the child's context.
                         let child_ctx = GeometryContext {
                             current_color: replace_color(subfile_cmd.color, ctx.current_color),
                             transform: ctx.transform * subfile_cmd.matrix(),
@@ -137,7 +184,9 @@ fn append_geometry(
                         // Don't invert additional subfile reference commands.
                         invert_next = false;
 
-                        append_geometry(geometry, subfile, source_map, child_ctx, recursive);
+                        append_geometry(
+                            geometry, vertex_map, subfile, source_map, child_ctx, recursive,
+                        );
                     }
                 }
             }
@@ -155,29 +204,40 @@ fn invert_winding(winding: Winding, invert: bool) -> Winding {
     }
 }
 
-fn add_face(
+fn add_face<const N: usize>(
     geometry: &mut LDrawGeometry,
     transform: Mat4,
-    vertices: &[weldr::Vec3],
+    vertices: [weldr::Vec3; N],
     winding: Winding,
+    vertex_map: &mut VertexMap,
 ) {
-    for v in vertices {
-        let pos = transform.transform_point3(*v);
-        geometry.vertices.push(pos);
-    }
-
-    let count = vertices.len() as u32;
     let starting_index = geometry.vertex_indices.len() as u32;
+    let indices = vertices.map(|v| insert_vertex(geometry, transform, v, vertex_map));
 
     // TODO: Is it ok to just reverse indices even though this isn't the convention?
-    let indices = starting_index..starting_index + count;
     match winding {
-        Winding::CCW => geometry.vertex_indices.extend(indices),
-        Winding::CW => geometry.vertex_indices.extend(indices.rev()),
+        Winding::CCW => geometry.vertex_indices.extend(indices.into_iter()),
+        Winding::CW => geometry.vertex_indices.extend(indices.into_iter().rev()),
     }
 
     geometry.face_start_indices.push(starting_index);
-    geometry.face_sizes.push(count);
+    geometry.face_sizes.push(N as u32);
+}
+
+fn insert_vertex(
+    geometry: &mut LDrawGeometry,
+    transform: Mat4,
+    vertex: Vec3,
+    vertex_map: &mut VertexMap,
+) -> u32 {
+    let new_vertex = transform.transform_point3(vertex);
+    let new_index = geometry.vertices.len() as u32;
+    if let Some(index) = vertex_map.insert(new_index, new_vertex.to_array()) {
+        index as u32
+    } else {
+        geometry.vertices.push(new_vertex);
+        new_index
+    }
 }
 
 #[cfg(test)]
