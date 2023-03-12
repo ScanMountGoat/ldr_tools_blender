@@ -21,7 +21,7 @@ const CURRENT_COLOR: ColorCode = 16;
 mod color;
 mod geometry;
 
-const SCALE: f32 = 0.01;
+const SCENE_SCALE: f32 = 0.01;
 
 pub struct LDrawNode {
     pub name: String,
@@ -230,7 +230,7 @@ fn scaled_transform(transform: &Mat4) -> Mat4 {
     // Only scale the translation so that the scale doesn't accumulate.
     // TODO: Is this the best way to handle scale?
     let mut transform = *transform;
-    transform.w_axis *= vec4(SCALE, SCALE, SCALE, 1.0);
+    transform.w_axis *= vec4(SCENE_SCALE, SCENE_SCALE, SCENE_SCALE, 1.0);
     transform
 }
 

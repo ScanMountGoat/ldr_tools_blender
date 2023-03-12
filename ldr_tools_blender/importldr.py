@@ -200,6 +200,10 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
             'loop_start', geometry.face_start_indices)
         mesh.polygons.foreach_set('loop_total', geometry.face_sizes)
 
+        # TODO: Replace this with calculated normals from Rust eventually.
+        mesh.use_auto_smooth = True
+        mesh.polygons.foreach_set('use_smooth', [True] * len(mesh.polygons))
+
     mesh.validate()
     mesh.update()
 

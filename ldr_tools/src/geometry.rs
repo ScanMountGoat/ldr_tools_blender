@@ -1,8 +1,8 @@
-use glam::{vec3, Mat4, Vec3};
+use glam::{Mat4, Vec3};
 use rstar::{primitives::GeomWithData, RTree};
 use weldr::Command;
 
-use crate::{replace_color, ColorCode, SCALE};
+use crate::{replace_color, ColorCode, SCENE_SCALE};
 
 // TODO: use the edge information to calculate smooth normals?
 pub struct LDrawGeometry {
@@ -98,10 +98,33 @@ pub fn create_geometry(
         }
     }
 
+    let min = geometry
+        .vertices
+        .iter()
+        .copied()
+        .reduce(Vec3::min)
+        .unwrap_or_default();
+    let max = geometry
+        .vertices
+        .iter()
+        .copied()
+        .reduce(Vec3::max)
+        .unwrap_or_default();
+    let dimensions = max - min;
+
+    // Convert a distance between parts to a scale factor.
+    // This gap is in LDUs since we haven't scaled the part yet.
+    let gap_distance = 0.1;
+    let gaps_scale = if dimensions.length_squared() > 0.0 {
+        (2.0 * gap_distance - dimensions) / dimensions
+    } else {
+        Vec3::ONE
+    };
+
     // Apply the scale last to use LDUs as the unit for vertex welding.
     // This avoids small floating point comparisons for small scene scales.
     for vertex in &mut geometry.vertices {
-        *vertex *= vec3(SCALE, SCALE, SCALE);
+        *vertex *= gaps_scale.abs() * SCENE_SCALE;
     }
 
     geometry
