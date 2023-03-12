@@ -5,7 +5,6 @@ use std::{
 
 use geometry::create_geometry;
 use glam::{vec4, Mat4};
-use path_slash::PathBufExt;
 use rayon::prelude::*;
 use weldr::{Command, FileRefResolver, ResolveError};
 
@@ -39,15 +38,14 @@ struct DiskResolver {
 
 impl DiskResolver {
     fn new_from_catalog<P: AsRef<Path>>(catalog_path: P) -> Self {
-        let catalog_path = std::fs::canonicalize(catalog_path).unwrap();
-        let base_paths = vec![
-            // TODO: Is it necessary to specify both p and hi-res primitives in p/48?
-            catalog_path.join("p"),
-            // catalog_path.join("p").join("48"),
-            catalog_path.join("parts"),
-            catalog_path.join("parts").join("s"),
-        ];
-        Self { base_paths }
+        let catalog_path = catalog_path.as_ref().to_owned();
+        Self {
+            base_paths: vec![
+                catalog_path.join("p"),
+                catalog_path.join("parts"),
+                catalog_path.join("parts").join("s"),
+            ],
+        }
     }
 }
 
@@ -62,24 +60,24 @@ impl FileRefResolver for DiskResolver {
             _ => filename,
         };
 
-        // TODO: This doesn't work with relative paths as the main ldr path?
-        self.base_paths
-            .iter()
-            .find_map(|prefix| {
-                // The file's path separator may not match the current OS.
-                // Don't assume the current file system and try both separators.
-                // TODO: Split by / or \ and use collect to normalize separators?
-                // TODO: replace separators and use collect() to normalize
-                let forward_path = prefix.join(PathBuf::from_slash(filename));
-                let backward_path = prefix.join(PathBuf::from_backslash(filename));
-                std::fs::read(prefix.join(forward_path))
-                    .or_else(|_| std::fs::read(prefix.join(backward_path)))
-                    .ok()
-            })
-            .ok_or(ResolveError::new(
-                filename.to_string(),
-                std::io::Error::from(std::io::ErrorKind::NotFound),
-            ))
+        // Find the first folder that contains the given file.
+        let contents = self.base_paths.iter().find_map(|prefix| {
+            // Paths in LDraw may not match the OS path separator.
+            // Normalize the path and recollect components to use the OS separator.
+            let normalized_path: PathBuf = Path::new(&filename.replace("\\", "/"))
+                .components()
+                .collect();
+            std::fs::read(prefix.join(normalized_path)).ok()
+        });
+
+        match contents {
+            Some(contents) => Ok(contents),
+            None => {
+                // TODO: Is there a better way to allow partial imports with resolve errors?
+                println!("Error resolving {filename:?}");
+                Ok(Vec::new())
+            }
+        }
     }
 }
 

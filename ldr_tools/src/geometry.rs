@@ -331,9 +331,8 @@ mod tests {
         let geometry = create_geometry(&source_file, &source_map, 7, true);
 
         // TODO: Also test vertex positions and transforms.
-        let vertex_count = 3 + 4 + 3 + 3 + 3 + 4 + 3 + 4;
-        assert_eq!(vertex_count, geometry.vertices.len());
-        assert_eq!(vertex_count, geometry.vertex_indices.len());
+        assert_eq!(6, geometry.vertices.len());
+        assert_eq!(3 + 4 + 3 + 3 + 3 + 4 + 3 + 4, geometry.vertex_indices.len());
         assert_eq!(vec![3, 4, 3, 3, 3, 4, 3, 4], geometry.face_sizes);
         assert_eq!(
             vec![0, 3, 7, 10, 13, 16, 20, 23],
@@ -360,7 +359,7 @@ mod tests {
 
         let geometry = create_geometry(&source_file, &source_map, 16, true);
 
-        assert_eq!(vec![0, 1, 2, 3, 4, 5], geometry.vertex_indices);
+        assert_eq!(vec![0, 1, 2, 0, 1, 2], geometry.vertex_indices);
         assert_eq!(vec![3, 3], geometry.face_sizes);
     }
 
@@ -382,7 +381,7 @@ mod tests {
 
         let geometry = create_geometry(&source_file, &source_map, 16, true);
 
-        assert_eq!(vec![2, 1, 0, 5, 4, 3], geometry.vertex_indices);
+        assert_eq!(vec![2, 1, 0, 2, 1, 0], geometry.vertex_indices);
         assert_eq!(vec![3, 3], geometry.face_sizes);
     }
 
@@ -416,7 +415,7 @@ mod tests {
         let geometry = create_geometry(&source_file, &source_map, 16, true);
 
         assert_eq!(
-            vec![0, 1, 2, 5, 4, 3, 8, 7, 6, 9, 10, 11],
+            vec![0, 1, 2, 5, 4, 3, 2, 1, 0, 3, 4, 5],
             geometry.vertex_indices
         );
         assert_eq!(vec![3, 3, 3, 3], geometry.face_sizes);
