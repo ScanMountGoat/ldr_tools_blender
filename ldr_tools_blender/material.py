@@ -6,37 +6,76 @@ import bpy
 def get_material(color_by_code: dict[int, LDrawColor], color: int):
     # Cache materials by name.
     # This loads materials lazily to avoid creating unused colors.
-    material = bpy.data.materials.get(str(color))
+    ldraw_color = color_by_code[color]
+
+    name = f'{color} {ldraw_color.name}'
+    material = bpy.data.materials.get(name)
+
     if material is None:
-        material = bpy.data.materials.new(str(color))
+        material = bpy.data.materials.new(name)
         material.use_nodes = True
         bsdf = material.node_tree.nodes["Principled BSDF"]
 
-        ldraw_color = color_by_code.get(color)
-        if color in color_by_code:
-            # LDraw colors don't specify an alpha value.
-            r, g, b = ldraw_color.rgba_linear
-            bsdf.inputs['Base Color'].default_value = [r, g, b, 1.0]
+        # Alpha is specified using transmission instead.
+        r, g, b, a = ldraw_color.rgba_linear
+        bsdf.inputs['Base Color'].default_value = [r, g, b, 1.0]
 
-            bsdf.inputs['Subsurface Color'].default_value = [r, g, b, 1.0]
-            bsdf.inputs['Subsurface Radius'].default_value = [
-                0.001, 0.001, 0.001]  # TODO: should depend on scene scale
-            bsdf.inputs['Subsurface'].default_value = 0.0 if ldraw_color.is_transmissive else 1.0
+        metallic = 0.0
+        if ldraw_color.finish_name in ['MatteMetallic', 'Chrome', 'Metal']:
+            metallic = 1.0
+        elif ldraw_color.finish_name == 'Pearlescent':
+            metallic = 0.35
 
-            # TODO: is it easier to just create a table for this in Python?
-            bsdf.inputs['Metallic'].default_value = 1.0 if ldraw_color.is_metallic else 0.0
-            bsdf.inputs['Transmission'].default_value = 1.0 if ldraw_color.is_transmissive else 0.0
-            bsdf.inputs['Transmission Roughness'].default_value = 0.2
+        # Transparent colors specify an alpha of 128 / 255.
+        is_transmissive = a <= 0.6
 
+        transmission = 0.0
+        if is_transmissive:
+            transmission = 1.0
+
+        bsdf.inputs['Subsurface Color'].default_value = [r, g, b, 1.0]
+        bsdf.inputs['Subsurface Radius'].default_value = [
+            0.001, 0.001, 0.001]  # TODO: should depend on scene scale
+        bsdf.inputs['Subsurface'].default_value = 1.0
+        bsdf.inputs['Metallic'].default_value = metallic
+        bsdf.inputs['Transmission'].default_value = transmission
+
+        if is_transmissive:
+            bsdf.inputs['Roughness'].default_value = 0.01
+            bsdf.inputs['Transmission Roughness'].default_value = 0.1
+            bsdf.inputs['IOR'].default_value = 1.55
+
+            # Disable shadow casting for transparent materials.
+            # This avoids unwanted shadows for transparent parts.
+            mix_shader = material.node_tree.nodes.new('ShaderNodeMixShader')
+            light_path = material.node_tree.nodes.new('ShaderNodeLightPath')
+            transparent_bsdf = material.node_tree.nodes.new(
+                'ShaderNodeBsdfTransparent')
+            output_node = material.node_tree.nodes.get('Material Output')
+
+            material.node_tree.links.new(
+                light_path.outputs['Is Shadow Ray'], mix_shader.inputs['Fac'])
+            material.node_tree.links.new(
+                bsdf.outputs['BSDF'], mix_shader.inputs[1])
+            material.node_tree.links.new(
+                transparent_bsdf.outputs['BSDF'], mix_shader.inputs[2])
+
+            material.node_tree.links.new(
+                mix_shader.outputs['Shader'], output_node.inputs['Surface'])
+        else:
             # Procedural roughness.
-            roughness_node_tree = bpy.data.node_groups.get('ldr_tools_roughness')
+            roughness_node_tree = bpy.data.node_groups.get(
+                'ldr_tools_roughness')
             if roughness_node_tree is None:
-                roughness_node_tree = create_roughness_node_group()
+                roughness_node_tree = create_roughness_node_group(
+                    'ldr_tools_roughness', 0.075, 0.3)
 
-            roughness_node = material.node_tree.nodes.new(type='ShaderNodeGroup')
+            roughness_node = material.node_tree.nodes.new(
+                type='ShaderNodeGroup')
             roughness_node.node_tree = roughness_node_tree
 
-            material.node_tree.links.new(roughness_node.outputs['Roughness'], bsdf.inputs['Roughness'])
+            material.node_tree.links.new(
+                roughness_node.outputs['Roughness'], bsdf.inputs['Roughness'])
 
             # Procedural normals.
             normals_node_tree = bpy.data.node_groups.get('ldr_tools_normal')
@@ -46,17 +85,18 @@ def get_material(color_by_code: dict[int, LDrawColor], color: int):
             normals_node = material.node_tree.nodes.new(type='ShaderNodeGroup')
             normals_node.node_tree = normals_node_tree
 
-            material.node_tree.links.new(normals_node.outputs['Normal'], bsdf.inputs['Normal'])
+            material.node_tree.links.new(
+                normals_node.outputs['Normal'], bsdf.inputs['Normal'])
 
-            # Set the color in the viewport.
-            material.diffuse_color = [r, g, b, 1.0]
+        # Set the color in the viewport.
+        material.diffuse_color = [r, g, b, 1.0]
 
     return material
 
 
-def create_roughness_node_group() -> bpy.types.NodeTree:
+def create_roughness_node_group(name: str, roughness_min: float, roughness_max: float) -> bpy.types.NodeTree:
     node_group_node_tree = bpy.data.node_groups.new(
-        'ldr_tools_roughness', 'ShaderNodeTree')
+        name, 'ShaderNodeTree')
 
     node_group_node_tree.outputs.new('NodeSocketFloat', 'Roughness')
 
@@ -71,8 +111,10 @@ def create_roughness_node_group() -> bpy.types.NodeTree:
     noise.inputs['Distortion'].default_value = 0.0
 
     ramp = inner_nodes.new('ShaderNodeValToRGB')
-    ramp.color_ramp.elements[0].color = (0.075, 0.075, 0.075, 1.0)
-    ramp.color_ramp.elements[1].color = (0.3, 0.3, 0.3, 1.0)
+    ramp.color_ramp.elements[0].color = (
+        roughness_min, roughness_min, roughness_min, 1.0)
+    ramp.color_ramp.elements[1].color = (
+        roughness_max, roughness_max, roughness_max, 1.0)
 
     output_node = inner_nodes.new('NodeGroupOutput')
 

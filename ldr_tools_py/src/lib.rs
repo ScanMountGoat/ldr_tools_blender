@@ -65,9 +65,8 @@ impl LDrawGeometry {
 #[derive(Debug, Clone)]
 pub struct LDrawColor {
     name: String,
-    rgba_linear: [f32; 3],
-    is_metallic: bool,
-    is_transmissive: bool,
+    rgba_linear: [f32; 4],
+    finish_name: String,
 }
 
 impl From<ldr_tools::LDrawColor> for LDrawColor {
@@ -75,8 +74,7 @@ impl From<ldr_tools::LDrawColor> for LDrawColor {
         Self {
             name: c.name,
             rgba_linear: c.rgba_linear,
-            is_metallic: c.is_metallic,
-            is_transmissive: c.is_transmissive,
+            finish_name: c.finish_name,
         }
     }
 }
