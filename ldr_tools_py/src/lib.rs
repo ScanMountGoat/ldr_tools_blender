@@ -81,18 +81,20 @@ impl From<ldr_tools::LDrawColor> for LDrawColor {
     }
 }
 
+// TODO: Is it worth creating the scene structs here as well?
 #[pyfunction]
 fn load_file(py: Python, path: &str) -> PyResult<(LDrawNode, HashMap<String, LDrawGeometry>)> {
     // TODO: This timing code doesn't need to be here.
     let start = std::time::Instant::now();
-    let (root, geometry_cache) = ldr_tools::load_file(path);
+    let scene = ldr_tools::load_file(path);
 
-    let geometry_cache_py = geometry_cache
+    let geometry_cache_py = scene
+        .geometry_cache
         .into_iter()
         .map(|(k, v)| (k, LDrawGeometry::from_geometry(py, v)))
         .collect();
     println!("load_file: {:?}", start.elapsed());
-    Ok((root.into(), geometry_cache_py))
+    Ok((scene.root_node.into(), geometry_cache_py))
 }
 
 #[pyfunction]
@@ -104,14 +106,16 @@ fn load_file_instanced(
     HashMap<(String, u32), PyObject>,
 )> {
     let start = std::time::Instant::now();
-    let (geometry_cache, geometry_world_transforms) = ldr_tools::load_file_instanced(path);
+    let scene = ldr_tools::load_file_instanced(path);
 
-    let geometry_cache_py = geometry_cache
+    let geometry_cache_py = scene
+        .geometry_cache
         .into_iter()
         .map(|(k, v)| (k, LDrawGeometry::from_geometry(py, v)))
         .collect();
 
-    let geometry_world_transforms_py = geometry_world_transforms
+    let geometry_world_transforms_py = scene
+        .geometry_world_transforms
         .into_iter()
         .map(|(k, v)| {
             // Create a single numpy array of transforms for each geometry.

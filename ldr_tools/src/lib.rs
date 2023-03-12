@@ -6,14 +6,17 @@ use std::{
 use geometry::create_geometry;
 use glam::{vec4, Mat4};
 use path_slash::PathBufExt;
+use rayon::prelude::*;
 use weldr::{Command, FileRefResolver, ResolveError};
 
 pub use color::{load_color_table, LDrawColor};
 pub use geometry::LDrawGeometry;
 pub use weldr::Color;
 
+pub type ColorCode = u32;
+
 // Special color code that "inherits" the existing color.
-const CURRENT_COLOR: u32 = 16;
+const CURRENT_COLOR: ColorCode = 16;
 
 mod color;
 mod geometry;
@@ -26,7 +29,7 @@ pub struct LDrawNode {
     pub geometry_name: Option<String>, // TODO: Better way to share geometry?
     /// The current color set for this node.
     /// Overrides colors in the geometry if present.
-    pub current_color: u32,
+    pub current_color: ColorCode,
     pub children: Vec<LDrawNode>,
 }
 
@@ -80,7 +83,17 @@ impl FileRefResolver for DiskResolver {
     }
 }
 
-fn replace_color(color: u32, current_color: u32) -> u32 {
+pub struct LDrawScene {
+    pub root_node: LDrawNode,
+    pub geometry_cache: HashMap<String, LDrawGeometry>,
+}
+
+pub struct LDrawSceneInstanced {
+    pub geometry_world_transforms: HashMap<(String, ColorCode), Vec<Mat4>>,
+    pub geometry_cache: HashMap<String, LDrawGeometry>,
+}
+
+fn replace_color(color: ColorCode, current_color: ColorCode) -> ColorCode {
     if color == CURRENT_COLOR {
         current_color
     } else {
@@ -88,35 +101,46 @@ fn replace_color(color: u32, current_color: u32) -> u32 {
     }
 }
 
+struct GeometryInitDescriptor<'a> {
+    source_file: &'a weldr::SourceFile,
+    current_color: ColorCode,
+    recursive: bool,
+}
+
 // TODO: Add global scale parameters.
 // Adjust the draw ctx for iter to set a "global scale"?
 // Also add a per part gap scale matrix.
-pub fn load_file(path: &str) -> (LDrawNode, HashMap<String, LDrawGeometry>) {
+pub fn load_file(path: &str) -> LDrawScene {
     let resolver = DiskResolver::new_from_catalog(r"C:\Users\Public\Documents\LDraw");
     let mut source_map = weldr::SourceMap::new();
 
     let main_model_name = weldr::parse(path, &resolver, &mut source_map).unwrap();
     let source_file = source_map.get(&main_model_name).unwrap();
 
-    let mut geometry_cache = HashMap::new();
+    // Collect the scene hierarchy and geometry descriptors.
+    let mut geometry_descriptors = HashMap::new();
     let root_node = load_node(
         source_file,
         &Mat4::IDENTITY,
         &source_map,
-        &mut geometry_cache,
+        &mut geometry_descriptors,
         CURRENT_COLOR,
     );
 
-    // TODO: Create a special return type for this?
-    (root_node, geometry_cache)
+    let geometry_cache = create_geometry_cache(geometry_descriptors, &source_map);
+
+    LDrawScene {
+        root_node,
+        geometry_cache,
+    }
 }
 
-fn load_node(
-    source_file: &weldr::SourceFile,
+fn load_node<'a>(
+    source_file: &'a weldr::SourceFile,
     transform: &Mat4,
-    source_map: &weldr::SourceMap,
-    geometry_cache: &mut HashMap<String, LDrawGeometry>,
-    current_color: u32,
+    source_map: &'a weldr::SourceMap,
+    geometry_descriptors: &mut HashMap<String, GeometryInitDescriptor<'a>>,
+    current_color: ColorCode,
 ) -> LDrawNode {
     let mut children = Vec::new();
     let mut geometry = None;
@@ -124,17 +148,25 @@ fn load_node(
     if is_part(source_file) || has_geometry(source_file) {
         // Create geometry if the node is a part.
         // Use the special color code to reuse identical parts in different colors.
-        geometry_cache
+        geometry_descriptors
             .entry(source_file.filename.clone())
-            .or_insert_with(|| create_geometry(source_file, source_map, CURRENT_COLOR, true));
+            .or_insert_with(|| GeometryInitDescriptor {
+                source_file,
+                current_color: CURRENT_COLOR,
+                recursive: true,
+            });
 
         geometry = Some(source_file.filename.clone());
     } else if has_geometry(source_file) {
         // Just add geometry for this node.
         // Use the current color at this node since this geometry might not be referenced elsewhere.
-        geometry_cache
+        geometry_descriptors
             .entry(source_file.filename.clone())
-            .or_insert_with(|| create_geometry(source_file, source_map, current_color, false));
+            .or_insert_with(|| GeometryInitDescriptor {
+                source_file,
+                current_color,
+                recursive: false,
+            });
 
         geometry = Some(source_file.filename.clone());
     } else {
@@ -152,7 +184,7 @@ fn load_node(
                         subfile,
                         &child_transform,
                         source_map,
-                        geometry_cache,
+                        geometry_descriptors,
                         child_color,
                     );
                     children.push(child_node);
@@ -172,6 +204,28 @@ fn load_node(
     }
 }
 
+fn create_geometry_cache(
+    geometry_descriptors: HashMap<String, GeometryInitDescriptor>,
+    source_map: &weldr::SourceMap,
+) -> HashMap<String, LDrawGeometry> {
+    // Create the actual geometry in parallel to improve performance.
+    let geometry_cache = geometry_descriptors
+        .into_par_iter()
+        .map(|(name, descriptor)| {
+            let GeometryInitDescriptor {
+                source_file,
+                current_color,
+                recursive,
+            } = descriptor;
+            (
+                name,
+                create_geometry(source_file, &source_map, current_color, recursive),
+            )
+        })
+        .collect();
+    geometry_cache
+}
+
 fn scaled_transform(transform: &Mat4) -> Mat4 {
     // Only scale the translation so that the scale doesn't accumulate.
     // TODO: Is this the best way to handle scale?
@@ -184,12 +238,7 @@ fn scaled_transform(transform: &Mat4) -> Mat4 {
 
 /// Find the world transforms for each geometry.
 /// This allows applications to more easily use instancing.
-pub fn load_file_instanced(
-    path: &str,
-) -> (
-    HashMap<String, LDrawGeometry>,
-    HashMap<(String, u32), Vec<Mat4>>,
-) {
+pub fn load_file_instanced(path: &str) -> LDrawSceneInstanced {
     let resolver = DiskResolver::new_from_catalog(r"C:\Users\Public\Documents\LDraw");
     let mut source_map = weldr::SourceMap::new();
 
@@ -198,36 +247,45 @@ pub fn load_file_instanced(
 
     // Find the world transforms for each geometry.
     // This allows applications to more easily use instancing.
-    let mut geometry_cache = HashMap::new();
+    let mut geometry_descriptors = HashMap::new();
     let mut geometry_world_transforms = HashMap::new();
     load_node_instanced(
         source_file,
         &Mat4::IDENTITY,
         &source_map,
-        &mut geometry_cache,
+        &mut geometry_descriptors,
         &mut geometry_world_transforms,
         CURRENT_COLOR,
     );
 
-    (geometry_cache, geometry_world_transforms)
+    let geometry_cache = create_geometry_cache(geometry_descriptors, &source_map);
+
+    LDrawSceneInstanced {
+        geometry_world_transforms,
+        geometry_cache,
+    }
 }
 
 // TODO: Share code with the non instanced function?
-fn load_node_instanced(
-    source_file: &weldr::SourceFile,
+fn load_node_instanced<'a>(
+    source_file: &'a weldr::SourceFile,
     world_transform: &Mat4,
-    source_map: &weldr::SourceMap,
-    geometry_cache: &mut HashMap<String, LDrawGeometry>,
-    geometry_world_transforms: &mut HashMap<(String, u32), Vec<Mat4>>,
-    current_color: u32,
+    source_map: &'a weldr::SourceMap,
+    geometry_descriptors: &mut HashMap<String, GeometryInitDescriptor<'a>>,
+    geometry_world_transforms: &mut HashMap<(String, ColorCode), Vec<Mat4>>,
+    current_color: ColorCode,
 ) {
     // TODO: Find a way to avoid repetition.
     if is_part(source_file) {
         // Create geometry if the node is a part.
         // Use the special color code to reuse identical parts in different colors.
-        geometry_cache
+        geometry_descriptors
             .entry(source_file.filename.clone())
-            .or_insert_with(|| create_geometry(source_file, source_map, CURRENT_COLOR, true));
+            .or_insert_with(|| GeometryInitDescriptor {
+                source_file,
+                current_color: CURRENT_COLOR,
+                recursive: true,
+            });
 
         // Add another instance of the current geometry.
         // Also key by the color in case a part appears in multiple colors.
@@ -238,9 +296,13 @@ fn load_node_instanced(
     } else if has_geometry(source_file) {
         // Just add geometry for this node.
         // Use the current color at this node since this geometry might not be referenced elsewhere.
-        geometry_cache
+        geometry_descriptors
             .entry(source_file.filename.clone())
-            .or_insert_with(|| create_geometry(source_file, source_map, current_color, false));
+            .or_insert_with(|| GeometryInitDescriptor {
+                source_file,
+                current_color,
+                recursive: false,
+            });
 
         // Add another instance of the current geometry.
         // Also key by the color in case a part appears in multiple colors.
@@ -262,7 +324,7 @@ fn load_node_instanced(
                         subfile,
                         &child_transform,
                         source_map,
-                        geometry_cache,
+                        geometry_descriptors,
                         geometry_world_transforms,
                         child_color,
                     );

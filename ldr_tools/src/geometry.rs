@@ -2,7 +2,7 @@ use glam::{vec3, Mat4, Vec3};
 use rstar::{primitives::GeomWithData, RTree};
 use weldr::Command;
 
-use crate::{replace_color, SCALE};
+use crate::{replace_color, ColorCode, SCALE};
 
 // TODO: use the edge information to calculate smooth normals?
 pub struct LDrawGeometry {
@@ -14,7 +14,7 @@ pub struct LDrawGeometry {
 }
 
 struct GeometryContext {
-    current_color: u32,
+    current_color: ColorCode,
     transform: Mat4,
     inverted: bool,
 }
@@ -59,7 +59,7 @@ impl VertexMap {
 pub fn create_geometry(
     source_file: &weldr::SourceFile,
     source_map: &weldr::SourceMap,
-    current_color: u32,
+    current_color: ColorCode,
     recursive: bool,
 ) -> LDrawGeometry {
     let mut geometry = LDrawGeometry {
