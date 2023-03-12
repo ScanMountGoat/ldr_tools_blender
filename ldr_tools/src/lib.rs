@@ -276,7 +276,8 @@ fn load_node_instanced<'a>(
     current_color: ColorCode,
 ) {
     // TODO: Find a way to avoid repetition.
-    if is_part(source_file) {
+    let is_part = is_part(source_file);
+    if is_part {
         // Create geometry if the node is a part.
         // Use the special color code to reuse identical parts in different colors.
         geometry_descriptors
@@ -310,7 +311,10 @@ fn load_node_instanced<'a>(
             .entry((source_file.filename.clone(), current_color))
             .or_insert(Vec::new())
             .push(scaled_transform(world_transform));
-    } else {
+    }
+
+    // Recursion is already handled for parts.
+    if !is_part {
         for cmd in &source_file.cmds {
             if let Command::SubFileRef(sfr_cmd) = cmd {
                 if let Some(subfile) = source_map.get(&sfr_cmd.file) {

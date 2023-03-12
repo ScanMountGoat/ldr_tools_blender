@@ -203,14 +203,4 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
     mesh.validate()
     mesh.update()
 
-    bm = bmesh.new()
-    bm.from_mesh(mesh)
-
-    # TODO: Faster to move this to Rust?
-    bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=0.0001)
-    # TODO: Calculate normals using the edge information in Rust?
-
-    bm.to_mesh(mesh)
-    bm.free()
-
     return mesh
