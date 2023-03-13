@@ -65,8 +65,9 @@ impl LDrawGeometry {
 #[derive(Debug, Clone)]
 pub struct LDrawColor {
     name: String,
-    rgba_linear: [f32; 4],
     finish_name: String,
+    rgba_linear: [f32; 4],
+    speckle_rgba_linear: Option<[f32; 4]>,
 }
 
 impl From<ldr_tools::LDrawColor> for LDrawColor {
@@ -75,6 +76,7 @@ impl From<ldr_tools::LDrawColor> for LDrawColor {
             name: c.name,
             rgba_linear: c.rgba_linear,
             finish_name: c.finish_name,
+            speckle_rgba_linear: c.speckle_rgba_linear,
         }
     }
 }

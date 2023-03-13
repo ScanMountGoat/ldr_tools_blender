@@ -2,8 +2,9 @@ use std::collections::HashMap;
 
 pub struct LDrawColor {
     pub name: String,
-    pub rgba_linear: [f32; 4],
     pub finish_name: String,
+    pub rgba_linear: [f32; 4],
+    pub speckle_rgba_linear: Option<[f32; 4]>,
 }
 
 pub fn load_color_table() -> HashMap<u32, LDrawColor> {
@@ -13,17 +14,14 @@ pub fn load_color_table() -> HashMap<u32, LDrawColor> {
     cmds.into_iter()
         .filter_map(|cmd| match cmd {
             weldr::Command::Colour(c) => {
-                let finish_name = finish_name(&c).to_string();
-
                 // LDraw colors are in sRGB space.
+                let rgba_linear = rgba_linear(&c.value, c.alpha);
+                let speckle_rgba_linear = speckle_rgba_linear(&c);
+                let finish_name = finish_name(&c).to_string();
                 let color = LDrawColor {
                     name: c.name,
-                    rgba_linear: [
-                        srgb_to_linear(c.value.red as f32 / 255.0),
-                        srgb_to_linear(c.value.green as f32 / 255.0),
-                        srgb_to_linear(c.value.blue as f32 / 255.0),
-                        c.alpha.unwrap_or(255) as f32 / 255.0,
-                    ],
+                    rgba_linear,
+                    speckle_rgba_linear,
                     finish_name,
                 };
                 Some((c.code, color))
@@ -33,8 +31,28 @@ pub fn load_color_table() -> HashMap<u32, LDrawColor> {
         .collect()
 }
 
+fn rgba_linear(value: &weldr::Color, alpha: Option<u8>) -> [f32; 4] {
+    [
+        srgb_to_linear(value.red as f32 / 255.0),
+        srgb_to_linear(value.green as f32 / 255.0),
+        srgb_to_linear(value.blue as f32 / 255.0),
+        alpha.unwrap_or(255) as f32 / 255.0,
+    ]
+}
+
+fn speckle_rgba_linear(c: &weldr::ColourCmd) -> Option<[f32; 4]> {
+    c.finish.as_ref().and_then(|f| match f {
+        weldr::ColorFinish::Material(m) => match m {
+            weldr::MaterialFinish::Speckle(speckle) => {
+                Some(rgba_linear(&speckle.value, speckle.alpha))
+            }
+            _ => None,
+        },
+        _ => None,
+    })
+}
+
 fn finish_name(c: &weldr::ColourCmd) -> &str {
-    // TODO: How to handle pearlescent colors?
     match &c.finish {
         Some(finish) => match finish {
             weldr::ColorFinish::Chrome => "Chrome",

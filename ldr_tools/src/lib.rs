@@ -233,7 +233,6 @@ fn scaled_transform(transform: &Mat4) -> Mat4 {
     transform
 }
 
-
 /// Find the world transforms for each geometry.
 /// This allows applications to more easily use instancing.
 pub fn load_file_instanced(path: &str) -> LDrawSceneInstanced {

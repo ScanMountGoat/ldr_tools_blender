@@ -1,3 +1,5 @@
+from typing import Callable
+
 from .ldr_tools_py import LDrawColor
 
 import bpy
@@ -29,64 +31,64 @@ def get_material(color_by_code: dict[int, LDrawColor], color: int):
         # Transparent colors specify an alpha of 128 / 255.
         is_transmissive = a <= 0.6
 
-        transmission = 0.0
-        if is_transmissive:
-            transmission = 1.0
-
         bsdf.inputs['Subsurface Color'].default_value = [r, g, b, 1.0]
         bsdf.inputs['Subsurface Radius'].default_value = [
             0.001, 0.001, 0.001]  # TODO: should depend on scene scale
         bsdf.inputs['Subsurface'].default_value = 1.0
         bsdf.inputs['Metallic'].default_value = metallic
-        bsdf.inputs['Transmission'].default_value = transmission
+
+        # Procedural roughness.
+        roughness_node = create_node_group(material, 'ldr_tools_roughness', create_roughness_node_group)
+
+        material.node_tree.links.new(
+            roughness_node.outputs['Roughness'], bsdf.inputs['Roughness'])
+
+        # Normal opaque materials.
+        roughness_node.inputs['Min'].default_value = 0.075
+        roughness_node.inputs['Max'].default_value = 0.2
 
         if is_transmissive:
-            bsdf.inputs['Roughness'].default_value = 0.01
-            bsdf.inputs['Transmission Roughness'].default_value = 0.1
+            bsdf.inputs['Transmission'].default_value = 1.0
             bsdf.inputs['IOR'].default_value = 1.55
 
+            if ldraw_color.finish_name == 'Rubber':
+                # Make the transparent rubber appear cloudy.
+                roughness_node.inputs['Min'].default_value = 0.1
+                roughness_node.inputs['Max'].default_value = 0.35
+                bsdf.inputs['Transmission Roughness'].default_value = 0.25
+            else:
+                roughness_node.inputs['Min'].default_value = 0.01
+                roughness_node.inputs['Max'].default_value = 0.02
+                bsdf.inputs['Transmission Roughness'].default_value = 0.1
+
             # Disable shadow casting for transparent materials.
-            # This avoids unwanted shadows for transparent parts.
-            mix_shader = material.node_tree.nodes.new('ShaderNodeMixShader')
-            light_path = material.node_tree.nodes.new('ShaderNodeLightPath')
-            transparent_bsdf = material.node_tree.nodes.new(
-                'ShaderNodeBsdfTransparent')
-            output_node = material.node_tree.nodes.get('Material Output')
+            # This avoids making transparent parts too dark.
+            make_shadows_transparent(material, bsdf)
+        elif ldraw_color.finish_name == 'Speckle':
+            # TODO: Are all speckled colors metals?
+            bsdf.inputs['Metallic'].default_value = 1.0
 
-            material.node_tree.links.new(
-                light_path.outputs['Is Shadow Ray'], mix_shader.inputs['Fac'])
-            material.node_tree.links.new(
-                bsdf.outputs['BSDF'], mix_shader.inputs[1])
-            material.node_tree.links.new(
-                transparent_bsdf.outputs['BSDF'], mix_shader.inputs[2])
+            speckle_node = create_node_group(material, 'ldr_tools_speckle', create_speckle_node_group)
 
-            material.node_tree.links.new(
-                mix_shader.outputs['Shader'], output_node.inputs['Surface'])
-        else:
-            # Procedural roughness.
-            roughness_node_tree = bpy.data.node_groups.get(
-                'ldr_tools_roughness')
-            if roughness_node_tree is None:
-                roughness_node_tree = create_roughness_node_group(
-                    'ldr_tools_roughness', 0.075, 0.3)
+            # Adjust the thresholds to control speckle size and density.
+            speckle_node.inputs['Min'].default_value = 0.5
+            speckle_node.inputs['Max'].default_value = 0.6
 
-            roughness_node = material.node_tree.nodes.new(
-                type='ShaderNodeGroup')
-            roughness_node.node_tree = roughness_node_tree
+            # TODO: Blend between the two speckle colors.
+            mix_rgb = material.node_tree.nodes.new('ShaderNodeMixRGB')
 
-            material.node_tree.links.new(
-                roughness_node.outputs['Roughness'], bsdf.inputs['Roughness'])
+            material.node_tree.links.new(speckle_node.outputs['Fac'], mix_rgb.inputs['Fac'])
+            mix_rgb.inputs[1].default_value = [r, g, b, 1.0]
+            speckle_r, speckle_g, speckle_b, _ = ldraw_color.speckle_rgba_linear
+            mix_rgb.inputs[2].default_value = [speckle_r, speckle_g, speckle_b, 1.0]
 
-            # Procedural normals.
-            normals_node_tree = bpy.data.node_groups.get('ldr_tools_normal')
-            if normals_node_tree is None:
-                normals_node_tree = create_normals_node_group()
+            material.node_tree.links.new(mix_rgb.outputs['Color'], bsdf.inputs['Base Color'])
 
-            normals_node = material.node_tree.nodes.new(type='ShaderNodeGroup')
-            normals_node.node_tree = normals_node_tree
+        # Procedural normals.
+        normals_node = create_node_group(material, 'ldr_tools_normal', create_normals_node_group)
 
-            material.node_tree.links.new(
-                normals_node.outputs['Normal'], bsdf.inputs['Normal'])
+        material.node_tree.links.new(
+            normals_node.outputs['Normal'], bsdf.inputs['Normal'])
 
         # Set the color in the viewport.
         material.diffuse_color = [r, g, b, 1.0]
@@ -94,7 +96,35 @@ def get_material(color_by_code: dict[int, LDrawColor], color: int):
     return material
 
 
-def create_roughness_node_group(name: str, roughness_min: float, roughness_max: float) -> bpy.types.NodeTree:
+def create_node_group(material: bpy.types.Material, name: str, create_group: Callable[[str], bpy.types.NodeTree]):
+    node_tree = bpy.data.node_groups.get(name)
+    if node_tree is None:
+        node_tree = create_group(name)
+
+    node = material.node_tree.nodes.new(type='ShaderNodeGroup')
+    node.node_tree = node_tree
+    return node
+
+
+def make_shadows_transparent(material, bsdf):
+    mix_shader = material.node_tree.nodes.new('ShaderNodeMixShader')
+    light_path = material.node_tree.nodes.new('ShaderNodeLightPath')
+    transparent_bsdf = material.node_tree.nodes.new(
+        'ShaderNodeBsdfTransparent')
+    output_node = material.node_tree.nodes.get('Material Output')
+
+    material.node_tree.links.new(
+        light_path.outputs['Is Shadow Ray'], mix_shader.inputs['Fac'])
+    material.node_tree.links.new(
+        bsdf.outputs['BSDF'], mix_shader.inputs[1])
+    material.node_tree.links.new(
+        transparent_bsdf.outputs['BSDF'], mix_shader.inputs[2])
+
+    material.node_tree.links.new(
+        mix_shader.outputs['Shader'], output_node.inputs['Surface'])
+
+
+def create_roughness_node_group(name: str) -> bpy.types.NodeTree:
     node_group_node_tree = bpy.data.node_groups.new(
         name, 'ShaderNodeTree')
 
@@ -103,6 +133,10 @@ def create_roughness_node_group(name: str, roughness_min: float, roughness_max: 
     inner_nodes = node_group_node_tree.nodes
     inner_links = node_group_node_tree.links
 
+    input_node = inner_nodes.new('NodeGroupInput')
+    node_group_node_tree.inputs.new('NodeSocketFloat', 'Min')
+    node_group_node_tree.inputs.new('NodeSocketFloat', 'Max')
+
     # TODO: Create frame called "smudges" or at least name the nodes.
     noise = inner_nodes.new('ShaderNodeTexNoise')
     noise.inputs['Scale'].default_value = 5.0
@@ -110,23 +144,54 @@ def create_roughness_node_group(name: str, roughness_min: float, roughness_max: 
     noise.inputs['Roughness'].default_value = 0.5
     noise.inputs['Distortion'].default_value = 0.0
 
-    ramp = inner_nodes.new('ShaderNodeValToRGB')
-    ramp.color_ramp.elements[0].color = (
-        roughness_min, roughness_min, roughness_min, 1.0)
-    ramp.color_ramp.elements[1].color = (
-        roughness_max, roughness_max, roughness_max, 1.0)
+    # Easier to configure than a color ramp since the input is 1D.
+    map_range = inner_nodes.new('ShaderNodeMapRange')
+    inner_links.new(noise.outputs['Fac'], map_range.inputs['Value'])
+    inner_links.new(input_node.outputs['Min'], map_range.inputs['To Min'])
+    inner_links.new(input_node.outputs['Max'], map_range.inputs['To Max'])
 
     output_node = inner_nodes.new('NodeGroupOutput')
 
-    inner_links.new(noise.outputs['Fac'], ramp.inputs['Fac'])
-    inner_links.new(ramp.outputs['Color'], output_node.inputs['Roughness'])
+    inner_links.new(map_range.outputs['Result'],
+                    output_node.inputs['Roughness'])
 
     return node_group_node_tree
 
 
-def create_normals_node_group() -> bpy.types.NodeTree:
+def create_speckle_node_group(name: str) -> bpy.types.NodeTree:
     node_group_node_tree = bpy.data.node_groups.new(
-        'ldr_tools_normal', 'ShaderNodeTree')
+        name, 'ShaderNodeTree')
+
+    node_group_node_tree.outputs.new('NodeSocketFloat', 'Fac')
+
+    inner_nodes = node_group_node_tree.nodes
+    inner_links = node_group_node_tree.links
+
+    input_node = inner_nodes.new('NodeGroupInput')
+    node_group_node_tree.inputs.new('NodeSocketFloat', 'Min')
+    node_group_node_tree.inputs.new('NodeSocketFloat', 'Max')
+
+    noise = inner_nodes.new('ShaderNodeTexNoise')
+    noise.inputs['Scale'].default_value = 15.0
+    noise.inputs['Detail'].default_value = 6.0
+    noise.inputs['Roughness'].default_value = 1.0
+    noise.inputs['Distortion'].default_value = 0.0
+
+    # Easier to configure than a color ramp since the input is 1D.
+    map_range = inner_nodes.new('ShaderNodeMapRange')
+    inner_links.new(noise.outputs['Fac'], map_range.inputs['Value'])
+    inner_links.new(input_node.outputs['Min'], map_range.inputs['From Min'])
+    inner_links.new(input_node.outputs['Max'], map_range.inputs['From Max'])
+
+    output_node = inner_nodes.new('NodeGroupOutput')
+
+    inner_links.new(map_range.outputs['Result'], output_node.inputs['Fac'])
+
+    return node_group_node_tree
+
+
+def create_normals_node_group(name: str) -> bpy.types.NodeTree:
+    node_group_node_tree = bpy.data.node_groups.new(name, 'ShaderNodeTree')
 
     node_group_node_tree.outputs.new('NodeSocketVector', 'Normal')
 
