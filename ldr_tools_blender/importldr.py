@@ -46,8 +46,8 @@ def import_instanced(filepath: str, color_by_code: dict[int, LDrawColor]):
     for name, color in geometry_world_transforms:
         geometry = geometry_cache[name]
 
-        mesh = create_mesh_from_geometry(name, geometry)
-        assign_materials(mesh, color, color_by_code, geometry)
+        mesh = create_colored_mesh_from_geometry(
+            name, color, color_by_code, geometry)
 
         blender_mesh_cache[(name, color)] = mesh
 
@@ -85,6 +85,7 @@ def import_instanced(filepath: str, color_by_code: dict[int, LDrawColor]):
 def create_instancer_mesh(name: str, transforms: np.ndarray):
     instancer_mesh = bpy.data.meshes.new(name)
 
+    # TODO: Some parts with negative scaling display as flipped (blacksmith).
     # Use homogeneous coordinates for 3D points.
     # Use a square with unit area centered at the origin.
     face_vertices = np.array(
@@ -135,9 +136,8 @@ def add_nodes(node: LDrawNode,
 
         blender_mesh = blender_mesh_cache.get(mesh_key)
         if blender_mesh is None:
-            mesh = create_mesh_from_geometry(node.name, geometry)
-
-            assign_materials(mesh, node.current_color, color_by_code, geometry)
+            mesh = create_colored_mesh_from_geometry(
+                node.name, node.current_color, color_by_code, geometry)
 
             blender_mesh_cache[mesh_key] = mesh
             obj = bpy.data.objects.new(node.name, mesh)
@@ -157,6 +157,19 @@ def add_nodes(node: LDrawNode,
         child_obj.parent = obj
 
     return obj
+
+
+def create_colored_mesh_from_geometry(name: str, color: int, color_by_code: dict[int, LDrawColor], geometry: LDrawGeometry):
+    mesh = create_mesh_from_geometry(name, geometry)
+
+    assign_materials(mesh, color, color_by_code, geometry)
+
+    # TODO: Why does this need to be done here to avoid messing up face colors?
+    # TODO: Can blender adjust faces in these calls?
+    mesh.validate()
+    mesh.update()
+
+    return mesh
 
 
 def assign_materials(mesh: bpy.types.Mesh, current_color: int, color_by_code: dict[int, LDrawColor], geometry: LDrawGeometry):
@@ -203,8 +216,5 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
         # TODO: Replace this with calculated normals from Rust eventually.
         mesh.use_auto_smooth = True
         mesh.polygons.foreach_set('use_smooth', [True] * len(mesh.polygons))
-
-    mesh.validate()
-    mesh.update()
 
     return mesh

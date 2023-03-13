@@ -50,10 +50,12 @@ impl DiskResolver {
 }
 
 impl FileRefResolver for DiskResolver {
-    fn resolve(&self, filename: &str) -> Result<Vec<u8>, ResolveError> {
+    fn resolve<P: AsRef<Path>>(&self, filename: P) -> Result<Vec<u8>, ResolveError> {
         // TODO: Where to handle stud replacement.
         // TODO: Make this configurable?
         // https://wiki.ldraw.org/wiki/Studs_with_Logos
+        // TODO: Avoid converting to an actual string using starts_with?
+        let filename = filename.as_ref().to_str().unwrap();
         let filename = match filename {
             "stud.dat" => "stud-logo4.dat",
             "stud2.dat" => "stud2-logo4.dat",
@@ -61,14 +63,10 @@ impl FileRefResolver for DiskResolver {
         };
 
         // Find the first folder that contains the given file.
-        let contents = self.base_paths.iter().find_map(|prefix| {
-            // Paths in LDraw may not match the OS path separator.
-            // Normalize the path and recollect components to use the OS separator.
-            let normalized_path: PathBuf = Path::new(&filename.replace("\\", "/"))
-                .components()
-                .collect();
-            std::fs::read(prefix.join(normalized_path)).ok()
-        });
+        let contents = self
+            .base_paths
+            .iter()
+            .find_map(|prefix| std::fs::read(prefix.join(filename)).ok());
 
         match contents {
             Some(contents) => Ok(contents),
@@ -119,6 +117,7 @@ pub fn load_file(path: &str) -> LDrawScene {
     let mut geometry_descriptors = HashMap::new();
     let root_node = load_node(
         source_file,
+        &main_model_name,
         &Mat4::IDENTITY,
         &source_map,
         &mut geometry_descriptors,
@@ -135,6 +134,7 @@ pub fn load_file(path: &str) -> LDrawScene {
 
 fn load_node<'a>(
     source_file: &'a weldr::SourceFile,
+    filename: &str,
     transform: &Mat4,
     source_map: &'a weldr::SourceMap,
     geometry_descriptors: &mut HashMap<String, GeometryInitDescriptor<'a>>,
@@ -143,30 +143,30 @@ fn load_node<'a>(
     let mut children = Vec::new();
     let mut geometry = None;
 
-    if is_part(source_file) || has_geometry(source_file) {
+    if is_part(source_file, filename) || has_geometry(source_file) {
         // Create geometry if the node is a part.
         // Use the special color code to reuse identical parts in different colors.
         geometry_descriptors
-            .entry(source_file.filename.clone())
+            .entry(filename.to_string())
             .or_insert_with(|| GeometryInitDescriptor {
                 source_file,
                 current_color: CURRENT_COLOR,
                 recursive: true,
             });
 
-        geometry = Some(source_file.filename.clone());
+        geometry = Some(filename.to_string());
     } else if has_geometry(source_file) {
         // Just add geometry for this node.
         // Use the current color at this node since this geometry might not be referenced elsewhere.
         geometry_descriptors
-            .entry(source_file.filename.clone())
+            .entry(filename.to_string())
             .or_insert_with(|| GeometryInitDescriptor {
                 source_file,
                 current_color,
                 recursive: false,
             });
 
-        geometry = Some(source_file.filename.clone());
+        geometry = Some(filename.to_string());
     } else {
         for cmd in &source_file.cmds {
             if let Command::SubFileRef(sfr_cmd) = cmd {
@@ -180,6 +180,7 @@ fn load_node<'a>(
 
                     let child_node = load_node(
                         subfile,
+                        &sfr_cmd.file,
                         &child_transform,
                         source_map,
                         geometry_descriptors,
@@ -194,7 +195,7 @@ fn load_node<'a>(
     let transform = scaled_transform(transform);
 
     LDrawNode {
-        name: source_file.filename.clone(),
+        name: filename.to_string(),
         transform,
         geometry_name: geometry,
         current_color,
@@ -232,7 +233,6 @@ fn scaled_transform(transform: &Mat4) -> Mat4 {
     transform
 }
 
-// TODO: Create another function that can generate the mesh for duplifaces?
 
 /// Find the world transforms for each geometry.
 /// This allows applications to more easily use instancing.
@@ -249,6 +249,7 @@ pub fn load_file_instanced(path: &str) -> LDrawSceneInstanced {
     let mut geometry_world_transforms = HashMap::new();
     load_node_instanced(
         source_file,
+        &main_model_name,
         &Mat4::IDENTITY,
         &source_map,
         &mut geometry_descriptors,
@@ -267,6 +268,7 @@ pub fn load_file_instanced(path: &str) -> LDrawSceneInstanced {
 // TODO: Share code with the non instanced function?
 fn load_node_instanced<'a>(
     source_file: &'a weldr::SourceFile,
+    filename: &str,
     world_transform: &Mat4,
     source_map: &'a weldr::SourceMap,
     geometry_descriptors: &mut HashMap<String, GeometryInitDescriptor<'a>>,
@@ -274,12 +276,12 @@ fn load_node_instanced<'a>(
     current_color: ColorCode,
 ) {
     // TODO: Find a way to avoid repetition.
-    let is_part = is_part(source_file);
+    let is_part = is_part(source_file, filename);
     if is_part {
         // Create geometry if the node is a part.
         // Use the special color code to reuse identical parts in different colors.
         geometry_descriptors
-            .entry(source_file.filename.clone())
+            .entry(filename.to_string())
             .or_insert_with(|| GeometryInitDescriptor {
                 source_file,
                 current_color: CURRENT_COLOR,
@@ -289,14 +291,14 @@ fn load_node_instanced<'a>(
         // Add another instance of the current geometry.
         // Also key by the color in case a part appears in multiple colors.
         geometry_world_transforms
-            .entry((source_file.filename.clone(), current_color))
+            .entry((filename.to_string(), current_color))
             .or_insert(Vec::new())
             .push(scaled_transform(world_transform));
     } else if has_geometry(source_file) {
         // Just add geometry for this node.
         // Use the current color at this node since this geometry might not be referenced elsewhere.
         geometry_descriptors
-            .entry(source_file.filename.clone())
+            .entry(filename.to_string())
             .or_insert_with(|| GeometryInitDescriptor {
                 source_file,
                 current_color,
@@ -306,7 +308,7 @@ fn load_node_instanced<'a>(
         // Add another instance of the current geometry.
         // Also key by the color in case a part appears in multiple colors.
         geometry_world_transforms
-            .entry((source_file.filename.clone(), current_color))
+            .entry((filename.to_string(), current_color))
             .or_insert(Vec::new())
             .push(scaled_transform(world_transform));
     }
@@ -324,6 +326,7 @@ fn load_node_instanced<'a>(
 
                     load_node_instanced(
                         subfile,
+                        &sfr_cmd.file,
                         &child_transform,
                         source_map,
                         geometry_descriptors,
@@ -336,9 +339,9 @@ fn load_node_instanced<'a>(
     }
 }
 
-fn is_part(source_file: &weldr::SourceFile) -> bool {
+fn is_part(source_file: &weldr::SourceFile, filename: &str) -> bool {
     // TODO: Check the part type rather than the extension.
-    source_file.filename.ends_with(".dat")
+    filename.ends_with(".dat")
 }
 
 fn has_geometry(source_file: &weldr::SourceFile) -> bool {
