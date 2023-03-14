@@ -69,11 +69,11 @@ def import_instanced(filepath: str, color_by_code: dict[int, LDrawColor]):
         instance_object = bpy.data.objects.new(
             f'{name}_{color}_instance', mesh)
         instance_object.parent = instancer_object
-        instance_object.hide_render = True
         bpy.context.collection.objects.link(instance_object)
         # Hide the original instanced object to avoid cluttering the viewport.
         # Make sure the object is in the view layer before hiding.
         instance_object.hide_set(True)
+        instance_object.hide_render = False
 
         # Instance the mesh on the faces of the parent object.
         instancer_object.instance_type = 'FACES'
