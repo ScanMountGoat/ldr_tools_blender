@@ -35,11 +35,14 @@ pub struct LDrawGeometry {
     face_start_indices: PyObject,
     face_sizes: PyObject,
     face_colors: PyObject,
+    edges: PyObject,
+    is_edge_sharp: Vec<bool>,
 }
 
 impl LDrawGeometry {
     fn from_geometry(py: Python, geometry: ldr_tools::LDrawGeometry) -> Self {
         let vertex_count = geometry.vertices.len();
+        let edge_count = geometry.edges.len();
 
         // This flatten will be optimized in Release mode.
         // This avoids needing unsafe code.
@@ -57,6 +60,16 @@ impl LDrawGeometry {
             face_start_indices: geometry.face_start_indices.into_pyarray(py).into(),
             face_sizes: geometry.face_sizes.into_pyarray(py).into(),
             face_colors: geometry.face_colors.into_pyarray(py).into(),
+            edges: geometry
+                .edges
+                .into_iter()
+                .flatten()
+                .collect::<Vec<u32>>()
+                .into_pyarray(py)
+                .reshape((edge_count, 2))
+                .unwrap()
+                .into(),
+            is_edge_sharp: geometry.is_edge_sharp,
         }
     }
 }

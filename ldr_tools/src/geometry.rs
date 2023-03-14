@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use glam::{Mat4, Vec3};
 use rstar::{primitives::GeomWithData, RTree};
 use weldr::Command;
@@ -5,12 +7,15 @@ use weldr::Command;
 use crate::{replace_color, ColorCode, SCENE_SCALE};
 
 // TODO: use the edge information to calculate smooth normals?
+// TODO: Document the data layout for these fields.
 pub struct LDrawGeometry {
     pub vertices: Vec<Vec3>,
     pub vertex_indices: Vec<u32>,
     pub face_start_indices: Vec<u32>,
     pub face_sizes: Vec<u32>,
     pub face_colors: Vec<u32>, // single element if all faces share a color
+    pub edges: Vec<[u32; 2]>,
+    pub is_edge_sharp: Vec<bool>,
 }
 
 struct GeometryContext {
@@ -21,8 +26,8 @@ struct GeometryContext {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Winding {
-    CCW,
-    CW,
+    Ccw,
+    Cw,
 }
 
 struct VertexMap {
@@ -36,17 +41,24 @@ impl VertexMap {
         }
     }
 
-    fn insert(&mut self, i: u32, v: [f32; 3]) -> Option<u32> {
+    fn get_nearest(&self, v: [f32; 3]) -> Option<u32> {
+        // TODO: Why do edges require higher tolerances?
+        self.rtree.nearest_neighbor(&v).map(|p| p.data)
+    }
+
+    fn get(&self, v: [f32; 3]) -> Option<u32> {
         // Return the value already in the map or None.
         // Dimensions in LDUs tend to be large, so use a large threshold.
         let epsilon = 0.001;
-        let existing_point = self
-            .rtree
+        self.rtree
             .locate_within_distance(v, epsilon * epsilon)
-            .next();
+            .next()
+            .map(|p| p.data)
+    }
 
-        match existing_point {
-            Some(point) => Some(point.data),
+    fn insert(&mut self, i: u32, v: [f32; 3]) -> Option<u32> {
+        match self.get(v) {
+            Some(index) => Some(index),
             None => {
                 // This vertex isn't in the map yet, so add it.
                 self.rtree.insert(GeomWithData::new(v, i));
@@ -68,6 +80,8 @@ pub fn create_geometry(
         face_start_indices: Vec::new(),
         face_sizes: Vec::new(),
         face_colors: Vec::new(),
+        edges: Vec::new(),
+        is_edge_sharp: Vec::new(),
     };
 
     // Start with inverted set to false since parts should never be inverted.
@@ -79,15 +93,19 @@ pub fn create_geometry(
     };
 
     let mut vertex_map = VertexMap::new();
+    let mut hard_edges = Vec::new();
 
     append_geometry(
         &mut geometry,
+        &mut hard_edges,
         &mut vertex_map,
         source_file,
         source_map,
         ctx,
         recursive,
     );
+
+    geometry.is_edge_sharp = get_sharp_edges(&geometry.edges, &hard_edges, &vertex_map);
 
     // Optimize the case where all face colors are the same.
     // This reduces overhead when processing data in Python.
@@ -112,6 +130,7 @@ pub fn create_geometry(
         .unwrap_or_default();
     let dimensions = max - min;
 
+    // TODO: Avoid applying this on chains, ropes, etc?
     // Convert a distance between parts to a scale factor.
     // This gap is in LDUs since we haven't scaled the part yet.
     let gap_distance = 0.1;
@@ -130,8 +149,33 @@ pub fn create_geometry(
     geometry
 }
 
+fn get_sharp_edges(
+    edges: &[[u32; 2]],
+    hard_edges: &[[Vec3; 2]],
+    vertex_map: &VertexMap,
+) -> Vec<bool> {
+    // Find the edges marked as edges in the LDraw geometry.
+    // These edges can be split by consuming applications later.
+    let mut hard_edge_indices = HashSet::new();
+    for [v0, v1] in hard_edges.iter() {
+        // TODO: Why is get_nearest not enough to find some indices?
+        let i0 = vertex_map.get_nearest(v0.to_array());
+        let i1 = vertex_map.get_nearest(v1.to_array());
+        if let (Some(i0), Some(i1)) = (i0, i1) {
+            hard_edge_indices.insert((i0, i1));
+            hard_edge_indices.insert((i1, i0));
+        }
+    }
+
+    edges
+        .iter()
+        .map(|[v0, v1]| hard_edge_indices.contains(&(*v0, *v1)))
+        .collect()
+}
+
 fn append_geometry(
     geometry: &mut LDrawGeometry,
+    hard_edges: &mut Vec<[Vec3; 2]>,
     vertex_map: &mut VertexMap,
     source_file: &weldr::SourceFile,
     source_map: &weldr::SourceMap,
@@ -142,7 +186,7 @@ fn append_geometry(
     // The default winding can be assumed to be CCW.
     // Winding can be changed within a file.
     // Winding only impacts the current file commands.
-    let mut current_winding = Winding::CCW;
+    let mut current_winding = Winding::Ccw;
 
     let mut current_inverted = ctx.inverted;
     // Invert if the current transform is "inverted".
@@ -158,8 +202,8 @@ fn append_geometry(
                 // TODO: Add proper parsing to weldr.
                 for word in c.text.split_whitespace() {
                     match word {
-                        "CCW" => current_winding = Winding::CCW,
-                        "CW" => current_winding = Winding::CW,
+                        "CCW" => current_winding = Winding::Ccw,
+                        "CW" => current_winding = Winding::Cw,
                         "INVERTNEXT" => invert_next = true,
                         _ => (),
                     }
@@ -189,6 +233,10 @@ fn append_geometry(
                 let color = replace_color(q.color, ctx.current_color);
                 geometry.face_colors.push(color);
             }
+            Command::Line(line_cmd) => {
+                let edge = line_cmd.vertices.map(|v| ctx.transform.transform_point3(v));
+                hard_edges.push(edge);
+            }
             Command::SubFileRef(subfile_cmd) => {
                 if recursive {
                     if let Some(subfile) = source_map.get(&subfile_cmd.file) {
@@ -208,7 +256,8 @@ fn append_geometry(
                         invert_next = false;
 
                         append_geometry(
-                            geometry, vertex_map, subfile, source_map, child_ctx, recursive,
+                            geometry, hard_edges, vertex_map, subfile, source_map, child_ctx,
+                            recursive,
                         );
                     }
                 }
@@ -220,10 +269,10 @@ fn append_geometry(
 
 fn invert_winding(winding: Winding, invert: bool) -> Winding {
     match (winding, invert) {
-        (Winding::CCW, false) => Winding::CCW,
-        (Winding::CW, false) => Winding::CW,
-        (Winding::CCW, true) => Winding::CW,
-        (Winding::CW, true) => Winding::CCW,
+        (Winding::Ccw, false) => Winding::Ccw,
+        (Winding::Cw, false) => Winding::Cw,
+        (Winding::Ccw, true) => Winding::Cw,
+        (Winding::Cw, true) => Winding::Ccw,
     }
 }
 
@@ -235,14 +284,18 @@ fn add_face<const N: usize>(
     vertex_map: &mut VertexMap,
 ) {
     let starting_index = geometry.vertex_indices.len() as u32;
-    let indices = vertices.map(|v| insert_vertex(geometry, transform, v, vertex_map));
+    let mut indices = vertices.map(|v| insert_vertex(geometry, transform, v, vertex_map));
 
     // TODO: Is it ok to just reverse indices even though this isn't the convention?
-    match winding {
-        Winding::CCW => geometry.vertex_indices.extend(indices.into_iter()),
-        Winding::CW => geometry.vertex_indices.extend(indices.into_iter().rev()),
+    if winding == Winding::Cw {
+        indices.reverse();
     }
 
+    geometry.vertex_indices.extend_from_slice(&indices);
+    for i in 0..indices.len() {
+        // A face (0,1,2) will have edges (0,1), (1,2), (2,0).
+        geometry.edges.push([indices[i], indices[(i + 1) % N]]);
+    }
     geometry.face_start_indices.push(starting_index);
     geometry.face_sizes.push(N as u32);
 }
@@ -256,7 +309,7 @@ fn insert_vertex(
     let new_vertex = transform.transform_point3(vertex);
     let new_index = geometry.vertices.len() as u32;
     if let Some(index) = vertex_map.insert(new_index, new_vertex.to_array()) {
-        index as u32
+        index
     } else {
         geometry.vertices.push(new_vertex);
         new_index
@@ -284,7 +337,11 @@ mod tests {
     }
 
     impl weldr::FileRefResolver for DummyResolver {
-        fn resolve(&self, filename: &str) -> Result<Vec<u8>, weldr::ResolveError> {
+        fn resolve<P: AsRef<std::path::Path>>(
+            &self,
+            filename: P,
+        ) -> Result<Vec<u8>, weldr::ResolveError> {
+            let filename = filename.as_ref().to_str().unwrap();
             self.files
                 .get(filename)
                 .cloned()

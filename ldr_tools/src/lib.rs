@@ -44,6 +44,7 @@ impl DiskResolver {
                 catalog_path.join("p"),
                 catalog_path.join("parts"),
                 catalog_path.join("parts").join("s"),
+                // TODO: How to handle the case where subfiles can be in the same directory as the current file?
             ],
         }
     }
@@ -208,7 +209,7 @@ fn create_geometry_cache(
     source_map: &weldr::SourceMap,
 ) -> HashMap<String, LDrawGeometry> {
     // Create the actual geometry in parallel to improve performance.
-    let geometry_cache = geometry_descriptors
+    geometry_descriptors
         .into_par_iter()
         .map(|(name, descriptor)| {
             let GeometryInitDescriptor {
@@ -218,11 +219,10 @@ fn create_geometry_cache(
             } = descriptor;
             (
                 name,
-                create_geometry(source_file, &source_map, current_color, recursive),
+                create_geometry(source_file, source_map, current_color, recursive),
             )
         })
-        .collect();
-    geometry_cache
+        .collect()
 }
 
 fn scaled_transform(transform: &Mat4) -> Mat4 {
@@ -233,6 +233,7 @@ fn scaled_transform(transform: &Mat4) -> Mat4 {
     transform
 }
 
+// TODO: Also instance studs to reduce memory usage?
 /// Find the world transforms for each geometry.
 /// This allows applications to more easily use instancing.
 pub fn load_file_instanced(path: &str) -> LDrawSceneInstanced {
@@ -338,7 +339,7 @@ fn load_node_instanced<'a>(
     }
 }
 
-fn is_part(source_file: &weldr::SourceFile, filename: &str) -> bool {
+fn is_part(_source_file: &weldr::SourceFile, filename: &str) -> bool {
     // TODO: Check the part type rather than the extension.
     filename.ends_with(".dat")
 }

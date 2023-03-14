@@ -169,7 +169,20 @@ def create_colored_mesh_from_geometry(name: str, color: int, color_by_code: dict
     mesh.validate()
     mesh.update()
 
+    split_hard_edges(mesh)
+
     return mesh
+
+
+def split_hard_edges(mesh):
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+
+    # The edge smooth state is set when creating the mesh geometry.
+    bmesh.ops.split_edges(bm, edges=[e for e in bm.edges if not e.smooth])
+
+    bm.to_mesh(mesh)
+    bm.free()
 
 
 def assign_materials(mesh: bpy.types.Mesh, current_color: int, color_by_code: dict[int, LDrawColor], geometry: LDrawGeometry):
@@ -213,8 +226,13 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
             'loop_start', geometry.face_start_indices)
         mesh.polygons.foreach_set('loop_total', geometry.face_sizes)
 
-        # TODO: Replace this with calculated normals from Rust eventually.
+        mesh.edges.add(geometry.edges.shape[0])
+        mesh.edges.foreach_set('vertices', geometry.edges.reshape(-1))
+        mesh.edges.foreach_set('use_edge_sharp', geometry.is_edge_sharp)
+
+        # Enable autosmooth to handle some cases where edges aren't split.
         mesh.use_auto_smooth = True
+        mesh.auto_smooth_angle = math.radians(60.0)
         mesh.polygons.foreach_set('use_smooth', [True] * len(mesh.polygons))
 
     return mesh
