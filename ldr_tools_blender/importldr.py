@@ -14,19 +14,19 @@ from .material import get_material
 # TODO: Add type hints for all functions.
 
 
-def importldraw(operator: bpy.types.Operator, filepath: str, use_instancing=True):
+def importldraw(operator: bpy.types.Operator, filepath: str, ldraw_path: str, use_instancing: bool):
     color_by_code = ldr_tools_py.load_color_table()
 
     # TODO: Create a parameter for whether to use instancing or not.
     if use_instancing:
-        import_instanced(filepath, color_by_code)
+        import_instanced(filepath, ldraw_path, color_by_code)
     else:
-        import_objects(filepath, color_by_code)
+        import_objects(filepath, ldraw_path, color_by_code)
 
 
-def import_objects(filepath: str, color_by_code: dict[int, LDrawColor]):
+def import_objects(filepath: str, ldraw_path: str, color_by_code: dict[int, LDrawColor]):
     blender_mesh_cache = {}
-    root_node, geometry_cache = ldr_tools_py.load_file(filepath)
+    root_node, geometry_cache = ldr_tools_py.load_file(filepath, ldraw_path)
 
     root_obj = add_nodes(root_node, geometry_cache,
                          blender_mesh_cache, color_by_code)
@@ -35,11 +35,11 @@ def import_objects(filepath: str, color_by_code: dict[int, LDrawColor]):
         math.radians(-90.0), 4, 'X')
 
 
-def import_instanced(filepath: str, color_by_code: dict[int, LDrawColor]):
+def import_instanced(filepath: str, ldraw_path: str, color_by_code: dict[int, LDrawColor]):
     # Instance each part on the points of a mesh.
     # This avoids overhead from object creation for large scenes.
     geometry_cache, geometry_world_transforms = ldr_tools_py.load_file_instanced(
-        filepath)
+        filepath, ldraw_path)
 
     # First create all the meshes and materials.
     blender_mesh_cache = {}

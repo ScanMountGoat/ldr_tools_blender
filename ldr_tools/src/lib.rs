@@ -37,7 +37,7 @@ struct DiskResolver {
 }
 
 impl DiskResolver {
-    fn new_from_catalog<P: AsRef<Path>>(catalog_path: P) -> Self {
+    fn new_from_library<P: AsRef<Path>>(catalog_path: P) -> Self {
         let catalog_path = catalog_path.as_ref().to_owned();
         Self {
             base_paths: vec![
@@ -107,8 +107,8 @@ struct GeometryInitDescriptor<'a> {
 // TODO: Add global scale parameters.
 // Adjust the draw ctx for iter to set a "global scale"?
 // Also add a per part gap scale matrix.
-pub fn load_file(path: &str) -> LDrawScene {
-    let resolver = DiskResolver::new_from_catalog(r"C:\Users\Public\Documents\LDraw");
+pub fn load_file(path: &str, ldraw_path: &str) -> LDrawScene {
+    let resolver = DiskResolver::new_from_library(ldraw_path);
     let mut source_map = weldr::SourceMap::new();
 
     let main_model_name = weldr::parse(path, &resolver, &mut source_map).unwrap();
@@ -236,8 +236,9 @@ fn scaled_transform(transform: &Mat4) -> Mat4 {
 // TODO: Also instance studs to reduce memory usage?
 /// Find the world transforms for each geometry.
 /// This allows applications to more easily use instancing.
-pub fn load_file_instanced(path: &str) -> LDrawSceneInstanced {
-    let resolver = DiskResolver::new_from_catalog(r"C:\Users\Public\Documents\LDraw");
+// TODO: Take AsRef<Path> instead?
+pub fn load_file_instanced(path: &str, ldraw_path: &str) -> LDrawSceneInstanced {
+    let resolver = DiskResolver::new_from_library(ldraw_path);
     let mut source_map = weldr::SourceMap::new();
 
     let main_model_name = weldr::parse(path, &resolver, &mut source_map).unwrap();

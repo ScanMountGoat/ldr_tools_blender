@@ -96,10 +96,14 @@ impl From<ldr_tools::LDrawColor> for LDrawColor {
 
 // TODO: Is it worth creating the scene structs here as well?
 #[pyfunction]
-fn load_file(py: Python, path: &str) -> PyResult<(LDrawNode, HashMap<String, LDrawGeometry>)> {
+fn load_file(
+    py: Python,
+    path: &str,
+    ldraw_path: &str,
+) -> PyResult<(LDrawNode, HashMap<String, LDrawGeometry>)> {
     // TODO: This timing code doesn't need to be here.
     let start = std::time::Instant::now();
-    let scene = ldr_tools::load_file(path);
+    let scene = ldr_tools::load_file(path, ldraw_path);
 
     let geometry_cache_py = scene
         .geometry_cache
@@ -114,12 +118,13 @@ fn load_file(py: Python, path: &str) -> PyResult<(LDrawNode, HashMap<String, LDr
 fn load_file_instanced(
     py: Python,
     path: &str,
+    ldraw_path: &str,
 ) -> PyResult<(
     HashMap<String, LDrawGeometry>,
     HashMap<(String, u32), PyObject>,
 )> {
     let start = std::time::Instant::now();
-    let scene = ldr_tools::load_file_instanced(path);
+    let scene = ldr_tools::load_file_instanced(path, ldraw_path);
 
     let geometry_cache_py = scene
         .geometry_cache
