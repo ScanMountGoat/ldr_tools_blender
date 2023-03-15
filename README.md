@@ -23,9 +23,6 @@ This project is built from the ground up with performance in mind. The ldr_tools
 
 Blender itself does not scale well with the number of objects created in the scene. For large scenes with more than 50000 parts, it's recommended to check "Instance on faces" before importing. This instances each part on the faces of a hidden mesh, which makes the individual objects harder to edit but avoids most of the Blender overhead for scenes with high object counts.
 
-### PBR Renders
-The addon also creates Blender materials suitable for photorealistic rendering. This includes more accurate colors, edge bevels, and procedural surface details. Import the provided color test LDR file to see 
-
 ## Projects
 ### ldr_tools
 A Rust library for working with LDraw files. This performs all the parsing and geometry handling. This project can be used in 
