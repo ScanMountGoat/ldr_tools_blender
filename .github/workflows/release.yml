@@ -1,6 +1,8 @@
 name: Compile Release
 
 on: 
+  release:
+    types: [created]
   workflow_dispatch:
 
 env:
@@ -20,10 +22,16 @@ jobs:
       run: |
         cp target/release/libldr_tools_py.so ldr_tools_blender/ldr_tools_py.so
         zip -r ldr_tools_blender_linux_x64.zip ldr_tools_blender
-    - uses: actions/upload-artifact@v3
+    - name: Upload Zip
+      uses: actions/upload-artifact@v3
       with:
         name: ldr_tools_blender_linux
         path: ldr_tools_blender_linux_x64.zip
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: ldr_tools_blender_linux_x64.zip
         
   build-windows:
     runs-on: windows-latest
@@ -37,11 +45,17 @@ jobs:
     - name: Create Release Zip
       run: |
         cp target/release/ldr_tools_py.dll ldr_tools_blender/ldr_tools_py.pyd
-        Compress-Archive -path ldr_tools_blender -destination ldr_tools_blender_win_x64.zip
-    - uses: actions/upload-artifact@v3
+        Compress-Archive -path ldr_tools_blender -destinationPath ldr_tools_blender_win_x64.zip 
+    - name: Upload Zip
+      uses: actions/upload-artifact@v3
       with:
         name: ldr_tools_blender_win
         path: ldr_tools_blender_win_x64.zip
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: ldr_tools_blender_win_x64.zip
 
   build-macos:
     runs-on: macos-latest
@@ -74,8 +88,14 @@ jobs:
     - name: Create Release Zip
       run: |
         cp target/${{matrix.target}}/release/libldr_tools_py.dylib ldr_tools_blender/ldr_tools_py.so
-        zip -r ldr_tools_blender_macos_${{matrix.desc}} ldr_tools_blender
-    - uses: actions/upload-artifact@v3
+        zip -r ldr_tools_blender_macos_${{matrix.desc}}.zip ldr_tools_blender
+    - name: Upload Zip
+      uses: actions/upload-artifact@v3
       with:
         name: ldr_tools_blender_macos_${{matrix.desc}}
         path: ldr_tools_blender_macos_${{matrix.desc}}.zip
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: ldr_tools_blender_macos${{matrix.desc}}.zip
