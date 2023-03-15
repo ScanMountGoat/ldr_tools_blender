@@ -16,18 +16,7 @@ to reduce the overhead for converting data from Rust to Python to Blender.
 The Blender addon for importing LDraw files making use of ldr_tools_py. This is not a pure Python project. See the building instructions for details on how to build this from source.
 
 ## Building
-### Prerequisites
-This project uses both Python and Rust code. The Python version should match the current version of Python used by Blender. 
-This is currently Python 3.10 for Blender 3.3 or later. It's recommended to create a virtual environment with the appropriate Python 
-version to avoid any issues when building. The latest version of the Rust toolchain can be installed from https://www.rust-lang.org/.
-
-### Building the Libraries
-Building the library code is as simple as running `cargo build --release`. Don't forget the `--release` since debug builds in Rust will not perform well. When building the libraries for use in the Blender addon, it's recommended to enable the virtual environment with the appropriate Python version. This ensures that the Python bindings will be built for the version of Python used by Blender. If the versions do not match, Blender will not be able to import the compiled ldr_tools_py native Python module.
-
-### Building the Addon
-The Blender addon uses the Rust code to simplify the addon code and take advantage of the performance and reliability of Rust. A precompiled binary is not provided for ldr_tools_py, so it will need to be built before installing the addon in Blender. Follow the instructions to build the libaries. This will generate a file like `target/release/ldr_tools_py.dll` or `target/release/libldr_tools_py.dylib`. Change the extension from `.dll` to `.pyd` or `.dylib` to `.so` depending on the platform. The `lib` prefix should also be removed from the filename. This compiled file can be imported like any other Python module. If the import fails, check that the file is in the correct folder, has the right extension, and was compiled using the correct Python version.
-
-Blender loads addons with multiple files from zip files, so place the contents of the `ldr_tools_blender` folder and the native Python module from earlier in a zip file. This zip file can than be installed from the addons menu in Blender and enabled as the `ldr_tools_blender` addon. This addon will only work on the current operating system and target like 64-bit Windows with an x86 processor. The Rust code can easily be compiled for other targets and operating systems like Apple Silicon Macs as needed.
+The easiest way to see the steps used to create a new release is to check the [release.yaml](https://github.com/ScanMountGoat/ldr_tools_blender/blob/main/.github/workflows/release.yml) script that runs using Github actions. Note that this may not be the most efficient way to develop locally. See [development](https://github.com/ScanMountGoat/ldr_tools_blender/blob/main/DEVELOPMENT.md) for working on your personal machine. The basic process is to build the Rust libraries and Python bindings, copy the native Python module into the addon folder, and create the addon folder ready for users to load into Blender. This needs to be repeated for each supported operating system and CPU architecture.
 
 ## Copyrights
 LDraw™ is a trademark owned and licensed by the Jessiman Estate, which does not sponsor, endorse, or authorize this project.  
