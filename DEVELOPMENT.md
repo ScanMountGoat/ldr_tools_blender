@@ -37,5 +37,13 @@ xcopy /E/I/Y "ldr_tools_blender" "%OUTPUT%"
 copy /y "target\release\ldr_tools_py.dll" "%OUTPUT%\ldr_tools_py.pyd"
 ```
 
+### MacOS
+```sh
+# reload.sh
+OUTPUT="/Users/<username>/library/Application Support/Blender/3.3/scripts/addons/ldr_tools_blender/"
+cp -a ldr_tools_blender/. "$OUTPUT"
+cp target/release/libldr_tools_py.dylib "$OUTPUT/ldr_tools_py.so"
+```
+
 ## Troubleshooting Loading Errors
 The addon will not be enabled if the code has errors. Check the addon preferences to check if any error messages come up when trying to manually enable the addon. After fixing the error, close Blender and reload the addon using the script. You will need to manually enable the addon again from the preferences menu after opening Blender.
