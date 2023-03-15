@@ -10,7 +10,8 @@ def linear(srgb: float) -> float:
 
 
 rgb_peeron_by_code = {
-    40: [linear(191/255), linear(183/255), linear(177/255)],  # Trans_Black
+    # Trans_Black
+    40: [linear(191/255), linear(183/255), linear(177/255)],
     # Light_Bluish_Gray
     71: [linear(163/255), linear(162/255), linear(164/255)],
 }

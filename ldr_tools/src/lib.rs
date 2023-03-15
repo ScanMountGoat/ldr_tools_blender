@@ -44,6 +44,10 @@ impl DiskResolver {
                 catalog_path.join("p"),
                 catalog_path.join("parts"),
                 catalog_path.join("parts").join("s"),
+                // Studio unoffical part folders.
+                catalog_path.join("UnOfficial").join("p"),
+                catalog_path.join("UnOfficial").join("parts"),
+                catalog_path.join("UnOfficial").join("parts").join("s"),
                 // TODO: How to handle the case where subfiles can be in the same directory as the current file?
             ],
         }
