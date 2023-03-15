@@ -160,8 +160,8 @@ fn load_file_instanced(
 }
 
 #[pyfunction]
-fn load_color_table() -> PyResult<HashMap<u32, LDrawColor>> {
-    Ok(ldr_tools::load_color_table()
+fn load_color_table(ldraw_path: &str) -> PyResult<HashMap<u32, LDrawColor>> {
+    Ok(ldr_tools::load_color_table(ldraw_path)
         .into_iter()
         .map(|(k, v)| (k, v.into()))
         .collect())

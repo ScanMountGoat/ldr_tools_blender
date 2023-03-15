@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 pub struct LDrawColor {
     pub name: String,
@@ -7,8 +7,8 @@ pub struct LDrawColor {
     pub speckle_rgba_linear: Option<[f32; 4]>,
 }
 
-pub fn load_color_table() -> HashMap<u32, LDrawColor> {
-    let config_path = r"C:\Users\Public\Documents\LDraw\LDConfig.ldr";
+pub fn load_color_table(ldraw_path: &str) -> HashMap<u32, LDrawColor> {
+    let config_path = Path::new(ldraw_path).join("LDConfig.ldr");
     let cmds = weldr::parse_raw(&std::fs::read(config_path).unwrap()).unwrap();
 
     cmds.into_iter()

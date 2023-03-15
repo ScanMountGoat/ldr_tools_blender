@@ -15,7 +15,7 @@ from .material import get_material
 
 
 def importldraw(operator: bpy.types.Operator, filepath: str, ldraw_path: str, use_instancing: bool):
-    color_by_code = ldr_tools_py.load_color_table()
+    color_by_code = ldr_tools_py.load_color_table(ldraw_path)
 
     # TODO: Create a parameter for whether to use instancing or not.
     if use_instancing:
