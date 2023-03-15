@@ -8,7 +8,7 @@ An addon for importing LDraw files into Blender 3.3 or later. Report bugs or req
 The goal of this project is to provided a reliable and performant way to import digital LEGO models into modern versions of Blender for rendering. This includes models built with [LDraw editing programs](https://www.ldraw.org/downloads-2/third-party-software.html) and LDR files exported from [Bricklink Studio](https://www.bricklink.com/v3/studio/download.page). 
 
 * Compatible with LDR and MPD files. If you have a file that doesn't open correctly or an extension you'd like supported, please report it in [issues](https://github.com/ScanMountGoat/ldr_tools_blender/issues).
-*  Easily load LEGO models with tens of thousands of parts. For extremely large scenes, see [instancing](#instancing).
+*  Easily load LEGO models with tens of thousands of parts. For extremely large scenes, see [performance](#performance).
 * Create photorealistc renders taking full advantage of Blender Cycles with automatically created PBR materials with accurate colors and procedurally generated surface detail. 
 
 ## Getting Started
@@ -18,8 +18,8 @@ The goal of this project is to provided a reliable and performant way to import 
 4. The addons menu should now allow you to check the ldr_tools_blender addon to enable it.
 5. Import an LDraw model into Blender by clicking File > Import > LDraw and selecting a .mpd or .ldr file.
 
-## Instancing
-This project is built from the ground up with performance in mind. The ldr_tools_blender addon can easily handle very large models with hundreds of thousands of parts. BThe addon will always instance geometry by part name and color to reduce memory usage and improve import times. Memory usage will be similar for both methods.
+## Performance
+This project is built from the ground up with performance in mind. The ldr_tools_blender addon can easily handle very large models with hundreds of thousands of parts. The addon will always instance geometry by part name and color to reduce memory usage and improve import times. Memory usage will be similar for both methods.
 
 Blender itself does not scale well with the number of objects created in the scene. For large scenes with more than 50000 parts, it's recommended to check "Instance on faces" before importing. This instances each part on the faces of a hidden mesh, which makes the individual objects harder to edit but avoids most of the Blender overhead for scenes with high object counts.
 
