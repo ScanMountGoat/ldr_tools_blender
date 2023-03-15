@@ -42,25 +42,40 @@ jobs:
       with:
         name: ldr_tools_blender_win
         path: ldr_tools_blender_win_x64.zip
-        
+
   build-macos:
     runs-on: macos-latest
+    strategy:
+      matrix:
+        target: [x86_64-apple-darwin]
+        desc: [intel]
+        include:
+          - target: aarch64-apple-darwin
+            desc: apple_silicon
     steps:
     - uses: actions/checkout@v3
     - uses: actions/setup-python@v3
       with:
         python-version: '3.10'
+    - name: Install maturin
+      run: |
+        python -m pip install --upgrade pip
+        pip install maturin
+    - name: Install Rust Toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: ${{matrix.target}}
     - name: Build
       run: |
-        # Workaround for compiling Pyo3 on MacOS
         cd ldr_tools_py 
-        cargo rustc --release -- -C link-arg=-undefined -C link-arg=dynamic_lookup
+        maturin build --release --target=${{matrix.target}}
         cd ..
     - name: Create Release Zip
       run: |
-        cp target/release/libldr_tools_py.dylib ldr_tools_blender/ldr_tools_py.so
-        zip -r ldr_tools_blender_macos_x64 ldr_tools_blender
+        cp target/${{matrix.target}}/release/libldr_tools_py.dylib ldr_tools_blender/ldr_tools_py.so
+        zip -r ldr_tools_blender_macos_${{matrix.desc}} ldr_tools_blender
     - uses: actions/upload-artifact@v3
       with:
-        name: ldr_tools_blender_macos
-        path: ldr_tools_blender_macos_x64.zip
+        name: ldr_tools_blender_macos_${{matrix.desc}}
+        path: ldr_tools_blender_macos_${{matrix.desc}}.zip
