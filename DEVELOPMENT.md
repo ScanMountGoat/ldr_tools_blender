@@ -15,7 +15,7 @@ This is currently Python 3.10 for Blender 3.3 or later. It's recommended to crea
 version to avoid any issues when building. The latest version of the Rust toolchain can be installed from https://www.rust-lang.org/.
 
 ### Building the Libraries
-Building the library code is as simple as running `cargo build --release` from terminal or command line. Don't forget the `--release` since debug builds in Rust will not perform well. When building the libraries for use in the Blender addon, it's recommended to enable the virtual environment with the appropriate Python version. This ensures that the Python bindings will be built for the version of Python used by Blender. If the versions do not match, Blender will not be able to import the compiled ldr_tools_py native Python module.
+Building the library code is as simple as running `cargo build --release` from terminal or command line. Don't forget the `--release` since debug builds in Rust will not perform well. When building the libraries for use in the Blender addon, it's recommended to enable the virtual environment with the appropriate Python version. This ensures that the Python bindings will be built for the version of Python used by Blender. If the versions do not match, Blender will not be able to import the compiled ldr_tools_py native Python module. The current Python version used by Blender is 3.10.
 
 MacOS users may experience errors when trying to build the Python bindings. The easiest way to fix this is to install the PyO3's build tool [maturin](https://github.com/PyO3/maturin) using pip. This is the method used by github actions in the CI script for MacOS. Simply call `maturin build --release` from within the `ldr_tools_py` directory. 
 

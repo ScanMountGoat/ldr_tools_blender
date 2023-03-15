@@ -9,7 +9,7 @@ bl_info = {
     "blender": (3, 3, 0),
     "location": "File > Import",
     "warning": "",
-    "wiki_url": "https://github.com/ScanMountGoat/ldr_tools_blender",
+    "doc_url": "https://github.com/ScanMountGoat/ldr_tools_blender/wiki",
     "tracker_url": "https://github.com/ScanMountGoat/ldr_tools_blender/issues",
     "category": "Import-Export"
 }
