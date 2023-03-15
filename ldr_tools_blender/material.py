@@ -1,6 +1,7 @@
 from typing import Callable
 
 from .ldr_tools_py import LDrawColor
+from .colors import rgb_peeron_by_code, rgb_ldr_tools_by_code
 
 import bpy
 
@@ -23,12 +24,15 @@ def get_material(color_by_code: dict[int, LDrawColor], code: int):
         # Alpha is specified using transmission instead.
         r, g, b, a = ldraw_color.rgba_linear
 
-        # TODO: make a dictionary of color overrides for more realistic colors.
-        if code == 80:
-            # Make Metallic_Silver brighter
-            r *= 3.0
-            g *= 3.0
-            b *= 3.0
+        # Set the color in the viewport.
+        # This can use the default LDraw color for familiarity.
+        material.diffuse_color = [r, g, b, a]
+
+        # Partially complete alternatives to LDraw colors for better realism.
+        if code in rgb_ldr_tools_by_code:
+            r, g, b = rgb_ldr_tools_by_code[code]
+        elif code in rgb_peeron_by_code:
+            r, g, b = rgb_peeron_by_code[code]
 
         bsdf.inputs['Base Color'].default_value = [r, g, b, 1.0]
 
@@ -117,9 +121,6 @@ def get_material(color_by_code: dict[int, LDrawColor], code: int):
 
             material.node_tree.links.new(
                 normals_node.outputs['Normal'], bsdf.inputs['Normal'])
-
-        # Set the color in the viewport.
-        material.diffuse_color = [r, g, b, 1.0]
 
     return material
 
@@ -231,7 +232,7 @@ def create_normals_node_group(name: str) -> bpy.types.NodeTree:
     bevel = inner_nodes.new('ShaderNodeBevel')
     bevel.inputs['Radius'].default_value = 0.01
 
-    # TODO: Create frame called "unevenness" or at least name the nodes.
+    # TODO: Set node positions.
     unevenness_noise = inner_nodes.new('ShaderNodeTexNoise')
     unevenness_noise.inputs['Scale'].default_value = 3.0
     unevenness_noise.inputs['Detail'].default_value = 0.0
@@ -239,19 +240,18 @@ def create_normals_node_group(name: str) -> bpy.types.NodeTree:
     unevenness_noise.inputs['Distortion'].default_value = 0.0
 
     unevenness_bump = inner_nodes.new('ShaderNodeBump')
-    unevenness_bump.inputs['Strength'].default_value = 0.1
-    unevenness_bump.inputs['Distance'].default_value = 0.1
+    unevenness_bump.inputs['Strength'].default_value = 1.0
+    unevenness_bump.inputs['Distance'].default_value = 0.01
 
-    # TODO: Create frame called "micronoise" or at least name the nodes.
-    micro_noise = inner_nodes.new('ShaderNodeTexNoise')
-    micro_noise.inputs['Scale'].default_value = 100.0
-    micro_noise.inputs['Detail'].default_value = 15.0
-    micro_noise.inputs['Roughness'].default_value = 1.0
-    micro_noise.inputs['Distortion'].default_value = 0.0
+    micro_noise = inner_nodes.new('ShaderNodeTexMusgrave')
+    micro_noise.inputs['Scale'].default_value = 400.0
+    micro_noise.inputs['Detail'].default_value = 2.0
+    micro_noise.inputs['Dimension'].default_value = 2.0
+    micro_noise.inputs['Lacunarity'].default_value = 2.0
 
     micro_bump = inner_nodes.new('ShaderNodeBump')
-    micro_bump.inputs['Strength'].default_value = 0.1
-    micro_bump.inputs['Distance'].default_value = 0.1
+    micro_bump.inputs['Strength'].default_value = 0.5
+    micro_bump.inputs['Distance'].default_value = 0.0002
 
     tex_coord = inner_nodes.new('ShaderNodeTexCoord')
 
