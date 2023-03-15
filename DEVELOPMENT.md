@@ -23,3 +23,19 @@ MacOS users may experience errors when trying to build the Python bindings. The 
 The Blender addon uses the Rust code to simplify the addon code and take advantage of the performance and reliability of Rust. A precompiled binary is not provided for ldr_tools_py, so it will need to be built before installing the addon in Blender. Follow the instructions to build the libaries. This will generate a file like `target/release/ldr_tools_py.dll` or `target/release/libldr_tools_py.dylib`. Change the extension from `.dll` to `.pyd` or `.dylib` to `.so` depending on the platform. The `lib` prefix should also be removed from the filename. This compiled file can be imported like any other Python module. If the import fails, check that the file is in the correct folder, has the right extension, and was compiled using the correct Python version.
 
 Blender loads addons with multiple files from zip files, so place the contents of the `ldr_tools_blender` folder and the native Python module from earlier in a zip file. This zip file can than be installed from the addons menu in Blender and enabled as the `ldr_tools_blender` addon. This addon will only work on the current operating system and target like 64-bit Windows with an x86 processor. The Rust code can easily be compiled for other targets and operating systems like Apple Silicon Macs as needed.
+
+## Reloading Changes
+The process of uninstalling and reinstalling the addon when making a new change can be time consuming. Thankfully, this can be almost entirely automated using a script. Simply close Blender, run a script to overwrite the files in the installed addon directory, and reopen Blender. 
+
+Sample scripts for different operating systems are provided below. Note that these scripts will also install the addon if it hasn't been installed already. Addon "installation" in Blender is just the process of moving the folder into the addons directory. Make sure to set the appropriate username and version of Blender!
+
+### Windows
+```bat
+@REM reload.bat
+set OUTPUT=C:\Users\<username>\AppData\Roaming\Blender Foundation\Blender\3.3\scripts\addons\ldr_tools_blender
+xcopy /E/I/Y "ldr_tools_blender" "%OUTPUT%" 
+copy /y "target\release\ldr_tools_py.dll" "%OUTPUT%\ldr_tools_py.pyd"
+```
+
+## Troubleshooting Loading Errors
+The addon will not be enabled if the code has errors. Check the addon preferences to check if any error messages come up when trying to manually enable the addon. After fixing the error, close Blender and reload the addon using the script. You will need to manually enable the addon again from the preferences menu after opening Blender.
