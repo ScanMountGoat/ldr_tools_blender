@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 glam = "0.23.0"
-weldr = { git = "https://github.com/ScanMountGoat/weldr", branch = "dev" }
+weldr = { git = "https://github.com/ScanMountGoat/weldr", rev = "c9ae933" }
 rstar = "0.10.0"
 rayon = "1.7.0"
 
