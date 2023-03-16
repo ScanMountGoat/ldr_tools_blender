@@ -102,6 +102,6 @@ jobs:
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: ldr_tools_blender_macos${{matrix.desc}}.zip
+        files: ldr_tools_blender_macos_${{matrix.desc}}.zip
       env:
         GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
