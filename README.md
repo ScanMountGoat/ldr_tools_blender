@@ -1,4 +1,5 @@
-# ldr_tools_blender
+# ldr_tools_blender [![GitHub release (latest by date including pre-releases)](https://img.shields.io/github/v/release/ScanMountGoat/ldr_tools_blender?include_prereleases)](https://github.com/ScanMountGoat/ldr_tools_blender/releases/latest)
+
 ![falcon](https://user-images.githubusercontent.com/23301691/225458929-e1870792-6125-443b-af49-fc047b6c8167.jpg)
 > Cycles render of [10179-1 Millenium Falcon UCS (LDraw OMR)](https://omr.ldraw.org/files/347)
 
