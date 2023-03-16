@@ -18,6 +18,9 @@ The goal of this project is to provided a reliable and performant way to import 
 4. The addons menu should now allow you to check the ldr_tools_blender addon to enable it.
 5. Import an LDraw model into Blender by clicking File > Import > LDraw and selecting a .mpd or .ldr file.
 
+## Uninstalling/Upgrading
+Upgrading the addon requires uninstalling the addon, downloading the latest version from releases, and then reinstalling the addon. On some operating systems, it may be necessary to disable the addon, restart Blender, and then uninstall the addon. This workaround seems to only be necessary on Windows.
+
 ## Performance
 This project is built from the ground up with performance in mind. The ldr_tools_blender addon can easily handle very large models with hundreds of thousands of parts. The addon will always instance geometry by part name and color to reduce memory usage and improve import times. Memory usage will be similar for both methods.
 
