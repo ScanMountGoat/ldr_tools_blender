@@ -7,7 +7,7 @@ An addon for importing LDraw files into Blender 3.3 or later. Report bugs or req
 ## Features
 The goal of this project is to provided a reliable and performant way to import digital LEGO models into modern versions of Blender for rendering. This includes models built with [LDraw editing programs](https://www.ldraw.org/downloads-2/third-party-software.html) and LDR files exported from [Bricklink Studio](https://www.bricklink.com/v3/studio/download.page). 
 
-* Compatible with LDR and MPD files. If you have a file that doesn't open correctly or an extension you'd like supported, please report it in [issues](https://github.com/ScanMountGoat/ldr_tools_blender/issues).
+* Compatible with LDR and MPD files. If you have a file that doesn't open correctly or an LDraw extension you'd like supported, please report it in [issues](https://github.com/ScanMountGoat/ldr_tools_blender/issues).
 *  Easily load LEGO models with tens of thousands of parts. For extremely large scenes, see [performance](#performance).
 * Create photorealistc renders taking full advantage of Blender Cycles with automatically created PBR materials with accurate colors and procedurally generated surface detail. 
 
