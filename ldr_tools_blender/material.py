@@ -5,6 +5,12 @@ from .colors import rgb_peeron_by_code, rgb_ldr_tools_by_code
 
 import bpy
 
+# Materials are based on the techniques described in the following blog posts.
+# This covers how to create lego shaders with realistic surface detailing.
+# https://stefanmuller.com/exploring-lego-material-part-1/
+# https://stefanmuller.com/exploring-lego-material-part-2/
+# https://stefanmuller.com/exploring-lego-material-part-3/
+
 
 def get_material(color_by_code: dict[int, LDrawColor], code: int):
     # Cache materials by name.
