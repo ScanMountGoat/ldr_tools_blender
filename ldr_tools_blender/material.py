@@ -45,9 +45,12 @@ def get_material(color_by_code: dict[int, LDrawColor], code: int):
         # Transparent colors specify an alpha of 128 / 255.
         is_transmissive = a <= 0.6
 
+        # RANDOM_WALK_FIXED_RADIUS is more accurate but appears white on edges.
+        # Use a less accurate SSS method instead.
+        bsdf.subsurface_method = 'BURLEY'
         bsdf.inputs['Subsurface Color'].default_value = [r, g, b, 1.0]
-        bsdf.inputs['Subsurface Radius'].default_value = [
-            0.001, 0.001, 0.001]  # TODO: should depend on scene scale
+        # TODO: This is in Blender units and should depend on scene scale
+        bsdf.inputs['Subsurface Radius'].default_value = [0.02, 0.02, 0.02]
         bsdf.inputs['Subsurface'].default_value = 1.0
 
         # Procedural roughness.
