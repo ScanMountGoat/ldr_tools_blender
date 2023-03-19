@@ -6,16 +6,24 @@ use weldr::Command;
 
 use crate::{replace_color, ColorCode, SCENE_SCALE};
 
-// TODO: use the edge information to calculate smooth normals?
+// TODO: use the edge information to calculate smooth normals directly in Rust?
 // TODO: Document the data layout for these fields.
+#[derive(Debug, PartialEq)]
 pub struct LDrawGeometry {
     pub vertices: Vec<Vec3>,
     pub vertex_indices: Vec<u32>,
     pub face_start_indices: Vec<u32>,
     pub face_sizes: Vec<u32>,
-    pub face_colors: Vec<u32>, // single element if all faces share a color
+    /// The colors of each face or a single element if all faces share a color.
+    pub face_colors: Vec<FaceColor>,
     pub edges: Vec<[u32; 2]>,
     pub is_edge_sharp: Vec<bool>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct FaceColor {
+    pub color: ColorCode,
+    pub is_grainy_slope: bool,
 }
 
 struct GeometryContext {
@@ -131,6 +139,7 @@ pub fn create_geometry(
     let dimensions = max - min;
 
     // TODO: Avoid applying this on chains, ropes, etc?
+    // TODO: Weld ropes into a single piece?
     // Convert a distance between parts to a scale factor.
     // This gap is in LDUs since we haven't scaled the part yet.
     let gap_distance = 0.1;
@@ -218,8 +227,11 @@ fn append_geometry(
                     vertex_map,
                 );
 
-                let color = replace_color(t.color, ctx.current_color);
-                geometry.face_colors.push(color);
+                let face_color = FaceColor {
+                    color: replace_color(t.color, ctx.current_color),
+                    is_grainy_slope: false,
+                };
+                geometry.face_colors.push(face_color);
             }
             Command::Quad(q) => {
                 add_face(
@@ -230,8 +242,11 @@ fn append_geometry(
                     vertex_map,
                 );
 
-                let color = replace_color(q.color, ctx.current_color);
-                geometry.face_colors.push(color);
+                let face_color = FaceColor {
+                    color: replace_color(q.color, ctx.current_color),
+                    is_grainy_slope: false,
+                };
+                geometry.face_colors.push(face_color);
             }
             Command::Line(line_cmd) => {
                 let edge = line_cmd.vertices.map(|v| ctx.transform.transform_point3(v));
@@ -395,7 +410,43 @@ mod tests {
             vec![0, 3, 7, 10, 13, 16, 20, 23],
             geometry.face_start_indices
         );
-        assert_eq!(vec![7, 2, 3, 1, 4, 5, 7, 8,], geometry.face_colors);
+        assert_eq!(
+            vec![
+                FaceColor {
+                    color: 7,
+                    is_grainy_slope: false
+                },
+                FaceColor {
+                    color: 2,
+                    is_grainy_slope: false
+                },
+                FaceColor {
+                    color: 3,
+                    is_grainy_slope: false
+                },
+                FaceColor {
+                    color: 1,
+                    is_grainy_slope: false
+                },
+                FaceColor {
+                    color: 4,
+                    is_grainy_slope: false
+                },
+                FaceColor {
+                    color: 5,
+                    is_grainy_slope: false
+                },
+                FaceColor {
+                    color: 7,
+                    is_grainy_slope: false
+                },
+                FaceColor {
+                    color: 8,
+                    is_grainy_slope: false
+                },
+            ],
+            geometry.face_colors
+        );
     }
 
     #[test]

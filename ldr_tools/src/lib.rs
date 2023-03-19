@@ -4,12 +4,12 @@ use std::{
 };
 
 use geometry::create_geometry;
-use glam::{vec4, Mat4};
+use glam::{vec3, vec4, Mat4, Vec3};
 use rayon::prelude::*;
 use weldr::{Command, FileRefResolver, ResolveError};
 
 pub use color::{load_color_table, LDrawColor};
-pub use geometry::LDrawGeometry;
+pub use geometry::{FaceColor, LDrawGeometry};
 pub use weldr::Color;
 
 pub type ColorCode = u32;
@@ -19,6 +19,7 @@ const CURRENT_COLOR: ColorCode = 16;
 
 mod color;
 mod geometry;
+mod slope;
 
 const SCENE_SCALE: f32 = 0.01;
 
@@ -91,6 +92,12 @@ pub struct LDrawScene {
 
 pub struct LDrawSceneInstanced {
     pub geometry_world_transforms: HashMap<(String, ColorCode), Vec<Mat4>>,
+    pub geometry_cache: HashMap<String, LDrawGeometry>,
+}
+
+pub struct LDrawSceneInstancedFaces {
+    /// A list of quads for each unique part and color whose position and vertex normal determine the part transformation.
+    pub geometry_face_instances: HashMap<(String, ColorCode), Vec<[Vec3; 4]>>,
     pub geometry_cache: HashMap<String, LDrawGeometry>,
 }
 
@@ -237,6 +244,61 @@ fn scaled_transform(transform: &Mat4) -> Mat4 {
     transform
 }
 
+/// Creates a face for each part's transform for Blender's instance on faces feature.
+/// Each quad face encodes the translation, rotation, and scale.
+pub fn load_file_instanced_faces(path: &str, ldraw_path: &str) -> LDrawSceneInstancedFaces {
+    let scene = load_file_instanced(path, ldraw_path);
+
+    // TODO: par_iter?
+    let geometry_face_instances = scene
+        .geometry_world_transforms
+        .into_par_iter()
+        .map(|(k, transforms)| {
+            let faces = geometry_face_instances(transforms);
+            (k, faces)
+        })
+        .collect();
+
+    LDrawSceneInstancedFaces {
+        geometry_face_instances,
+        geometry_cache: scene.geometry_cache,
+    }
+}
+
+fn geometry_face_instances(transforms: Vec<Mat4>) -> Vec<[Vec3; 4]> {
+    transforms
+        .into_iter()
+        .map(|transform| {
+            // Account for some parts being "flipped".
+            // Fix winding order and negative scaling.
+            // This ensure calculated face normals work as expected in Blender.
+            let flipped = transform.determinant() < 0.0;
+            let transform = if flipped {
+                let (s, r, t) = transform.to_scale_rotation_translation();
+                Mat4::from_scale_rotation_translation(-s, r, t)
+            } else {
+                transform
+            };
+
+            // Transform a square with unit area centered at the origin.
+            // The position and vertex normal encode the translation and rotation.
+            // The face area encodes the scale.
+            let mut face = [
+                transform.transform_point3(vec3(-0.5, -0.5, 0.0)),
+                transform.transform_point3(vec3(0.5, -0.5, 0.0)),
+                transform.transform_point3(vec3(0.5, 0.5, 0.0)),
+                transform.transform_point3(vec3(-0.5, 0.5, 0.0)),
+            ];
+
+            if flipped {
+                face.reverse();
+            }
+
+            face
+        })
+        .collect()
+}
+
 // TODO: Also instance studs to reduce memory usage?
 /// Find the world transforms for each geometry.
 /// This allows applications to more easily use instancing.
@@ -356,4 +418,48 @@ fn has_geometry(source_file: &weldr::SourceFile) -> bool {
         .cmds
         .iter()
         .any(|c| matches!(c, Command::Triangle(_) | Command::Quad(_)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn geometry_face_instances_flip() {
+        // Some LDraw models use negative scaling.
+        // Test that flipped parts have correct winding and orientation.
+        let transforms = vec![
+            Mat4::from_cols_array_2d(&[
+                [0.0, 0.0, -1.0, 1.0],
+                [0.0, 1.0, 0.0, 2.0],
+                [1.0, 0.0, 0.0, 3.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ])
+            .transpose(),
+            Mat4::from_cols_array_2d(&[
+                [0.0, 0.0, 1.0, 1.0],
+                [0.0, 1.0, 0.0, 2.0],
+                [1.0, 0.0, 0.0, 3.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ])
+            .transpose(),
+        ];
+        assert_eq!(
+            vec![
+                [
+                    vec3(1.0, 1.5, 2.5,),
+                    vec3(1.0, 1.5, 3.5,),
+                    vec3(1.0, 2.5, 3.5,),
+                    vec3(1.0, 2.5, 2.5,),
+                ],
+                [
+                    vec3(1.0, 1.5, 3.5,),
+                    vec3(1.0, 1.5, 2.5,),
+                    vec3(1.0, 2.5, 2.5,),
+                    vec3(1.0, 2.5, 3.5,),
+                ],
+            ],
+            geometry_face_instances(transforms)
+        );
+    }
 }

@@ -12,7 +12,7 @@ import bpy
 # https://stefanmuller.com/exploring-lego-material-part-3/
 
 
-def get_material(color_by_code: dict[int, LDrawColor], code: int):
+def get_material(color_by_code: dict[int, LDrawColor], code: int, is_grainy_slope: bool):
     # Cache materials by name.
     # This loads materials lazily to avoid creating unused colors.
     ldraw_color = color_by_code.get(code)
@@ -116,20 +116,24 @@ def get_material(color_by_code: dict[int, LDrawColor], code: int):
                 bsdf.inputs['Transmission Roughness'].default_value = 0.25
             else:
                 roughness_node.inputs['Min'].default_value = 0.01
-                roughness_node.inputs['Max'].default_value = 0.02
-                bsdf.inputs['Transmission Roughness'].default_value = 0.1
+                roughness_node.inputs['Max'].default_value = 0.15
+                bsdf.inputs['Transmission Roughness'].default_value = 0.075
 
             # Disable shadow casting for transparent materials.
             # This avoids making transparent parts too dark.
             make_shadows_transparent(material, bsdf)
 
         # Procedural normals.
-        if not is_transmissive:
+        # if not is_transmissive:
+        if is_grainy_slope:
+            normals_node = create_node_group(
+                material, 'ldr_tools_slope_normal', create_slope_normals_node_group)
+        else:
             normals_node = create_node_group(
                 material, 'ldr_tools_normal', create_normals_node_group)
 
-            material.node_tree.links.new(
-                normals_node.outputs['Normal'], bsdf.inputs['Normal'])
+        material.node_tree.links.new(
+            normals_node.outputs['Normal'], bsdf.inputs['Normal'])
 
     return material
 
@@ -177,7 +181,7 @@ def create_roughness_node_group(name: str) -> bpy.types.NodeTree:
 
     # TODO: Create frame called "smudges" or at least name the nodes.
     noise = inner_nodes.new('ShaderNodeTexNoise')
-    noise.inputs['Scale'].default_value = 5.0
+    noise.inputs['Scale'].default_value = 4.0
     noise.inputs['Detail'].default_value = 2.0
     noise.inputs['Roughness'].default_value = 0.5
     noise.inputs['Distortion'].default_value = 0.0
@@ -233,48 +237,74 @@ def create_normals_node_group(name: str) -> bpy.types.NodeTree:
 
     node_group_node_tree.outputs.new('NodeSocketVector', 'Normal')
 
-    inner_nodes = node_group_node_tree.nodes
-    inner_links = node_group_node_tree.links
+    nodes = node_group_node_tree.nodes
+    links = node_group_node_tree.links
 
-    output_node = inner_nodes.new('NodeGroupOutput')
+    output_node = nodes.new('NodeGroupOutput')
 
-    bevel = inner_nodes.new('ShaderNodeBevel')
+    bevel = nodes.new('ShaderNodeBevel')
     bevel.inputs['Radius'].default_value = 0.01
 
     # TODO: Set node positions.
-    unevenness_noise = inner_nodes.new('ShaderNodeTexNoise')
-    unevenness_noise.inputs['Scale'].default_value = 3.0
-    unevenness_noise.inputs['Detail'].default_value = 0.0
-    unevenness_noise.inputs['Roughness'].default_value = 0.0
-    unevenness_noise.inputs['Distortion'].default_value = 0.0
+    # Faces of bricks are never perfectly flat.
+    # Create a very low frequency noise to break up highlights
+    noise = nodes.new('ShaderNodeTexNoise')
+    noise.inputs['Scale'].default_value = 2.0
+    noise.inputs['Detail'].default_value = 1.0
+    noise.inputs['Roughness'].default_value = 1.0
+    noise.inputs['Distortion'].default_value = 0.0
 
-    unevenness_bump = inner_nodes.new('ShaderNodeBump')
-    unevenness_bump.inputs['Strength'].default_value = 1.0
-    unevenness_bump.inputs['Distance'].default_value = 0.01
+    bump = nodes.new('ShaderNodeBump')
+    bump.inputs['Strength'].default_value = 1.0
+    bump.inputs['Distance'].default_value = 0.01
 
-    micro_noise = inner_nodes.new('ShaderNodeTexMusgrave')
-    micro_noise.inputs['Scale'].default_value = 400.0
-    micro_noise.inputs['Detail'].default_value = 2.0
-    micro_noise.inputs['Dimension'].default_value = 2.0
-    micro_noise.inputs['Lacunarity'].default_value = 2.0
+    tex_coord = nodes.new('ShaderNodeTexCoord')
 
-    micro_bump = inner_nodes.new('ShaderNodeBump')
-    micro_bump.inputs['Strength'].default_value = 0.5
-    micro_bump.inputs['Distance'].default_value = 0.0002
+    links.new(bevel.outputs['Normal'], bump.inputs['Normal'])
 
-    tex_coord = inner_nodes.new('ShaderNodeTexCoord')
+    links.new(tex_coord.outputs['Object'],
+              noise.inputs['Vector'])
+    links.new(
+        noise.outputs['Fac'], bump.inputs['Height'])
+    links.new(
+        bump.outputs['Normal'], output_node.inputs['Normal'])
 
-    inner_links.new(bevel.outputs['Normal'], unevenness_bump.inputs['Normal'])
+    return node_group_node_tree
 
-    inner_links.new(tex_coord.outputs['Object'],
-                    unevenness_noise.inputs['Vector'])
-    inner_links.new(
-        unevenness_noise.outputs['Fac'], unevenness_bump.inputs['Height'])
-    inner_links.new(
-        unevenness_bump.outputs['Normal'], micro_bump.inputs['Normal'])
 
-    inner_links.new(tex_coord.outputs['Object'], micro_noise.inputs['Vector'])
-    inner_links.new(micro_noise.outputs['Fac'], micro_bump.inputs['Height'])
-    inner_links.new(micro_bump.outputs['Normal'], output_node.inputs['Normal'])
+def create_slope_normals_node_group(name: str) -> bpy.types.NodeTree:
+    node_group_node_tree = bpy.data.node_groups.new(name, 'ShaderNodeTree')
+
+    node_group_node_tree.outputs.new('NodeSocketVector', 'Normal')
+
+    nodes = node_group_node_tree.nodes
+    links = node_group_node_tree.links
+
+    output_node = nodes.new('NodeGroupOutput')
+
+    bevel = nodes.new('ShaderNodeBevel')
+    bevel.inputs['Radius'].default_value = 0.01
+
+    # TODO: Set node positions.
+    noise = nodes.new('ShaderNodeTexMusgrave')
+    noise.inputs['Scale'].default_value = 125.0
+    noise.inputs['Detail'].default_value = 3.0
+    noise.inputs['Dimension'].default_value = 1.0
+    noise.inputs['Lacunarity'].default_value = 2.0
+
+    bump = nodes.new('ShaderNodeBump')
+    bump.inputs['Strength'].default_value = 0.5
+    bump.inputs['Distance'].default_value = 0.005
+
+    tex_coord = nodes.new('ShaderNodeTexCoord')
+
+    links.new(bevel.outputs['Normal'], bump.inputs['Normal'])
+
+    links.new(tex_coord.outputs['Object'],
+              noise.inputs['Vector'])
+    links.new(
+        noise.outputs['Fac'], bump.inputs['Height'])
+    links.new(
+        bump.outputs['Normal'], output_node.inputs['Normal'])
 
     return node_group_node_tree

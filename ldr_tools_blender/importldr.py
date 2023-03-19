@@ -17,7 +17,7 @@ from .material import get_material
 def importldraw(operator: bpy.types.Operator, filepath: str, ldraw_path: str, use_instancing: bool):
     color_by_code = ldr_tools_py.load_color_table(ldraw_path)
 
-    # TODO: Create a parameter for whether to use instancing or not.
+    # TODO: Add an option to make the lowest point have a height of 0 using obj.dimensions?
     if use_instancing:
         import_instanced(filepath, ldraw_path, color_by_code)
     else:
@@ -38,12 +38,12 @@ def import_objects(filepath: str, ldraw_path: str, color_by_code: dict[int, LDra
 def import_instanced(filepath: str, ldraw_path: str, color_by_code: dict[int, LDrawColor]):
     # Instance each part on the points of a mesh.
     # This avoids overhead from object creation for large scenes.
-    geometry_cache, geometry_world_transforms = ldr_tools_py.load_file_instanced(
+    geometry_cache, geometry_face_instances = ldr_tools_py.load_file_instanced_faces(
         filepath, ldraw_path)
 
     # First create all the meshes and materials.
     blender_mesh_cache = {}
-    for name, color in geometry_world_transforms:
+    for name, color in geometry_face_instances:
         geometry = geometry_cache[name]
 
         mesh = create_colored_mesh_from_geometry(
@@ -52,9 +52,9 @@ def import_instanced(filepath: str, ldraw_path: str, color_by_code: dict[int, LD
         blender_mesh_cache[(name, color)] = mesh
 
     # Instant each unique colored part on the faces of a mesh.
-    for (name, color), transforms in geometry_world_transforms.items():
+    for (name, color), faces in geometry_face_instances.items():
         instancer_mesh = create_instancer_mesh(
-            f'{name}_{color}_instancer', transforms)
+            f'{name}_{color}_instancer', faces)
 
         instancer_object = bpy.data.objects.new(
             f'{name}_{color}_instancer', instancer_mesh)
@@ -82,20 +82,10 @@ def import_instanced(filepath: str, ldraw_path: str, color_by_code: dict[int, LD
         instancer_object.show_instancer_for_viewport = False
 
 
-def create_instancer_mesh(name: str, transforms: np.ndarray):
+def create_instancer_mesh(name: str, vertices: np.ndarray):
+    # Create a quad face for each part instance.
+    # The face's position, normal, and area encode the transform.
     instancer_mesh = bpy.data.meshes.new(name)
-
-    # TODO: Some parts with negative scaling display as flipped (blacksmith).
-    # Use homogeneous coordinates for 3D points.
-    # Use a square with unit area centered at the origin.
-    face_vertices = np.array(
-        [[-0.5, -0.5, 0.0, 1.0], [0.5, -0.5, 0.0, 1.0], [0.5, 0.5, 0.0, 1.0], [-0.5, 0.5, 0.0, 1.0]])
-
-    # Duplicate the vertices for each face for each transform.
-    # Transform each quad face by each of the transforms.
-    vertices = face_vertices.reshape((1, 4, 4)).repeat(
-        transforms.shape[0], axis=0) @ transforms
-    vertices = vertices[:, :, :3].reshape((-1, 3))
 
     vertex_indices = np.arange(vertices.shape[0], dtype=np.uint32)
     loop_start = np.arange(0, vertex_indices.shape[0], 4, dtype=np.int32)
@@ -186,24 +176,22 @@ def split_hard_edges(mesh):
 
 
 def assign_materials(mesh: bpy.types.Mesh, current_color: int, color_by_code: dict[int, LDrawColor], geometry: LDrawGeometry):
-    if geometry.face_colors.size == 1:
+    if len(geometry.face_colors) == 1:
         # Geometry is cached with code 16, so also handle color replacement.
-        color = current_color if geometry.face_colors[0] == 16 else geometry.face_colors[0]
+        face_color = geometry.face_colors[0]
+        color = current_color if face_color.color == 16 else face_color.color
 
         # Cache materials by name.
-        material = get_material(color_by_code, color)
+        material = get_material(color_by_code, color, face_color.is_grainy_slope)
 
         mesh.materials.append(material)
     else:
-        # Copy the array to avoid modifying the geometry cache.
-        # The value 16 must be preserved for parts used in multiple colors.
-        replaced_colors = geometry.face_colors.copy()
-        replaced_colors[replaced_colors == 16] = current_color
-
         # Handle the case where not all faces have the same color.
         # This includes patterned (printed) parts and stickers.
-        for (face, color) in zip(mesh.polygons, replaced_colors):
-            material = get_material(color_by_code, color)
+        for (face, face_color) in zip(mesh.polygons, geometry.face_colors):
+            color = current_color if face_color.color == 16 else face_color.color
+
+            material = get_material(color_by_code, color, face_color.is_grainy_slope)
             if mesh.materials.get(material.name) is None:
                 mesh.materials.append(material)
             face.material_index = mesh.materials.find(material.name)

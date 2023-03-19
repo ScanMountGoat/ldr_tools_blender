@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use numpy::IntoPyArray;
 use pyo3::prelude::*;
 
-// TODO: Is it worth supporting mutability in lists using PyList?
+// TODO: Is it easier to drop the prefix and use ldr_tools_py.Node instead of LDrawNode?
 #[pyclass(get_all)]
 #[derive(Debug, Clone)]
 pub struct LDrawNode {
@@ -34,7 +34,7 @@ pub struct LDrawGeometry {
     vertex_indices: PyObject,
     face_start_indices: PyObject,
     face_sizes: PyObject,
-    face_colors: PyObject,
+    face_colors: Vec<FaceColor>,
     edges: PyObject,
     is_edge_sharp: Vec<bool>,
 }
@@ -59,7 +59,7 @@ impl LDrawGeometry {
             vertex_indices: geometry.vertex_indices.into_pyarray(py).into(),
             face_start_indices: geometry.face_start_indices.into_pyarray(py).into(),
             face_sizes: geometry.face_sizes.into_pyarray(py).into(),
-            face_colors: geometry.face_colors.into_pyarray(py).into(),
+            face_colors: geometry.face_colors.into_iter().map(Into::into).collect(),
             edges: geometry
                 .edges
                 .into_iter()
@@ -70,6 +70,22 @@ impl LDrawGeometry {
                 .unwrap()
                 .into(),
             is_edge_sharp: geometry.is_edge_sharp,
+        }
+    }
+}
+
+#[pyclass(get_all)]
+#[derive(Debug, Clone)]
+pub struct FaceColor {
+    color: u32,
+    is_grainy_slope: bool,
+}
+
+impl From<ldr_tools::FaceColor> for FaceColor {
+    fn from(f: ldr_tools::FaceColor) -> Self {
+        Self {
+            color: f.color,
+            is_grainy_slope: f.is_grainy_slope,
         }
     }
 }
@@ -160,6 +176,54 @@ fn load_file_instanced(
 }
 
 #[pyfunction]
+fn load_file_instanced_faces(
+    py: Python,
+    path: &str,
+    ldraw_path: &str,
+) -> PyResult<(
+    HashMap<String, LDrawGeometry>,
+    HashMap<(String, u32), PyObject>,
+)> {
+    let start = std::time::Instant::now();
+    let scene = ldr_tools::load_file_instanced_faces(path, ldraw_path);
+
+    let geometry_cache_py = scene
+        .geometry_cache
+        .into_iter()
+        .map(|(k, v)| (k, LDrawGeometry::from_geometry(py, v)))
+        .collect();
+
+    let geometry_world_transforms_py = scene
+        .geometry_face_instances
+        .into_iter()
+        .map(|(k, v)| {
+            // Create a single numpy array of vertices for each part.
+            // This means Python code can avoid overhead from for loops.
+            // This flatten will be optimized in Release mode.
+            // This avoids needing unsafe code.
+            let vertex_count = v.len() * 4;
+            let transforms = v
+                .into_iter()
+                .flat_map(|[v0, v1, v2, v3]| {
+                    [v0.to_array(), v1.to_array(), v2.to_array(), v3.to_array()]
+                })
+                .flatten()
+                .collect::<Vec<f32>>()
+                .into_pyarray(py)
+                .reshape((vertex_count, 3))
+                .unwrap()
+                .into();
+
+            (k, transforms)
+        })
+        .collect();
+
+    println!("load_file_instanced_faces: {:?}", start.elapsed());
+
+    Ok((geometry_cache_py, geometry_world_transforms_py))
+}
+
+#[pyfunction]
 fn load_color_table(ldraw_path: &str) -> PyResult<HashMap<u32, LDrawColor>> {
     Ok(ldr_tools::load_color_table(ldraw_path)
         .into_iter()
@@ -171,10 +235,12 @@ fn load_color_table(ldraw_path: &str) -> PyResult<HashMap<u32, LDrawColor>> {
 fn ldr_tools_py(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<LDrawNode>()?;
     m.add_class::<LDrawGeometry>()?;
+    m.add_class::<FaceColor>()?;
     m.add_class::<LDrawColor>()?;
 
     m.add_function(wrap_pyfunction!(load_file, m)?)?;
     m.add_function(wrap_pyfunction!(load_file_instanced, m)?)?;
+    m.add_function(wrap_pyfunction!(load_file_instanced_faces, m)?)?;
     m.add_function(wrap_pyfunction!(load_color_table, m)?)?;
 
     Ok(())
