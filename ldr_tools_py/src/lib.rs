@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use numpy::IntoPyArray;
 use pyo3::prelude::*;
 
-// TODO: Is it easier to drop the prefix and use ldr_tools_py.Node instead of LDrawNode?
 #[pyclass(get_all)]
 #[derive(Debug, Clone)]
 pub struct LDrawNode {
@@ -110,16 +109,44 @@ impl From<ldr_tools::LDrawColor> for LDrawColor {
     }
 }
 
+#[pyclass(get_all, set_all)]
+#[derive(Debug, Clone)]
+pub struct GeometrySettings {
+    triangulate: bool,
+    add_gap_between_parts: bool,
+}
+
+#[pymethods]
+impl GeometrySettings {
+    #[new]
+    fn new(triangulate: bool, add_gap_between_parts: bool) -> Self {
+        Self {
+            triangulate,
+            add_gap_between_parts,
+        }
+    }
+}
+
+impl From<&GeometrySettings> for ldr_tools::GeometrySettings {
+    fn from(value: &GeometrySettings) -> Self {
+        Self {
+            triangulate: value.triangulate,
+            add_gap_between_parts: value.add_gap_between_parts,
+        }
+    }
+}
+
 // TODO: Is it worth creating the scene structs here as well?
 #[pyfunction]
 fn load_file(
     py: Python,
     path: &str,
     ldraw_path: &str,
+    settings: &GeometrySettings,
 ) -> PyResult<(LDrawNode, HashMap<String, LDrawGeometry>)> {
     // TODO: This timing code doesn't need to be here.
     let start = std::time::Instant::now();
-    let scene = ldr_tools::load_file(path, ldraw_path);
+    let scene = ldr_tools::load_file(path, ldraw_path, &settings.into());
 
     let geometry_cache_py = scene
         .geometry_cache
@@ -135,12 +162,13 @@ fn load_file_instanced(
     py: Python,
     path: &str,
     ldraw_path: &str,
+    settings: &GeometrySettings,
 ) -> PyResult<(
     HashMap<String, LDrawGeometry>,
     HashMap<(String, u32), PyObject>,
 )> {
     let start = std::time::Instant::now();
-    let scene = ldr_tools::load_file_instanced(path, ldraw_path);
+    let scene = ldr_tools::load_file_instanced(path, ldraw_path, &settings.into());
 
     let geometry_cache_py = scene
         .geometry_cache
@@ -180,12 +208,13 @@ fn load_file_instanced_faces(
     py: Python,
     path: &str,
     ldraw_path: &str,
+    settings: &GeometrySettings,
 ) -> PyResult<(
     HashMap<String, LDrawGeometry>,
     HashMap<(String, u32), PyObject>,
 )> {
     let start = std::time::Instant::now();
-    let scene = ldr_tools::load_file_instanced_faces(path, ldraw_path);
+    let scene = ldr_tools::load_file_instanced_faces(path, ldraw_path, &settings.into());
 
     let geometry_cache_py = scene
         .geometry_cache
@@ -237,6 +266,7 @@ fn ldr_tools_py(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<LDrawGeometry>()?;
     m.add_class::<FaceColor>()?;
     m.add_class::<LDrawColor>()?;
+    m.add_class::<GeometrySettings>()?;
 
     m.add_function(wrap_pyfunction!(load_file, m)?)?;
     m.add_function(wrap_pyfunction!(load_file_instanced, m)?)?;

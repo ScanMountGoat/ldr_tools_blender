@@ -4,7 +4,7 @@ use glam::{Mat4, Vec3};
 use rstar::{primitives::GeomWithData, RTree};
 use weldr::Command;
 
-use crate::{replace_color, ColorCode, SCENE_SCALE};
+use crate::{replace_color, slope::is_grainy_slope, ColorCode, GeometrySettings, SCENE_SCALE};
 
 // TODO: use the edge information to calculate smooth normals directly in Rust?
 // TODO: Document the data layout for these fields.
@@ -79,8 +79,10 @@ impl VertexMap {
 pub fn create_geometry(
     source_file: &weldr::SourceFile,
     source_map: &weldr::SourceMap,
+    name: &str,
     current_color: ColorCode,
     recursive: bool,
+    settings: &GeometrySettings,
 ) -> LDrawGeometry {
     let mut geometry = LDrawGeometry {
         vertices: Vec::new(),
@@ -109,8 +111,10 @@ pub fn create_geometry(
         &mut vertex_map,
         source_file,
         source_map,
+        name,
         ctx,
         recursive,
+        settings,
     );
 
     geometry.is_edge_sharp = get_sharp_edges(&geometry.edges, &hard_edges, &vertex_map);
@@ -138,24 +142,32 @@ pub fn create_geometry(
         .unwrap_or_default();
     let dimensions = max - min;
 
-    // TODO: Avoid applying this on chains, ropes, etc?
-    // TODO: Weld ropes into a single piece?
-    // Convert a distance between parts to a scale factor.
-    // This gap is in LDUs since we haven't scaled the part yet.
-    let gap_distance = 0.1;
-    let gaps_scale = if dimensions.length_squared() > 0.0 {
-        (2.0 * gap_distance - dimensions) / dimensions
+    let scale = if settings.add_gap_between_parts {
+        gaps_scale(dimensions) * SCENE_SCALE
     } else {
-        Vec3::ONE
+        Vec3::splat(SCENE_SCALE)
     };
 
     // Apply the scale last to use LDUs as the unit for vertex welding.
     // This avoids small floating point comparisons for small scene scales.
     for vertex in &mut geometry.vertices {
-        *vertex *= gaps_scale.abs() * SCENE_SCALE;
+        *vertex *= scale;
     }
 
     geometry
+}
+
+fn gaps_scale(dimensions: Vec3) -> Vec3 {
+    // TODO: Avoid applying this on chains, ropes, etc?
+    // TODO: Weld ropes into a single piece?
+    // Convert a distance between parts to a scale factor.
+    // This gap is in LDUs since we haven't scaled the part yet.
+    let gap_distance = 0.1;
+    if dimensions.length_squared() > 0.0 {
+        ((2.0 * gap_distance - dimensions) / dimensions).abs()
+    } else {
+        Vec3::ONE
+    }
 }
 
 fn get_sharp_edges(
@@ -188,8 +200,10 @@ fn append_geometry(
     vertex_map: &mut VertexMap,
     source_file: &weldr::SourceFile,
     source_map: &weldr::SourceMap,
+    name: &str,
     ctx: GeometryContext,
     recursive: bool,
+    settings: &GeometrySettings,
 ) {
     // BFC Extension: https://www.ldraw.org/article/415.html
     // The default winding can be assumed to be CCW.
@@ -219,34 +233,59 @@ fn append_geometry(
                 }
             }
             Command::Triangle(t) => {
-                add_face(
+                let color = replace_color(t.color, ctx.current_color);
+                add_triangle_face(
                     geometry,
-                    ctx.transform,
+                    &ctx,
                     t.vertices,
-                    invert_winding(current_winding, current_inverted),
+                    current_winding,
+                    current_inverted,
                     vertex_map,
+                    color,
+                    name,
                 );
-
-                let face_color = FaceColor {
-                    color: replace_color(t.color, ctx.current_color),
-                    is_grainy_slope: false,
-                };
-                geometry.face_colors.push(face_color);
             }
             Command::Quad(q) => {
-                add_face(
-                    geometry,
-                    ctx.transform,
-                    q.vertices,
-                    invert_winding(current_winding, current_inverted),
-                    vertex_map,
-                );
+                let color = replace_color(q.color, ctx.current_color);
 
-                let face_color = FaceColor {
-                    color: replace_color(q.color, ctx.current_color),
-                    is_grainy_slope: false,
-                };
-                geometry.face_colors.push(face_color);
+                // TODO: Avoid repetition
+                if settings.triangulate {
+                    // TODO: How to properly triangulate a quad?
+                    add_triangle_face(
+                        geometry,
+                        &ctx,
+                        [q.vertices[0], q.vertices[1], q.vertices[2]],
+                        current_winding,
+                        current_inverted,
+                        vertex_map,
+                        color,
+                        name,
+                    );
+                    add_triangle_face(
+                        geometry,
+                        &ctx,
+                        [q.vertices[0], q.vertices[2], q.vertices[3]],
+                        current_winding,
+                        current_inverted,
+                        vertex_map,
+                        color,
+                        name,
+                    );
+                } else {
+                    add_face(
+                        geometry,
+                        ctx.transform,
+                        q.vertices,
+                        invert_winding(current_winding, current_inverted),
+                        vertex_map,
+                    );
+
+                    let face_color = FaceColor {
+                        color: replace_color(q.color, ctx.current_color),
+                        is_grainy_slope: is_grainy_slope(&q.vertices, name),
+                    };
+                    geometry.face_colors.push(face_color);
+                }
             }
             Command::Line(line_cmd) => {
                 let edge = line_cmd.vertices.map(|v| ctx.transform.transform_point3(v));
@@ -271,8 +310,8 @@ fn append_geometry(
                         invert_next = false;
 
                         append_geometry(
-                            geometry, hard_edges, vertex_map, subfile, source_map, child_ctx,
-                            recursive,
+                            geometry, hard_edges, vertex_map, subfile, source_map, name, child_ctx,
+                            recursive, settings,
                         );
                     }
                 }
@@ -280,6 +319,31 @@ fn append_geometry(
             _ => {}
         }
     }
+}
+
+fn add_triangle_face(
+    geometry: &mut LDrawGeometry,
+    ctx: &GeometryContext,
+    vertices: [weldr::Vec3; 3],
+    current_winding: Winding,
+    current_inverted: bool,
+    vertex_map: &mut VertexMap,
+    color: u32,
+    name: &str,
+) {
+    add_face(
+        geometry,
+        ctx.transform,
+        vertices,
+        invert_winding(current_winding, current_inverted),
+        vertex_map,
+    );
+
+    let face_color = FaceColor {
+        color,
+        is_grainy_slope: is_grainy_slope(&vertices, name),
+    };
+    geometry.face_colors.push(face_color);
 }
 
 fn invert_winding(winding: Winding, invert: bool) -> Winding {
@@ -400,7 +464,14 @@ mod tests {
         let main_model_name = weldr::parse("root", &resolver, &mut source_map).unwrap();
         let source_file = source_map.get(&main_model_name).unwrap();
 
-        let geometry = create_geometry(&source_file, &source_map, 7, true);
+        let geometry = create_geometry(
+            &source_file,
+            &source_map,
+            "",
+            7,
+            true,
+            &GeometrySettings::default(),
+        );
 
         // TODO: Also test vertex positions and transforms.
         assert_eq!(6, geometry.vertices.len());
@@ -465,7 +536,14 @@ mod tests {
         let main_model_name = weldr::parse("root", &resolver, &mut source_map).unwrap();
         let source_file = source_map.get(&main_model_name).unwrap();
 
-        let geometry = create_geometry(&source_file, &source_map, 16, true);
+        let geometry = create_geometry(
+            &source_file,
+            &source_map,
+            "",
+            16,
+            true,
+            &GeometrySettings::default(),
+        );
 
         assert_eq!(vec![0, 1, 2, 0, 1, 2], geometry.vertex_indices);
         assert_eq!(vec![3, 3], geometry.face_sizes);
@@ -487,7 +565,14 @@ mod tests {
         let main_model_name = weldr::parse("root", &resolver, &mut source_map).unwrap();
         let source_file = source_map.get(&main_model_name).unwrap();
 
-        let geometry = create_geometry(&source_file, &source_map, 16, true);
+        let geometry = create_geometry(
+            &source_file,
+            &source_map,
+            "",
+            16,
+            true,
+            &GeometrySettings::default(),
+        );
 
         assert_eq!(vec![2, 1, 0, 2, 1, 0], geometry.vertex_indices);
         assert_eq!(vec![3, 3], geometry.face_sizes);
@@ -520,7 +605,14 @@ mod tests {
         let main_model_name = weldr::parse("root", &resolver, &mut source_map).unwrap();
         let source_file = source_map.get(&main_model_name).unwrap();
 
-        let geometry = create_geometry(&source_file, &source_map, 16, true);
+        let geometry = create_geometry(
+            &source_file,
+            &source_map,
+            "",
+            16,
+            true,
+            &GeometrySettings::default(),
+        );
 
         assert_eq!(
             vec![0, 1, 2, 5, 4, 3, 2, 1, 0, 3, 4, 5],
@@ -528,6 +620,8 @@ mod tests {
         );
         assert_eq!(vec![3, 3, 3, 3], geometry.face_sizes);
     }
+
+    // TODO: Test create geometry with and without welding and triangulate options
 
     // TODO: Add tests for BFC certified superfiles.
 }

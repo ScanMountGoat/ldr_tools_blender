@@ -101,6 +101,13 @@ pub struct LDrawSceneInstancedFaces {
     pub geometry_cache: HashMap<String, LDrawGeometry>,
 }
 
+// TODO: Come up with a better name.
+#[derive(Debug, Default)]
+pub struct GeometrySettings {
+    pub triangulate: bool,
+    pub add_gap_between_parts: bool,
+}
+
 fn replace_color(color: ColorCode, current_color: ColorCode) -> ColorCode {
     if color == CURRENT_COLOR {
         current_color
@@ -118,7 +125,7 @@ struct GeometryInitDescriptor<'a> {
 // TODO: Add global scale parameters.
 // Adjust the draw ctx for iter to set a "global scale"?
 // Also add a per part gap scale matrix.
-pub fn load_file(path: &str, ldraw_path: &str) -> LDrawScene {
+pub fn load_file(path: &str, ldraw_path: &str, settings: &GeometrySettings) -> LDrawScene {
     let resolver = DiskResolver::new_from_library(ldraw_path);
     let mut source_map = weldr::SourceMap::new();
 
@@ -136,7 +143,7 @@ pub fn load_file(path: &str, ldraw_path: &str) -> LDrawScene {
         CURRENT_COLOR,
     );
 
-    let geometry_cache = create_geometry_cache(geometry_descriptors, &source_map);
+    let geometry_cache = create_geometry_cache(geometry_descriptors, &source_map, settings);
 
     LDrawScene {
         root_node,
@@ -218,6 +225,7 @@ fn load_node<'a>(
 fn create_geometry_cache(
     geometry_descriptors: HashMap<String, GeometryInitDescriptor>,
     source_map: &weldr::SourceMap,
+    settings: &GeometrySettings,
 ) -> HashMap<String, LDrawGeometry> {
     // Create the actual geometry in parallel to improve performance.
     geometry_descriptors
@@ -228,10 +236,17 @@ fn create_geometry_cache(
                 current_color,
                 recursive,
             } = descriptor;
-            (
-                name,
-                create_geometry(source_file, source_map, current_color, recursive),
-            )
+
+            let geometry = create_geometry(
+                source_file,
+                source_map,
+                &name,
+                current_color,
+                recursive,
+                settings,
+            );
+
+            (name, geometry)
         })
         .collect()
 }
@@ -246,8 +261,12 @@ fn scaled_transform(transform: &Mat4) -> Mat4 {
 
 /// Creates a face for each part's transform for Blender's instance on faces feature.
 /// Each quad face encodes the translation, rotation, and scale.
-pub fn load_file_instanced_faces(path: &str, ldraw_path: &str) -> LDrawSceneInstancedFaces {
-    let scene = load_file_instanced(path, ldraw_path);
+pub fn load_file_instanced_faces(
+    path: &str,
+    ldraw_path: &str,
+    settings: &GeometrySettings,
+) -> LDrawSceneInstancedFaces {
+    let scene = load_file_instanced(path, ldraw_path, settings);
 
     // TODO: par_iter?
     let geometry_face_instances = scene
@@ -303,7 +322,11 @@ fn geometry_face_instances(transforms: Vec<Mat4>) -> Vec<[Vec3; 4]> {
 /// Find the world transforms for each geometry.
 /// This allows applications to more easily use instancing.
 // TODO: Take AsRef<Path> instead?
-pub fn load_file_instanced(path: &str, ldraw_path: &str) -> LDrawSceneInstanced {
+pub fn load_file_instanced(
+    path: &str,
+    ldraw_path: &str,
+    settings: &GeometrySettings,
+) -> LDrawSceneInstanced {
     let resolver = DiskResolver::new_from_library(ldraw_path);
     let mut source_map = weldr::SourceMap::new();
 
@@ -324,7 +347,7 @@ pub fn load_file_instanced(path: &str, ldraw_path: &str) -> LDrawSceneInstanced 
         CURRENT_COLOR,
     );
 
-    let geometry_cache = create_geometry_cache(geometry_descriptors, &source_map);
+    let geometry_cache = create_geometry_cache(geometry_descriptors, &source_map, settings);
 
     LDrawSceneInstanced {
         geometry_world_transforms,

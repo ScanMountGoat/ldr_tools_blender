@@ -7,7 +7,7 @@ import bmesh
 # TODO: Create a pyi type stub file?
 from . import ldr_tools_py
 
-from .ldr_tools_py import LDrawNode, LDrawGeometry, LDrawColor
+from .ldr_tools_py import LDrawNode, LDrawGeometry, LDrawColor, GeometrySettings
 
 from .material import get_material
 
@@ -17,16 +17,21 @@ from .material import get_material
 def importldraw(operator: bpy.types.Operator, filepath: str, ldraw_path: str, use_instancing: bool):
     color_by_code = ldr_tools_py.load_color_table(ldraw_path)
 
+    triangulate = False
+    add_gaps_between_parts = True
+    settings = GeometrySettings(triangulate, add_gaps_between_parts)
+
     # TODO: Add an option to make the lowest point have a height of 0 using obj.dimensions?
     if use_instancing:
-        import_instanced(filepath, ldraw_path, color_by_code)
+        import_instanced(filepath, ldraw_path, color_by_code, settings)
     else:
-        import_objects(filepath, ldraw_path, color_by_code)
+        import_objects(filepath, ldraw_path, color_by_code, settings)
 
 
-def import_objects(filepath: str, ldraw_path: str, color_by_code: dict[int, LDrawColor]):
+def import_objects(filepath: str, ldraw_path: str, color_by_code: dict[int, LDrawColor], settings: GeometrySettings):
     blender_mesh_cache = {}
-    root_node, geometry_cache = ldr_tools_py.load_file(filepath, ldraw_path)
+    root_node, geometry_cache = ldr_tools_py.load_file(
+        filepath, ldraw_path, settings)
 
     root_obj = add_nodes(root_node, geometry_cache,
                          blender_mesh_cache, color_by_code)
@@ -35,11 +40,11 @@ def import_objects(filepath: str, ldraw_path: str, color_by_code: dict[int, LDra
         math.radians(-90.0), 4, 'X')
 
 
-def import_instanced(filepath: str, ldraw_path: str, color_by_code: dict[int, LDrawColor]):
+def import_instanced(filepath: str, ldraw_path: str, color_by_code: dict[int, LDrawColor], settings: GeometrySettings):
     # Instance each part on the points of a mesh.
     # This avoids overhead from object creation for large scenes.
     geometry_cache, geometry_face_instances = ldr_tools_py.load_file_instanced_faces(
-        filepath, ldraw_path)
+        filepath, ldraw_path, settings)
 
     # First create all the meshes and materials.
     blender_mesh_cache = {}
@@ -182,7 +187,8 @@ def assign_materials(mesh: bpy.types.Mesh, current_color: int, color_by_code: di
         color = current_color if face_color.color == 16 else face_color.color
 
         # Cache materials by name.
-        material = get_material(color_by_code, color, face_color.is_grainy_slope)
+        material = get_material(color_by_code, color,
+                                face_color.is_grainy_slope)
 
         mesh.materials.append(material)
     else:
@@ -191,7 +197,8 @@ def assign_materials(mesh: bpy.types.Mesh, current_color: int, color_by_code: di
         for (face, face_color) in zip(mesh.polygons, geometry.face_colors):
             color = current_color if face_color.color == 16 else face_color.color
 
-            material = get_material(color_by_code, color, face_color.is_grainy_slope)
+            material = get_material(
+                color_by_code, color, face_color.is_grainy_slope)
             if mesh.materials.get(material.name) is None:
                 mesh.materials.append(material)
             face.material_index = mesh.materials.find(material.name)
