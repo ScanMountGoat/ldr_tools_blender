@@ -57,16 +57,7 @@ impl DiskResolver {
 
 impl FileRefResolver for DiskResolver {
     fn resolve<P: AsRef<Path>>(&self, filename: P) -> Result<Vec<u8>, ResolveError> {
-        // TODO: Where to handle stud replacement.
-        // TODO: Make this configurable?
-        // https://wiki.ldraw.org/wiki/Studs_with_Logos
-        // TODO: Avoid converting to an actual string using starts_with?
-        let filename = filename.as_ref().to_str().unwrap();
-        let filename = match filename {
-            "stud.dat" => "stud-logo4.dat",
-            "stud2.dat" => "stud2-logo4.dat",
-            _ => filename,
-        };
+        let filename = filename.as_ref();
 
         // Find the first folder that contains the given file.
         let contents = self
@@ -106,6 +97,8 @@ pub struct LDrawSceneInstancedFaces {
 pub struct GeometrySettings {
     pub triangulate: bool,
     pub add_gap_between_parts: bool,
+    // TODO: Create an enum for different stud types.
+    pub logo_on_studs: bool
 }
 
 fn replace_color(color: ColorCode, current_color: ColorCode) -> ColorCode {

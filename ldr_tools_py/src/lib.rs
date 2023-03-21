@@ -114,15 +114,17 @@ impl From<ldr_tools::LDrawColor> for LDrawColor {
 pub struct GeometrySettings {
     triangulate: bool,
     add_gap_between_parts: bool,
+    logo_on_studs: bool,
 }
 
 #[pymethods]
 impl GeometrySettings {
     #[new]
-    fn new(triangulate: bool, add_gap_between_parts: bool) -> Self {
+    fn new(triangulate: bool, add_gap_between_parts: bool, logo_on_studs: bool) -> Self {
         Self {
             triangulate,
             add_gap_between_parts,
+            logo_on_studs,
         }
     }
 }
@@ -132,6 +134,7 @@ impl From<&GeometrySettings> for ldr_tools::GeometrySettings {
         Self {
             triangulate: value.triangulate,
             add_gap_between_parts: value.add_gap_between_parts,
+            logo_on_studs: value.logo_on_studs,
         }
     }
 }

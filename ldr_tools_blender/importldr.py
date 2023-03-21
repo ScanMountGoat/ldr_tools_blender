@@ -19,7 +19,8 @@ def importldraw(operator: bpy.types.Operator, filepath: str, ldraw_path: str, us
 
     triangulate = False
     add_gaps_between_parts = True
-    settings = GeometrySettings(triangulate, add_gaps_between_parts)
+    logo_on_studs = True
+    settings = GeometrySettings(triangulate, add_gaps_between_parts, logo_on_studs)
 
     # TODO: Add an option to make the lowest point have a height of 0 using obj.dimensions?
     if use_instancing:

@@ -293,7 +293,9 @@ fn append_geometry(
             }
             Command::SubFileRef(subfile_cmd) => {
                 if recursive {
-                    if let Some(subfile) = source_map.get(&subfile_cmd.file) {
+                    let subfilename = replace_studs(subfile_cmd, settings.logo_on_studs);
+
+                    if let Some(subfile) = source_map.get(subfilename) {
                         // The determinant is checked in each file.
                         // It should not be included in the child's context.
                         let child_ctx = GeometryContext {
@@ -318,6 +320,20 @@ fn append_geometry(
             }
             _ => {}
         }
+    }
+}
+
+fn replace_studs(subfile_cmd: &weldr::SubFileRefCmd, logo_on_studs: bool) -> &str {
+    // TODO: Does this work properly?
+    // https://wiki.ldraw.org/wiki/Studs_with_Logos
+    if logo_on_studs {
+        match subfile_cmd.file.as_str() {
+            "stud.dat" => "stud-logo4.dat",
+            "stud2.dat" => "stud2-logo4.dat",
+            _ => subfile_cmd.file.as_str(),
+        }
+    } else {
+        &subfile_cmd.file
     }
 }
 
