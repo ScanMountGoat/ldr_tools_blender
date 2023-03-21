@@ -194,6 +194,7 @@ fn get_sharp_edges(
         .collect()
 }
 
+// TODO: simplify the parameters on these functions.
 fn append_geometry(
     geometry: &mut LDrawGeometry,
     hard_edges: &mut Vec<[Vec3; 2]>,
@@ -243,6 +244,7 @@ fn append_geometry(
                     vertex_map,
                     color,
                     name,
+                    settings.weld_vertices,
                 );
             }
             Command::Quad(q) => {
@@ -260,6 +262,7 @@ fn append_geometry(
                         vertex_map,
                         color,
                         name,
+                        settings.weld_vertices,
                     );
                     add_triangle_face(
                         geometry,
@@ -270,6 +273,7 @@ fn append_geometry(
                         vertex_map,
                         color,
                         name,
+                        settings.weld_vertices,
                     );
                 } else {
                     add_face(
@@ -278,6 +282,7 @@ fn append_geometry(
                         q.vertices,
                         invert_winding(current_winding, current_inverted),
                         vertex_map,
+                        settings.weld_vertices,
                     );
 
                     let face_color = FaceColor {
@@ -346,6 +351,7 @@ fn add_triangle_face(
     vertex_map: &mut VertexMap,
     color: u32,
     name: &str,
+    weld_vertices: bool,
 ) {
     add_face(
         geometry,
@@ -353,6 +359,7 @@ fn add_triangle_face(
         vertices,
         invert_winding(current_winding, current_inverted),
         vertex_map,
+        weld_vertices,
     );
 
     let face_color = FaceColor {
@@ -377,9 +384,11 @@ fn add_face<const N: usize>(
     vertices: [weldr::Vec3; N],
     winding: Winding,
     vertex_map: &mut VertexMap,
+    weld_vertices: bool,
 ) {
     let starting_index = geometry.vertex_indices.len() as u32;
-    let mut indices = vertices.map(|v| insert_vertex(geometry, transform, v, vertex_map));
+    let mut indices =
+        vertices.map(|v| insert_vertex(geometry, transform, v, vertex_map, weld_vertices));
 
     // TODO: Is it ok to just reverse indices even though this isn't the convention?
     if winding == Winding::Cw {
@@ -400,10 +409,15 @@ fn insert_vertex(
     transform: Mat4,
     vertex: Vec3,
     vertex_map: &mut VertexMap,
+    weld_vertices: bool,
 ) -> u32 {
     let new_vertex = transform.transform_point3(vertex);
     let new_index = geometry.vertices.len() as u32;
-    if let Some(index) = vertex_map.insert(new_index, new_vertex.to_array()) {
+
+    if !weld_vertices {
+        geometry.vertices.push(new_vertex);
+        new_index
+    } else if let Some(index) = vertex_map.insert(new_index, new_vertex.to_array()) {
         index
     } else {
         geometry.vertices.push(new_vertex);
@@ -486,7 +500,10 @@ mod tests {
             "",
             7,
             true,
-            &GeometrySettings::default(),
+            &GeometrySettings {
+                weld_vertices: true,
+                ..Default::default()
+            },
         );
 
         // TODO: Also test vertex positions and transforms.
@@ -558,7 +575,10 @@ mod tests {
             "",
             16,
             true,
-            &GeometrySettings::default(),
+            &GeometrySettings {
+                weld_vertices: true,
+                ..Default::default()
+            },
         );
 
         assert_eq!(vec![0, 1, 2, 0, 1, 2], geometry.vertex_indices);
@@ -587,7 +607,10 @@ mod tests {
             "",
             16,
             true,
-            &GeometrySettings::default(),
+            &GeometrySettings {
+                weld_vertices: true,
+                ..Default::default()
+            },
         );
 
         assert_eq!(vec![2, 1, 0, 2, 1, 0], geometry.vertex_indices);
@@ -627,7 +650,10 @@ mod tests {
             "",
             16,
             true,
-            &GeometrySettings::default(),
+            &GeometrySettings {
+                weld_vertices: true,
+                ..Default::default()
+            },
         );
 
         assert_eq!(

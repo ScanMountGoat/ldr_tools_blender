@@ -98,7 +98,8 @@ pub struct GeometrySettings {
     pub triangulate: bool,
     pub add_gap_between_parts: bool,
     // TODO: Create an enum for different stud types.
-    pub logo_on_studs: bool
+    pub logo_on_studs: bool,
+    pub weld_vertices: bool,
 }
 
 fn replace_color(color: ColorCode, current_color: ColorCode) -> ColorCode {

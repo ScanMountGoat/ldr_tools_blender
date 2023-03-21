@@ -17,10 +17,12 @@ from .material import get_material
 def importldraw(operator: bpy.types.Operator, filepath: str, ldraw_path: str, use_instancing: bool):
     color_by_code = ldr_tools_py.load_color_table(ldraw_path)
 
-    triangulate = False
-    add_gaps_between_parts = True
-    logo_on_studs = True
-    settings = GeometrySettings(triangulate, add_gaps_between_parts, logo_on_studs)
+    settings = GeometrySettings()
+    settings.triangulate = False
+    settings.add_gap_between_parts = True
+    settings.logo_on_studs = True
+    # Required for calculated normals.
+    settings.weld_vertices = True
 
     # TODO: Add an option to make the lowest point have a height of 0 using obj.dimensions?
     if use_instancing:

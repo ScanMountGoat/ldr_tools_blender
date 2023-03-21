@@ -115,16 +115,24 @@ pub struct GeometrySettings {
     triangulate: bool,
     add_gap_between_parts: bool,
     logo_on_studs: bool,
+    weld_vertices: bool,
 }
 
 #[pymethods]
 impl GeometrySettings {
     #[new]
-    fn new(triangulate: bool, add_gap_between_parts: bool, logo_on_studs: bool) -> Self {
+    fn new() -> Self {
+        ldr_tools::GeometrySettings::default().into()
+    }
+}
+
+impl From<ldr_tools::GeometrySettings> for GeometrySettings {
+    fn from(value: ldr_tools::GeometrySettings) -> Self {
         Self {
-            triangulate,
-            add_gap_between_parts,
-            logo_on_studs,
+            triangulate: value.triangulate,
+            add_gap_between_parts: value.add_gap_between_parts,
+            logo_on_studs: value.logo_on_studs,
+            weld_vertices: value.weld_vertices,
         }
     }
 }
@@ -135,6 +143,7 @@ impl From<&GeometrySettings> for ldr_tools::GeometrySettings {
             triangulate: value.triangulate,
             add_gap_between_parts: value.add_gap_between_parts,
             logo_on_studs: value.logo_on_studs,
+            weld_vertices: value.weld_vertices,
         }
     }
 }
