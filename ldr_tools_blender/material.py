@@ -17,7 +17,8 @@ def get_material(color_by_code: dict[int, LDrawColor], code: int, is_grainy_slop
     # This loads materials lazily to avoid creating unused colors.
     ldraw_color = color_by_code.get(code)
 
-    name = f'{code} {ldraw_color.name}' if ldraw_color is not None else str(
+    grain_code = 'grain' if is_grainy_slope else ''
+    name = f'{code} {ldraw_color.name} {grain_code}' if ldraw_color is not None else str(
         code)
     material = bpy.data.materials.get(name)
 
