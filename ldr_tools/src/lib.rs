@@ -122,6 +122,7 @@ struct GeometryInitDescriptor<'a> {
 pub fn load_file(path: &str, ldraw_path: &str, settings: &GeometrySettings) -> LDrawScene {
     let resolver = DiskResolver::new_from_library(ldraw_path);
     let mut source_map = weldr::SourceMap::new();
+    ensure_studs(settings, &resolver, &mut source_map);
 
     let main_model_name = weldr::parse(path, &resolver, &mut source_map).unwrap();
     let source_file = source_map.get(&main_model_name).unwrap();
@@ -142,6 +143,19 @@ pub fn load_file(path: &str, ldraw_path: &str, settings: &GeometrySettings) -> L
     LDrawScene {
         root_node,
         geometry_cache,
+    }
+}
+
+fn ensure_studs(
+    settings: &GeometrySettings,
+    resolver: &DiskResolver,
+    source_map: &mut weldr::SourceMap,
+) {
+    // The replaced studs likely won't be referenced by existing files.
+    // Make sure the selected stud type is in the source map.
+    if settings.logo_on_studs {
+        weldr::parse("stud-logo4.dat", resolver, source_map).unwrap();
+        weldr::parse("stud2-logo4.dat", resolver, source_map).unwrap();
     }
 }
 
@@ -323,6 +337,7 @@ pub fn load_file_instanced(
 ) -> LDrawSceneInstanced {
     let resolver = DiskResolver::new_from_library(ldraw_path);
     let mut source_map = weldr::SourceMap::new();
+    ensure_studs(settings, &resolver, &mut source_map);
 
     let main_model_name = weldr::parse(path, &resolver, &mut source_map).unwrap();
     let source_file = source_map.get(&main_model_name).unwrap();

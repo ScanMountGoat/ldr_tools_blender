@@ -329,7 +329,6 @@ fn append_geometry(
 }
 
 fn replace_studs(subfile_cmd: &weldr::SubFileRefCmd, logo_on_studs: bool) -> &str {
-    // TODO: Does this work properly?
     // https://wiki.ldraw.org/wiki/Studs_with_Logos
     if logo_on_studs {
         match subfile_cmd.file.as_str() {
