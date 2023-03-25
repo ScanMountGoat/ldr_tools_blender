@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use ldr_tools::StudType;
 use numpy::IntoPyArray;
 use pyo3::prelude::*;
 
@@ -109,6 +110,7 @@ impl From<ldr_tools::LDrawColor> for LDrawColor {
     }
 }
 
+// TODO: make a proper enum for the stud type.
 #[pyclass(get_all, set_all)]
 #[derive(Debug, Clone)]
 pub struct GeometrySettings {
@@ -131,7 +133,7 @@ impl From<ldr_tools::GeometrySettings> for GeometrySettings {
         Self {
             triangulate: value.triangulate,
             add_gap_between_parts: value.add_gap_between_parts,
-            logo_on_studs: value.logo_on_studs,
+            logo_on_studs: value.stud_type == StudType::Logo4,
             weld_vertices: value.weld_vertices,
         }
     }
@@ -142,7 +144,11 @@ impl From<&GeometrySettings> for ldr_tools::GeometrySettings {
         Self {
             triangulate: value.triangulate,
             add_gap_between_parts: value.add_gap_between_parts,
-            logo_on_studs: value.logo_on_studs,
+            stud_type: if value.logo_on_studs {
+                StudType::Logo4
+            } else {
+                StudType::Normal
+            },
             weld_vertices: value.weld_vertices,
         }
     }

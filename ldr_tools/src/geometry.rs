@@ -4,7 +4,9 @@ use glam::{Mat4, Vec3};
 use rstar::{primitives::GeomWithData, RTree};
 use weldr::Command;
 
-use crate::{replace_color, slope::is_grainy_slope, ColorCode, GeometrySettings, SCENE_SCALE};
+use crate::{
+    replace_color, slope::is_grainy_slope, ColorCode, GeometrySettings, StudType, SCENE_SCALE,
+};
 
 // TODO: use the edge information to calculate smooth normals directly in Rust?
 // TODO: Document the data layout for these fields.
@@ -298,7 +300,7 @@ fn append_geometry(
             }
             Command::SubFileRef(subfile_cmd) => {
                 if recursive {
-                    let subfilename = replace_studs(subfile_cmd, settings.logo_on_studs);
+                    let subfilename = replace_studs(subfile_cmd, settings.stud_type);
 
                     if let Some(subfile) = source_map.get(subfilename) {
                         // The determinant is checked in each file.
@@ -328,16 +330,23 @@ fn append_geometry(
     }
 }
 
-fn replace_studs(subfile_cmd: &weldr::SubFileRefCmd, logo_on_studs: bool) -> &str {
+fn replace_studs(subfile_cmd: &weldr::SubFileRefCmd, stud_type: StudType) -> &str {
     // https://wiki.ldraw.org/wiki/Studs_with_Logos
-    if logo_on_studs {
-        match subfile_cmd.file.as_str() {
+    match stud_type {
+        StudType::Disabled => {
+            // TODO: Will this have false positives for studs?
+            if subfile_cmd.file.contains("stu") {
+                ""
+            } else {
+                subfile_cmd.file.as_str()
+            }
+        }
+        StudType::Normal => &subfile_cmd.file,
+        StudType::Logo4 => match subfile_cmd.file.as_str() {
             "stud.dat" => "stud-logo4.dat",
             "stud2.dat" => "stud2-logo4.dat",
             _ => subfile_cmd.file.as_str(),
-        }
-    } else {
-        &subfile_cmd.file
+        },
     }
 }
 

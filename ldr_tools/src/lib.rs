@@ -92,13 +92,29 @@ pub struct LDrawSceneInstancedFaces {
     pub geometry_cache: HashMap<String, LDrawGeometry>,
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum StudType {
+    /// Removes all visible and internal studs.
+    Disabled,
+    /// The default stud model and quality.
+    Normal,
+    /// A higher quality modeled logo suitable for realistic rendering.
+    Logo4,
+}
+
+impl Default for StudType {
+    fn default() -> Self {
+        Self::Normal
+    }
+}
+
 // TODO: Come up with a better name.
 #[derive(Debug, Default)]
 pub struct GeometrySettings {
     pub triangulate: bool,
     pub add_gap_between_parts: bool,
     // TODO: Create an enum for different stud types.
-    pub logo_on_studs: bool,
+    pub stud_type: StudType,
     pub weld_vertices: bool,
 }
 
@@ -153,9 +169,13 @@ fn ensure_studs(
 ) {
     // The replaced studs likely won't be referenced by existing files.
     // Make sure the selected stud type is in the source map.
-    if settings.logo_on_studs {
-        weldr::parse("stud-logo4.dat", resolver, source_map).unwrap();
-        weldr::parse("stud2-logo4.dat", resolver, source_map).unwrap();
+    match settings.stud_type {
+        StudType::Disabled => (),
+        StudType::Normal => (),
+        StudType::Logo4 => {
+            weldr::parse("stud-logo4.dat", resolver, source_map).unwrap();
+            weldr::parse("stud2-logo4.dat", resolver, source_map).unwrap();
+        }
     }
 }
 
