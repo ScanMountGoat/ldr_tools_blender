@@ -38,20 +38,25 @@ struct DiskResolver {
 }
 
 impl DiskResolver {
-    fn new_from_library<P: AsRef<Path>>(catalog_path: P) -> Self {
+    fn new_from_library<P: AsRef<Path>>(catalog_path: P, resolution: PrimitiveResolution) -> Self {
         let catalog_path = catalog_path.as_ref().to_owned();
-        Self {
-            base_paths: vec![
-                catalog_path.join("p"),
-                catalog_path.join("parts"),
-                catalog_path.join("parts").join("s"),
-                // Studio unoffical part folders.
-                catalog_path.join("UnOfficial").join("p"),
-                catalog_path.join("UnOfficial").join("parts"),
-                catalog_path.join("UnOfficial").join("parts").join("s"),
-                // TODO: How to handle the case where subfiles can be in the same directory as the current file?
-            ],
+        let mut base_paths = vec![
+            catalog_path.join("p"),
+            catalog_path.join("parts"),
+            catalog_path.join("parts").join("s"),
+            // Studio unoffical part folders.
+            catalog_path.join("UnOfficial").join("p"),
+            catalog_path.join("UnOfficial").join("parts"),
+            catalog_path.join("UnOfficial").join("parts").join("s"),
+            // TODO: How to handle the case where subfiles can be in the same directory as the current file?
+        ];
+        // Insert at the front since earlier elements take priority.
+        match resolution {
+            PrimitiveResolution::Low => base_paths.insert(0, catalog_path.join("p").join("8")),
+            PrimitiveResolution::Normal => (),
+            PrimitiveResolution::High => base_paths.insert(0, catalog_path.join("p").join("48")),
         }
+        Self { base_paths }
     }
 }
 
@@ -108,6 +113,22 @@ impl Default for StudType {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum PrimitiveResolution {
+    /// Primitives in the `p/8` folder.
+    Low,
+    /// The standard primitive resolution
+    Normal,
+    /// Primitives in the `p/48` folder.
+    High,
+}
+
+impl Default for PrimitiveResolution {
+    fn default() -> Self {
+        Self::Normal
+    }
+}
+
 // TODO: Come up with a better name.
 #[derive(Debug, Default)]
 pub struct GeometrySettings {
@@ -116,6 +137,7 @@ pub struct GeometrySettings {
     // TODO: Create an enum for different stud types.
     pub stud_type: StudType,
     pub weld_vertices: bool,
+    pub primitive_resolution: PrimitiveResolution,
 }
 
 fn replace_color(color: ColorCode, current_color: ColorCode) -> ColorCode {
@@ -136,7 +158,7 @@ struct GeometryInitDescriptor<'a> {
 // Adjust the draw ctx for iter to set a "global scale"?
 // Also add a per part gap scale matrix.
 pub fn load_file(path: &str, ldraw_path: &str, settings: &GeometrySettings) -> LDrawScene {
-    let resolver = DiskResolver::new_from_library(ldraw_path);
+    let resolver = DiskResolver::new_from_library(ldraw_path, settings.primitive_resolution);
     let mut source_map = weldr::SourceMap::new();
     ensure_studs(settings, &resolver, &mut source_map);
 
@@ -355,7 +377,7 @@ pub fn load_file_instanced(
     ldraw_path: &str,
     settings: &GeometrySettings,
 ) -> LDrawSceneInstanced {
-    let resolver = DiskResolver::new_from_library(ldraw_path);
+    let resolver = DiskResolver::new_from_library(ldraw_path, settings.primitive_resolution);
     let mut source_map = weldr::SourceMap::new();
     ensure_studs(settings, &resolver, &mut source_map);
 

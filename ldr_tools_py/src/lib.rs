@@ -150,6 +150,7 @@ impl From<&GeometrySettings> for ldr_tools::GeometrySettings {
                 StudType::Normal
             },
             weld_vertices: value.weld_vertices,
+            primitive_resolution: ldr_tools::PrimitiveResolution::Normal,
         }
     }
 }
