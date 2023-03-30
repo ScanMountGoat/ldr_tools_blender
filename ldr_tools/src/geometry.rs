@@ -32,6 +32,7 @@ struct GeometryContext {
     current_color: ColorCode,
     transform: Mat4,
     inverted: bool,
+    is_stud: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -102,6 +103,7 @@ pub fn create_geometry(
         current_color,
         transform: Mat4::IDENTITY,
         inverted: false,
+        is_stud: is_stud(name),
     };
 
     let mut vertex_map = VertexMap::new();
@@ -157,6 +159,11 @@ pub fn create_geometry(
     }
 
     geometry
+}
+
+fn is_stud(name: &str) -> bool {
+    // TODO: find a more accurate way to check this.
+    name.contains("stu")
 }
 
 fn gaps_scale(dimensions: Vec3) -> Vec3 {
@@ -303,16 +310,31 @@ fn append_geometry(
                     let subfilename = replace_studs(subfile_cmd, settings.stud_type);
 
                     if let Some(subfile) = source_map.get(subfilename) {
+                        // Subfiles of studs should still be treated like studs.
+                        let is_stud = ctx.is_stud || is_stud(subfilename);
+
+                        // Set the walls of high contrast studs to black.
+                        // TODO: Create custom stud files for better accuracy.
+                        let current_color = if is_stud
+                            && settings.stud_type == StudType::HighContrast
+                            && subfilename.contains("cyli.dat")
+                        {
+                            0
+                        } else {
+                            replace_color(subfile_cmd.color, ctx.current_color)
+                        };
+
                         // The determinant is checked in each file.
                         // It should not be included in the child's context.
                         let child_ctx = GeometryContext {
-                            current_color: replace_color(subfile_cmd.color, ctx.current_color),
+                            current_color,
                             transform: ctx.transform * subfile_cmd.matrix(),
                             inverted: if invert_next {
                                 !ctx.inverted
                             } else {
                                 ctx.inverted
                             },
+                            is_stud,
                         };
 
                         // Don't invert additional subfile reference commands.
@@ -334,8 +356,8 @@ fn replace_studs(subfile_cmd: &weldr::SubFileRefCmd, stud_type: StudType) -> &st
     // https://wiki.ldraw.org/wiki/Studs_with_Logos
     match stud_type {
         StudType::Disabled => {
-            // TODO: Will this have false positives for studs?
-            if subfile_cmd.file.contains("stu") {
+            if is_stud(&subfile_cmd.file) {
+                // TODO: is there a better way to empty out files?
                 ""
             } else {
                 subfile_cmd.file.as_str()
@@ -345,8 +367,10 @@ fn replace_studs(subfile_cmd: &weldr::SubFileRefCmd, stud_type: StudType) -> &st
         StudType::Logo4 => match subfile_cmd.file.as_str() {
             "stud.dat" => "stud-logo4.dat",
             "stud2.dat" => "stud2-logo4.dat",
+            "stud20.dat" => "stud20-logo4.dat",
             _ => subfile_cmd.file.as_str(),
         },
+        StudType::HighContrast => &subfile_cmd.file,
     }
 }
 

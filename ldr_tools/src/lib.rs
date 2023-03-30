@@ -105,6 +105,8 @@ pub enum StudType {
     Normal,
     /// A higher quality modeled logo suitable for realistic rendering.
     Logo4,
+    /// Studs with black sides similar to official LEGO instructions.
+    HighContrast,
 }
 
 impl Default for StudType {
@@ -192,12 +194,11 @@ fn ensure_studs(
     // The replaced studs likely won't be referenced by existing files.
     // Make sure the selected stud type is in the source map.
     match settings.stud_type {
-        StudType::Disabled => (),
-        StudType::Normal => (),
         StudType::Logo4 => {
             weldr::parse("stud-logo4.dat", resolver, source_map).unwrap();
             weldr::parse("stud2-logo4.dat", resolver, source_map).unwrap();
         }
+        _ => (),
     }
 }
 
