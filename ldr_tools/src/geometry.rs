@@ -12,13 +12,13 @@ use crate::{
 // TODO: Document the data layout for these fields.
 #[derive(Debug, PartialEq)]
 pub struct LDrawGeometry {
-    pub vertices: Vec<Vec3>,
-    pub vertex_indices: Vec<u32>,
+    pub positions: Vec<Vec3>,
+    pub position_indices: Vec<u32>,
     pub face_start_indices: Vec<u32>,
     pub face_sizes: Vec<u32>,
     /// The colors of each face or a single element if all faces share a color.
     pub face_colors: Vec<FaceColor>,
-    pub edges: Vec<[u32; 2]>,
+    pub edge_position_indices: Vec<[u32; 2]>,
     pub is_edge_sharp: Vec<bool>,
 }
 
@@ -88,12 +88,12 @@ pub fn create_geometry(
     settings: &GeometrySettings,
 ) -> LDrawGeometry {
     let mut geometry = LDrawGeometry {
-        vertices: Vec::new(),
-        vertex_indices: Vec::new(),
+        positions: Vec::new(),
+        position_indices: Vec::new(),
         face_start_indices: Vec::new(),
         face_sizes: Vec::new(),
         face_colors: Vec::new(),
-        edges: Vec::new(),
+        edge_position_indices: Vec::new(),
         is_edge_sharp: Vec::new(),
     };
 
@@ -121,7 +121,8 @@ pub fn create_geometry(
         settings,
     );
 
-    geometry.is_edge_sharp = get_sharp_edges(&geometry.edges, &hard_edges, &vertex_map);
+    geometry.is_edge_sharp =
+        get_sharp_edges(&geometry.edge_position_indices, &hard_edges, &vertex_map);
 
     // Optimize the case where all face colors are the same.
     // This reduces overhead when processing data in Python.
@@ -133,13 +134,13 @@ pub fn create_geometry(
     }
 
     let min = geometry
-        .vertices
+        .positions
         .iter()
         .copied()
         .reduce(Vec3::min)
         .unwrap_or_default();
     let max = geometry
-        .vertices
+        .positions
         .iter()
         .copied()
         .reduce(Vec3::max)
@@ -154,7 +155,7 @@ pub fn create_geometry(
 
     // Apply the scale last to use LDUs as the unit for vertex welding.
     // This avoids small floating point comparisons for small scene scales.
-    for vertex in &mut geometry.vertices {
+    for vertex in &mut geometry.positions {
         *vertex *= scale;
     }
 
@@ -418,7 +419,7 @@ fn add_face<const N: usize>(
     vertex_map: &mut VertexMap,
     weld_vertices: bool,
 ) {
-    let starting_index = geometry.vertex_indices.len() as u32;
+    let starting_index = geometry.position_indices.len() as u32;
     let mut indices =
         vertices.map(|v| insert_vertex(geometry, transform, v, vertex_map, weld_vertices));
 
@@ -427,10 +428,12 @@ fn add_face<const N: usize>(
         indices.reverse();
     }
 
-    geometry.vertex_indices.extend_from_slice(&indices);
+    geometry.position_indices.extend_from_slice(&indices);
     for i in 0..indices.len() {
         // A face (0,1,2) will have edges (0,1), (1,2), (2,0).
-        geometry.edges.push([indices[i], indices[(i + 1) % N]]);
+        geometry
+            .edge_position_indices
+            .push([indices[i], indices[(i + 1) % N]]);
     }
     geometry.face_start_indices.push(starting_index);
     geometry.face_sizes.push(N as u32);
@@ -444,15 +447,15 @@ fn insert_vertex(
     weld_vertices: bool,
 ) -> u32 {
     let new_vertex = transform.transform_point3(vertex);
-    let new_index = geometry.vertices.len() as u32;
+    let new_index = geometry.positions.len() as u32;
 
     if !weld_vertices {
-        geometry.vertices.push(new_vertex);
+        geometry.positions.push(new_vertex);
         new_index
     } else if let Some(index) = vertex_map.insert(new_index, new_vertex.to_array()) {
         index
     } else {
-        geometry.vertices.push(new_vertex);
+        geometry.positions.push(new_vertex);
         new_index
     }
 }
@@ -539,8 +542,11 @@ mod tests {
         );
 
         // TODO: Also test vertex positions and transforms.
-        assert_eq!(6, geometry.vertices.len());
-        assert_eq!(3 + 4 + 3 + 3 + 3 + 4 + 3 + 4, geometry.vertex_indices.len());
+        assert_eq!(6, geometry.positions.len());
+        assert_eq!(
+            3 + 4 + 3 + 3 + 3 + 4 + 3 + 4,
+            geometry.position_indices.len()
+        );
         assert_eq!(vec![3, 4, 3, 3, 3, 4, 3, 4], geometry.face_sizes);
         assert_eq!(
             vec![0, 3, 7, 10, 13, 16, 20, 23],
@@ -613,7 +619,7 @@ mod tests {
             },
         );
 
-        assert_eq!(vec![0, 1, 2, 0, 1, 2], geometry.vertex_indices);
+        assert_eq!(vec![0, 1, 2, 0, 1, 2], geometry.position_indices);
         assert_eq!(vec![3, 3], geometry.face_sizes);
     }
 
@@ -645,7 +651,7 @@ mod tests {
             },
         );
 
-        assert_eq!(vec![2, 1, 0, 2, 1, 0], geometry.vertex_indices);
+        assert_eq!(vec![2, 1, 0, 2, 1, 0], geometry.position_indices);
         assert_eq!(vec![3, 3], geometry.face_sizes);
     }
 
@@ -690,7 +696,7 @@ mod tests {
 
         assert_eq!(
             vec![0, 1, 2, 5, 4, 3, 2, 1, 0, 3, 4, 5],
-            geometry.vertex_indices
+            geometry.position_indices
         );
         assert_eq!(vec![3, 3, 3, 3], geometry.face_sizes);
     }

@@ -41,14 +41,14 @@ pub struct LDrawGeometry {
 
 impl LDrawGeometry {
     fn from_geometry(py: Python, geometry: ldr_tools::LDrawGeometry) -> Self {
-        let vertex_count = geometry.vertices.len();
-        let edge_count = geometry.edges.len();
+        let vertex_count = geometry.positions.len();
+        let edge_count = geometry.edge_position_indices.len();
 
         // This flatten will be optimized in Release mode.
         // This avoids needing unsafe code.
         Self {
             vertices: geometry
-                .vertices
+                .positions
                 .into_iter()
                 .flat_map(|v| [v.x, v.y, v.z])
                 .collect::<Vec<f32>>()
@@ -56,12 +56,12 @@ impl LDrawGeometry {
                 .reshape((vertex_count, 3))
                 .unwrap()
                 .into(),
-            vertex_indices: geometry.vertex_indices.into_pyarray(py).into(),
+            vertex_indices: geometry.position_indices.into_pyarray(py).into(),
             face_start_indices: geometry.face_start_indices.into_pyarray(py).into(),
             face_sizes: geometry.face_sizes.into_pyarray(py).into(),
             face_colors: geometry.face_colors.into_iter().map(Into::into).collect(),
             edges: geometry
-                .edges
+                .edge_position_indices
                 .into_iter()
                 .flatten()
                 .collect::<Vec<u32>>()
