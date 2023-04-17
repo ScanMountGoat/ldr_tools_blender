@@ -12,7 +12,7 @@ import bpy
 # https://stefanmuller.com/exploring-lego-material-part-3/
 
 
-def get_material(color_by_code: dict[int, LDrawColor], code: int, is_grainy_slope: bool):
+def get_material(color_by_code: dict[int, LDrawColor], code: int, is_grainy_slope: bool) -> bpy.types.Material:
     # Cache materials by name.
     # This loads materials lazily to avoid creating unused colors.
     ldraw_color = color_by_code.get(code)
@@ -23,118 +23,121 @@ def get_material(color_by_code: dict[int, LDrawColor], code: int, is_grainy_slop
     material = bpy.data.materials.get(name)
 
     # TODO: Report warnings if a part contains an invalid color code.
-    if material is None and ldraw_color is not None:
+    if material is None:
         material = bpy.data.materials.new(name)
         material.use_nodes = True
-        bsdf = material.node_tree.nodes["Principled BSDF"]
 
-        # Alpha is specified using transmission instead.
-        r, g, b, a = ldraw_color.rgba_linear
+        # TODO: Error if color is missing?
+        if ldraw_color is not None:
+            bsdf = material.node_tree.nodes["Principled BSDF"]
 
-        # Set the color in the viewport.
-        # This can use the default LDraw color for familiarity.
-        material.diffuse_color = [r, g, b, a]
+            # Alpha is specified using transmission instead.
+            r, g, b, a = ldraw_color.rgba_linear
 
-        # Partially complete alternatives to LDraw colors for better realism.
-        if code in rgb_ldr_tools_by_code:
-            r, g, b = rgb_ldr_tools_by_code[code]
-        elif code in rgb_peeron_by_code:
-            r, g, b = rgb_peeron_by_code[code]
+            # Set the color in the viewport.
+            # This can use the default LDraw color for familiarity.
+            material.diffuse_color = [r, g, b, a]
 
-        bsdf.inputs['Base Color'].default_value = [r, g, b, 1.0]
+            # Partially complete alternatives to LDraw colors for better realism.
+            if code in rgb_ldr_tools_by_code:
+                r, g, b = rgb_ldr_tools_by_code[code]
+            elif code in rgb_peeron_by_code:
+                r, g, b = rgb_peeron_by_code[code]
 
-        # Transparent colors specify an alpha of 128 / 255.
-        is_transmissive = a <= 0.6
+            bsdf.inputs['Base Color'].default_value = [r, g, b, 1.0]
 
-        # RANDOM_WALK_FIXED_RADIUS is more accurate but appears white on edges.
-        # Use a less accurate SSS method instead.
-        bsdf.subsurface_method = 'BURLEY'
-        bsdf.inputs['Subsurface Color'].default_value = [r, g, b, 1.0]
-        # TODO: This is in Blender units and should depend on scene scale
-        bsdf.inputs['Subsurface Radius'].default_value = [0.02, 0.02, 0.02]
-        bsdf.inputs['Subsurface'].default_value = 1.0
+            # Transparent colors specify an alpha of 128 / 255.
+            is_transmissive = a <= 0.6
 
-        # Procedural roughness.
-        roughness_node = create_node_group(
-            material, 'ldr_tools_roughness', create_roughness_node_group)
+            # RANDOM_WALK_FIXED_RADIUS is more accurate but appears white on edges.
+            # Use a less accurate SSS method instead.
+            bsdf.subsurface_method = 'BURLEY'
+            bsdf.inputs['Subsurface Color'].default_value = [r, g, b, 1.0]
+            # TODO: This is in Blender units and should depend on scene scale
+            bsdf.inputs['Subsurface Radius'].default_value = [0.02, 0.02, 0.02]
+            bsdf.inputs['Subsurface'].default_value = 1.0
 
-        material.node_tree.links.new(
-            roughness_node.outputs['Roughness'], bsdf.inputs['Roughness'])
+            # Procedural roughness.
+            roughness_node = create_node_group(
+                material, 'ldr_tools_roughness', create_roughness_node_group)
 
-        # Normal opaque materials.
-        roughness_node.inputs['Min'].default_value = 0.075
-        roughness_node.inputs['Max'].default_value = 0.2
+            material.node_tree.links.new(
+                roughness_node.outputs['Roughness'], bsdf.inputs['Roughness'])
 
-        # TODO: Have a case for each finish type?
-        if ldraw_color.finish_name == 'MatteMetallic':
-            bsdf.inputs['Metallic'].default_value = 1.0
-        if ldraw_color.finish_name == 'Chrome':
-            # Glossy metal coating.
-            bsdf.inputs['Metallic'].default_value = 1.0
+            # Normal opaque materials.
             roughness_node.inputs['Min'].default_value = 0.075
-            roughness_node.inputs['Max'].default_value = 0.1
-        if ldraw_color.finish_name == 'Metal':
-            # Rougher metals.
-            bsdf.inputs['Metallic'].default_value = 1.0
-            roughness_node.inputs['Min'].default_value = 0.15
-            roughness_node.inputs['Max'].default_value = 0.3
-        elif ldraw_color.finish_name == 'Pearlescent':
-            bsdf.inputs['Metallic'].default_value = 0.35
-            roughness_node.inputs['Min'].default_value = 0.3
-            roughness_node.inputs['Max'].default_value = 0.5
-        elif ldraw_color.finish_name == 'Speckle':
-            # TODO: Are all speckled colors metals?
-            bsdf.inputs['Metallic'].default_value = 1.0
+            roughness_node.inputs['Max'].default_value = 0.2
 
-            speckle_node = create_node_group(
-                material, 'ldr_tools_speckle', create_speckle_node_group)
+            # TODO: Have a case for each finish type?
+            if ldraw_color.finish_name == 'MatteMetallic':
+                bsdf.inputs['Metallic'].default_value = 1.0
+            if ldraw_color.finish_name == 'Chrome':
+                # Glossy metal coating.
+                bsdf.inputs['Metallic'].default_value = 1.0
+                roughness_node.inputs['Min'].default_value = 0.075
+                roughness_node.inputs['Max'].default_value = 0.1
+            if ldraw_color.finish_name == 'Metal':
+                # Rougher metals.
+                bsdf.inputs['Metallic'].default_value = 1.0
+                roughness_node.inputs['Min'].default_value = 0.15
+                roughness_node.inputs['Max'].default_value = 0.3
+            elif ldraw_color.finish_name == 'Pearlescent':
+                bsdf.inputs['Metallic'].default_value = 0.35
+                roughness_node.inputs['Min'].default_value = 0.3
+                roughness_node.inputs['Max'].default_value = 0.5
+            elif ldraw_color.finish_name == 'Speckle':
+                # TODO: Are all speckled colors metals?
+                bsdf.inputs['Metallic'].default_value = 1.0
 
-            # Adjust the thresholds to control speckle size and density.
-            speckle_node.inputs['Min'].default_value = 0.5
-            speckle_node.inputs['Max'].default_value = 0.6
+                speckle_node = create_node_group(
+                    material, 'ldr_tools_speckle', create_speckle_node_group)
 
-            # Blend between the two speckle colors.
-            mix_rgb = material.node_tree.nodes.new('ShaderNodeMixRGB')
+                # Adjust the thresholds to control speckle size and density.
+                speckle_node.inputs['Min'].default_value = 0.5
+                speckle_node.inputs['Max'].default_value = 0.6
 
-            material.node_tree.links.new(
-                speckle_node.outputs['Fac'], mix_rgb.inputs['Fac'])
-            mix_rgb.inputs[1].default_value = [r, g, b, 1.0]
-            speckle_r, speckle_g, speckle_b, _ = ldraw_color.speckle_rgba_linear
-            mix_rgb.inputs[2].default_value = [
-                speckle_r, speckle_g, speckle_b, 1.0]
+                # Blend between the two speckle colors.
+                mix_rgb = material.node_tree.nodes.new('ShaderNodeMixRGB')
 
-            material.node_tree.links.new(
-                mix_rgb.outputs['Color'], bsdf.inputs['Base Color'])
+                material.node_tree.links.new(
+                    speckle_node.outputs['Fac'], mix_rgb.inputs['Fac'])
+                mix_rgb.inputs[1].default_value = [r, g, b, 1.0]
+                speckle_r, speckle_g, speckle_b, _ = ldraw_color.speckle_rgba_linear
+                mix_rgb.inputs[2].default_value = [
+                    speckle_r, speckle_g, speckle_b, 1.0]
 
-        if is_transmissive:
-            bsdf.inputs['Transmission'].default_value = 1.0
-            bsdf.inputs['IOR'].default_value = 1.55
+                material.node_tree.links.new(
+                    mix_rgb.outputs['Color'], bsdf.inputs['Base Color'])
 
-            if ldraw_color.finish_name == 'Rubber':
-                # Make the transparent rubber appear cloudy.
-                roughness_node.inputs['Min'].default_value = 0.1
-                roughness_node.inputs['Max'].default_value = 0.35
-                bsdf.inputs['Transmission Roughness'].default_value = 0.25
+            if is_transmissive:
+                bsdf.inputs['Transmission'].default_value = 1.0
+                bsdf.inputs['IOR'].default_value = 1.55
+
+                if ldraw_color.finish_name == 'Rubber':
+                    # Make the transparent rubber appear cloudy.
+                    roughness_node.inputs['Min'].default_value = 0.1
+                    roughness_node.inputs['Max'].default_value = 0.35
+                    bsdf.inputs['Transmission Roughness'].default_value = 0.25
+                else:
+                    roughness_node.inputs['Min'].default_value = 0.01
+                    roughness_node.inputs['Max'].default_value = 0.15
+                    bsdf.inputs['Transmission Roughness'].default_value = 0.075
+
+                # Disable shadow casting for transparent materials.
+                # This avoids making transparent parts too dark.
+                make_shadows_transparent(material, bsdf)
+
+            # Procedural normals.
+            # if not is_transmissive:
+            if is_grainy_slope:
+                normals_node = create_node_group(
+                    material, 'ldr_tools_slope_normal', create_slope_normals_node_group)
             else:
-                roughness_node.inputs['Min'].default_value = 0.01
-                roughness_node.inputs['Max'].default_value = 0.15
-                bsdf.inputs['Transmission Roughness'].default_value = 0.075
+                normals_node = create_node_group(
+                    material, 'ldr_tools_normal', create_normals_node_group)
 
-            # Disable shadow casting for transparent materials.
-            # This avoids making transparent parts too dark.
-            make_shadows_transparent(material, bsdf)
-
-        # Procedural normals.
-        # if not is_transmissive:
-        if is_grainy_slope:
-            normals_node = create_node_group(
-                material, 'ldr_tools_slope_normal', create_slope_normals_node_group)
-        else:
-            normals_node = create_node_group(
-                material, 'ldr_tools_normal', create_normals_node_group)
-
-        material.node_tree.links.new(
-            normals_node.outputs['Normal'], bsdf.inputs['Normal'])
+            material.node_tree.links.new(
+                normals_node.outputs['Normal'], bsdf.inputs['Normal'])
 
     return material
 
