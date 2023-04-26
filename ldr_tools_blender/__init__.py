@@ -18,15 +18,24 @@ bl_info = {
 def menuImport(self, context):
     self.layout.operator(operator.ImportOperator.bl_idname,
                          text="LDraw (.mpd/.ldr/.dat)")
-
+    
+classes = [operator.ImportOperator, operator.LIST_OT_NewItem, operator.LIST_OT_DeleteItem]
 
 def register():
-    bpy.utils.register_class(operator.ImportOperator)
+    for cls in classes:
+        bpy.utils.register_class(cls)
+
+    bpy.types.Scene.ldr_path_to_add = bpy.props.StringProperty(name="Additional LDraw Path")
+
     bpy.types.TOPBAR_MT_file_import.append(menuImport)
 
 
 def unregister():
-    bpy.utils.unregister_class(operator.ImportOperator)
+    for cls in classes:
+        bpy.utils.unregister_class(cls)
+
+    del bpy.types.Scene.ldr_path_to_add
+
     bpy.types.TOPBAR_MT_file_import.remove(menuImport)
 
 

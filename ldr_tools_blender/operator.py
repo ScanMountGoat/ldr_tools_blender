@@ -1,11 +1,7 @@
 import os
 import json
 import bpy
-from bpy.props import (StringProperty,
-                       FloatProperty,
-                       EnumProperty,
-                       BoolProperty
-                       )
+from bpy.props import StringProperty, BoolProperty, IntProperty, CollectionProperty
 from bpy_extras.io_utils import ImportHelper
 from typing import Any
 import platform
@@ -63,12 +59,16 @@ class Preferences():
     def __init__(self):
         self.ldraw_path = find_ldraw_library()
         self.instance_on_faces = False
+        self.additional_paths = []
 
     def from_dict(self, dict: dict[str, Any]):
         # Fill in defaults for any missing values.
         defaults = Preferences()
         self.ldraw_path = dict.get('ldraw_path', defaults.ldraw_path)
-        self.instance_on_faces = dict.get('instance_on_faces', defaults.instance_on_faces)
+        self.instance_on_faces = dict.get(
+            'instance_on_faces', defaults.instance_on_faces)
+        self.additional_paths = dict.get(
+            'additional_paths', defaults.additional_paths)
 
     def save(self):
         with open(Preferences.preferences_path, 'w+') as file:
@@ -85,6 +85,35 @@ class Preferences():
             preferences = Preferences()
 
         return preferences
+
+
+class LIST_OT_NewItem(bpy.types.Operator):
+    """Add a new item to the list."""
+
+    bl_idname = "additional_paths.new_item"
+    bl_label = "Add a new item"
+
+    def execute(self, context):
+        # TODO: Don't store the preferences in the operator itself?
+        # TODO: singleton pattern?
+        p = context.scene.ldr_path_to_add
+        ImportOperator.preferences.additional_paths.append(p)
+        return {'FINISHED'}
+
+
+class LIST_OT_DeleteItem(bpy.types.Operator):
+    """Delete the selected item from the list."""
+
+    bl_idname = "additional_paths.delete_item"
+    bl_label = "Deletes an item"
+
+    @classmethod
+    def poll(cls, context):
+        return ImportOperator.preferences.additional_paths
+
+    def execute(self, context):
+        ImportOperator.preferences.additional_paths.pop()
+        return {'FINISHED'}
 
 
 class ImportOperator(bpy.types.Operator, ImportHelper):
@@ -107,7 +136,7 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
 
     ldraw_path: StringProperty(
         name="LDraw Library",
-        default=preferences.ldraw_path,
+        default=preferences.ldraw_path
     )
 
     # TODO: make this an enum for instance_method (linked_duplicates, instance_on_faces, etc)
@@ -120,9 +149,18 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
-        # TODO: File selector?
         layout.prop(self, "ldraw_path")
         layout.prop(self, "instance_on_faces")
+
+        # TODO: File selector?
+        # TODO: Come up with better UI for this?
+        layout.label(text="Additional Library Paths")
+        layout.label(text=';'.join(ImportOperator.preferences.additional_paths))
+
+        row = layout.row()
+        row.prop(context.scene, "ldr_path_to_add")
+        row.operator("additional_paths.new_item", text="Add")
+        row.operator("additional_paths.delete_item", text="Remove")
 
     def execute(self, context):
         # Update from the UI values to support saving them to disk later.
@@ -131,7 +169,9 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
 
         import time
         start = time.time()
-        importldraw(self, self.filepath, self.ldraw_path, self.instance_on_faces)
+        # TODO: Pass in additional paths.
+        importldraw(self, self.filepath, self.ldraw_path,
+                    self.instance_on_faces)
         end = time.time()
         print(f'Import: {end - start}')
 
