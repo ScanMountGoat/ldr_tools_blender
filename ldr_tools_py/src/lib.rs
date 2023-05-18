@@ -161,11 +161,12 @@ fn load_file(
     py: Python,
     path: &str,
     ldraw_path: &str,
+    additional_paths: Vec<&str>,
     settings: &GeometrySettings,
 ) -> PyResult<(LDrawNode, HashMap<String, LDrawGeometry>)> {
     // TODO: This timing code doesn't need to be here.
     let start = std::time::Instant::now();
-    let scene = ldr_tools::load_file(path, ldraw_path, &settings.into());
+    let scene = ldr_tools::load_file(path, ldraw_path, &additional_paths, &settings.into());
 
     let geometry_cache_py = scene
         .geometry_cache
@@ -181,13 +182,15 @@ fn load_file_instanced(
     py: Python,
     path: &str,
     ldraw_path: &str,
+    additional_paths: Vec<&str>,
     settings: &GeometrySettings,
 ) -> PyResult<(
     HashMap<String, LDrawGeometry>,
     HashMap<(String, u32), PyObject>,
 )> {
     let start = std::time::Instant::now();
-    let scene = ldr_tools::load_file_instanced(path, ldraw_path, &settings.into());
+    let scene =
+        ldr_tools::load_file_instanced(path, ldraw_path, &additional_paths, &settings.into());
 
     let geometry_cache_py = scene
         .geometry_cache
@@ -227,13 +230,15 @@ fn load_file_instanced_faces(
     py: Python,
     path: &str,
     ldraw_path: &str,
+    additional_paths: Vec<&str>,
     settings: &GeometrySettings,
 ) -> PyResult<(
     HashMap<String, LDrawGeometry>,
     HashMap<(String, u32), PyObject>,
 )> {
     let start = std::time::Instant::now();
-    let scene = ldr_tools::load_file_instanced_faces(path, ldraw_path, &settings.into());
+    let scene =
+        ldr_tools::load_file_instanced_faces(path, ldraw_path, &additional_paths, &settings.into());
 
     let geometry_cache_py = scene
         .geometry_cache

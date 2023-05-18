@@ -14,7 +14,7 @@ from .material import get_material
 # TODO: Add type hints for all functions.
 
 
-def importldraw(operator: bpy.types.Operator, filepath: str, ldraw_path: str, use_instancing: bool):
+def import_ldraw(operator: bpy.types.Operator, filepath: str, ldraw_path: str, additional_paths: list[str], use_instancing: bool):
     color_by_code = ldr_tools_py.load_color_table(ldraw_path)
 
     settings = GeometrySettings()
@@ -26,15 +26,17 @@ def importldraw(operator: bpy.types.Operator, filepath: str, ldraw_path: str, us
 
     # TODO: Add an option to make the lowest point have a height of 0 using obj.dimensions?
     if use_instancing:
-        import_instanced(filepath, ldraw_path, color_by_code, settings)
+        import_instanced(filepath, ldraw_path,
+                         additional_paths, color_by_code, settings)
     else:
-        import_objects(filepath, ldraw_path, color_by_code, settings)
+        import_objects(filepath, ldraw_path, additional_paths,
+                       color_by_code, settings)
 
 
-def import_objects(filepath: str, ldraw_path: str, color_by_code: dict[int, LDrawColor], settings: GeometrySettings):
+def import_objects(filepath: str, ldraw_path: str, additional_paths: list[str], color_by_code: dict[int, LDrawColor], settings: GeometrySettings):
     blender_mesh_cache = {}
     root_node, geometry_cache = ldr_tools_py.load_file(
-        filepath, ldraw_path, settings)
+        filepath, ldraw_path, additional_paths, settings)
 
     root_obj = add_nodes(root_node, geometry_cache,
                          blender_mesh_cache, color_by_code)
@@ -43,11 +45,11 @@ def import_objects(filepath: str, ldraw_path: str, color_by_code: dict[int, LDra
         math.radians(-90.0), 4, 'X')
 
 
-def import_instanced(filepath: str, ldraw_path: str, color_by_code: dict[int, LDrawColor], settings: GeometrySettings):
+def import_instanced(filepath: str, ldraw_path: str, additional_paths: list[str], color_by_code: dict[int, LDrawColor], settings: GeometrySettings):
     # Instance each part on the points of a mesh.
     # This avoids overhead from object creation for large scenes.
     geometry_cache, geometry_face_instances = ldr_tools_py.load_file_instanced_faces(
-        filepath, ldraw_path, settings)
+        filepath, ldraw_path, additional_paths, settings)
 
     # First create all the meshes and materials.
     blender_mesh_cache = {}

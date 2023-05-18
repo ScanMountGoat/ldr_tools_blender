@@ -6,7 +6,7 @@ from bpy_extras.io_utils import ImportHelper
 from typing import Any
 import platform
 
-from .importldr import importldraw
+from .importldr import import_ldraw
 
 
 def find_ldraw_library() -> str:
@@ -170,7 +170,7 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         import time
         start = time.time()
         # TODO: Pass in additional paths.
-        importldraw(self, self.filepath, self.ldraw_path,
+        import_ldraw(self, self.filepath, self.ldraw_path, ImportOperator.preferences.additional_paths,
                     self.instance_on_faces)
         end = time.time()
         print(f'Import: {end - start}')

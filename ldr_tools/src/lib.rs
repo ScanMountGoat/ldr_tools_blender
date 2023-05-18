@@ -38,7 +38,11 @@ struct DiskResolver {
 }
 
 impl DiskResolver {
-    fn new_from_library<P: AsRef<Path>>(catalog_path: P, resolution: PrimitiveResolution) -> Self {
+    fn new_from_library<P: AsRef<Path>>(
+        catalog_path: P,
+        additional_paths: impl IntoIterator<Item = P>,
+        resolution: PrimitiveResolution,
+    ) -> Self {
         let catalog_path = catalog_path.as_ref().to_owned();
         let mut base_paths = vec![
             catalog_path.join("p"),
@@ -56,6 +60,12 @@ impl DiskResolver {
             PrimitiveResolution::Normal => (),
             PrimitiveResolution::High => base_paths.insert(0, catalog_path.join("p").join("48")),
         }
+
+        // Users may want to specify additional folders for parts.
+        for path in additional_paths {
+            base_paths.push(path.as_ref().to_owned());
+        }
+
         Self { base_paths }
     }
 }
@@ -159,8 +169,17 @@ struct GeometryInitDescriptor<'a> {
 // TODO: Add global scale parameters.
 // Adjust the draw ctx for iter to set a "global scale"?
 // Also add a per part gap scale matrix.
-pub fn load_file(path: &str, ldraw_path: &str, settings: &GeometrySettings) -> LDrawScene {
-    let resolver = DiskResolver::new_from_library(ldraw_path, settings.primitive_resolution);
+pub fn load_file(
+    path: &str,
+    ldraw_path: &str,
+    additional_paths: &[&str],
+    settings: &GeometrySettings,
+) -> LDrawScene {
+    let resolver = DiskResolver::new_from_library(
+        ldraw_path,
+        additional_paths.iter().cloned(),
+        settings.primitive_resolution,
+    );
     let mut source_map = weldr::SourceMap::new();
     ensure_studs(settings, &resolver, &mut source_map);
 
@@ -315,9 +334,10 @@ fn scaled_transform(transform: &Mat4) -> Mat4 {
 pub fn load_file_instanced_faces(
     path: &str,
     ldraw_path: &str,
+    additional_paths: &[&str],
     settings: &GeometrySettings,
 ) -> LDrawSceneInstancedFaces {
-    let scene = load_file_instanced(path, ldraw_path, settings);
+    let scene = load_file_instanced(path, ldraw_path, additional_paths, settings);
 
     // TODO: par_iter?
     let geometry_face_instances = scene
@@ -376,9 +396,14 @@ fn geometry_face_instances(transforms: Vec<Mat4>) -> Vec<[Vec3; 4]> {
 pub fn load_file_instanced(
     path: &str,
     ldraw_path: &str,
+    additional_paths: &[&str],
     settings: &GeometrySettings,
 ) -> LDrawSceneInstanced {
-    let resolver = DiskResolver::new_from_library(ldraw_path, settings.primitive_resolution);
+    let resolver = DiskResolver::new_from_library(
+        ldraw_path,
+        additional_paths.iter().cloned(),
+        settings.primitive_resolution,
+    );
     let mut source_map = weldr::SourceMap::new();
     ensure_studs(settings, &resolver, &mut source_map);
 
