@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### unreleased
 ### Added
 * Added `models/colors.ldr` for testing all current LDraw colors.
+* Added an option to add additional parts paths when importing.
 
 ### Changed
 * Adjusted generated materials to improve subsurface scattering and procedural bump mapping.
