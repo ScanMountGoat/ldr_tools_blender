@@ -155,12 +155,14 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         # TODO: File selector?
         # TODO: Come up with better UI for this?
         layout.label(text="Additional Library Paths")
-        layout.label(text=';'.join(ImportOperator.preferences.additional_paths))
+        for path in ImportOperator.preferences.additional_paths:
+            layout.label(text=path)
 
         row = layout.row()
         row.prop(context.scene, "ldr_path_to_add")
-        row.operator("additional_paths.new_item", text="Add")
-        row.operator("additional_paths.delete_item", text="Remove")
+        row.operator("additional_paths.new_item", text="Add Path")
+        row = layout.row()
+        row.operator("additional_paths.delete_item", text="Remove Path")
 
     def execute(self, context):
         # Update from the UI values to support saving them to disk later.

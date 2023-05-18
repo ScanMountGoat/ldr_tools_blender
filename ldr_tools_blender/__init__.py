@@ -25,7 +25,7 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
 
-    bpy.types.Scene.ldr_path_to_add = bpy.props.StringProperty(name="Additional LDraw Path")
+    bpy.types.Scene.ldr_path_to_add = bpy.props.StringProperty(name="", description="Additional LDraw parts path")
 
     bpy.types.TOPBAR_MT_file_import.append(menuImport)
 
