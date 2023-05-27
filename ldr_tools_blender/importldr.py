@@ -14,7 +14,7 @@ from .material import get_material
 # TODO: Add type hints for all functions.
 
 
-def import_ldraw(operator: bpy.types.Operator, filepath: str, ldraw_path: str, additional_paths: list[str], use_instancing: bool):
+def import_ldraw(operator: bpy.types.Operator, filepath: str, ldraw_path: str, additional_paths: list[str], instance_type: str):
     color_by_code = ldr_tools_py.load_color_table(ldraw_path)
 
     settings = GeometrySettings()
@@ -25,10 +25,10 @@ def import_ldraw(operator: bpy.types.Operator, filepath: str, ldraw_path: str, a
     settings.weld_vertices = True
 
     # TODO: Add an option to make the lowest point have a height of 0 using obj.dimensions?
-    if use_instancing:
+    if instance_type == 'GeometryNodes':
         import_instanced(filepath, ldraw_path,
                          additional_paths, color_by_code, settings)
-    else:
+    elif instance_type == 'LinkedDuplicates':
         import_objects(filepath, ldraw_path, additional_paths,
                        color_by_code, settings)
 

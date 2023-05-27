@@ -268,7 +268,7 @@ fn load_file_instanced_points(
         .map(|(k, v)| (k, PointInstances::from_instances(py, v)))
         .collect();
 
-    println!("load_file_instanced_faces: {:?}", start.elapsed());
+    println!("load_file_instanced_points: {:?}", start.elapsed());
 
     Ok((geometry_cache_py, geometry_point_instances_py))
 }

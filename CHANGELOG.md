@@ -10,9 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 * Adjusted generated materials to improve subsurface scattering and procedural bump mapping.
+* Reworked instancing to select either linked duplicates or geometry nodes for instancing.
 
-### Fixed
-* Fixed an issue where some parts would be incorrectly flipped when importing with "Instance on faces" checked.
+### Removed
+* Removed "Instance on faces" due to compatibility issues with Blender 3.5.1.
 
 ## 0.1.0 - 2023-03-15
 First public release!

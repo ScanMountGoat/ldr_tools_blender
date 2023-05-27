@@ -1,7 +1,7 @@
 import os
 import json
 import bpy
-from bpy.props import StringProperty, BoolProperty, IntProperty, CollectionProperty
+from bpy.props import StringProperty, EnumProperty
 from bpy_extras.io_utils import ImportHelper
 from typing import Any
 import platform
@@ -58,15 +58,15 @@ class Preferences():
 
     def __init__(self):
         self.ldraw_path = find_ldraw_library()
-        self.instance_on_faces = False
+        self.instance_type = 'LinkedDuplicates'
         self.additional_paths = []
 
     def from_dict(self, dict: dict[str, Any]):
         # Fill in defaults for any missing values.
         defaults = Preferences()
         self.ldraw_path = dict.get('ldraw_path', defaults.ldraw_path)
-        self.instance_on_faces = dict.get(
-            'instance_on_faces', defaults.instance_on_faces)
+        self.instance_type = dict.get(
+            'instance_type', defaults.instance_type)
         self.additional_paths = dict.get(
             'additional_paths', defaults.additional_paths)
 
@@ -139,18 +139,21 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         default=preferences.ldraw_path
     )
 
-    # TODO: make this an enum for instance_method (linked_duplicates, instance_on_faces, etc)
-    instance_on_faces: BoolProperty(
-        name="Instance on faces",
-        description="Instance parts on the faces of a mesh instead of linking object meshes. Faster imports but harder to edit",
-        default=preferences.instance_on_faces
+    instance_type: EnumProperty(
+        name="Instance Type",
+        items=[
+            ('LinkedDuplicates', "Linked Duplicates", "Objects with linked mesh data blocks (Alt+D). Easy to edit."),
+            ('GeometryNodes', "Geometry Nodes", "Geometry node instances on an instancer mesh. Faster imports for large scenes but harder to edit.")
+        ],
+        description="The method to use for instancing part meshes",
+        default=preferences.instance_type
     )
 
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
         layout.prop(self, "ldraw_path")
-        layout.prop(self, "instance_on_faces")
+        layout.prop(self, "instance_type")
 
         # TODO: File selector?
         # TODO: Come up with better UI for this?
@@ -167,13 +170,12 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
     def execute(self, context):
         # Update from the UI values to support saving them to disk later.
         ImportOperator.preferences.ldraw_path = self.ldraw_path
-        ImportOperator.preferences.instance_on_faces = self.instance_on_faces
+        ImportOperator.preferences.instance_type = self.instance_type
 
         import time
         start = time.time()
-        # TODO: Pass in additional paths.
         import_ldraw(self, self.filepath, self.ldraw_path, ImportOperator.preferences.additional_paths,
-                    self.instance_on_faces)
+                    self.instance_type)
         end = time.time()
         print(f'Import: {end - start}')
 
