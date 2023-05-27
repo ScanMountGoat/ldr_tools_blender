@@ -4,12 +4,13 @@ use std::{
 };
 
 use geometry::create_geometry;
-use glam::{vec3, vec4, Mat4, Vec3};
+use glam::{vec4, Mat4, Vec3};
 use rayon::prelude::*;
 use weldr::{Command, FileRefResolver, ResolveError};
 
 pub use color::{load_color_table, LDrawColor};
 pub use geometry::{FaceColor, LDrawGeometry};
+pub use glam;
 pub use weldr::Color;
 
 pub type ColorCode = u32;
@@ -101,10 +102,18 @@ pub struct LDrawSceneInstanced {
     pub geometry_cache: HashMap<String, LDrawGeometry>,
 }
 
-pub struct LDrawSceneInstancedFaces {
-    /// A list of quads for each unique part and color whose position and vertex normal determine the part transformation.
-    pub geometry_face_instances: HashMap<(String, ColorCode), Vec<[Vec3; 4]>>,
+pub struct LDrawSceneInstancedPoints {
+    /// Decomposed instance transforms for unique part and color.
+    pub geometry_point_instances: HashMap<(String, ColorCode), PointInstances>,
     pub geometry_cache: HashMap<String, LDrawGeometry>,
+}
+
+pub struct PointInstances {
+    pub translations: Vec<Vec3>,
+    pub rotations_axis: Vec<Vec3>,
+    /// The angle of the rotation in radians.
+    pub rotations_angle: Vec<f32>,
+    pub scales: Vec<Vec3>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -329,64 +338,63 @@ fn scaled_transform(transform: &Mat4) -> Mat4 {
     transform
 }
 
-/// Creates a face for each part's transform for Blender's instance on faces feature.
-/// Each quad face encodes the translation, rotation, and scale.
-pub fn load_file_instanced_faces(
+pub fn load_file_instanced_points(
     path: &str,
     ldraw_path: &str,
     additional_paths: &[&str],
     settings: &GeometrySettings,
-) -> LDrawSceneInstancedFaces {
+) -> LDrawSceneInstancedPoints {
     let scene = load_file_instanced(path, ldraw_path, additional_paths, settings);
 
     // TODO: par_iter?
-    let geometry_face_instances = scene
+    let geometry_point_instances = scene
         .geometry_world_transforms
         .into_par_iter()
         .map(|(k, transforms)| {
-            let faces = geometry_face_instances(transforms);
+            let faces = geometry_point_instances(transforms);
             (k, faces)
         })
         .collect();
 
-    LDrawSceneInstancedFaces {
-        geometry_face_instances,
+    LDrawSceneInstancedPoints {
+        geometry_point_instances,
         geometry_cache: scene.geometry_cache,
     }
 }
 
-fn geometry_face_instances(transforms: Vec<Mat4>) -> Vec<[Vec3; 4]> {
-    transforms
-        .into_iter()
-        .map(|transform| {
-            // Account for some parts being "flipped".
-            // Fix winding order and negative scaling.
-            // This ensure calculated face normals work as expected in Blender.
-            let flipped = transform.determinant() < 0.0;
-            let transform = if flipped {
-                let (s, r, t) = transform.to_scale_rotation_translation();
-                Mat4::from_scale_rotation_translation(-s, r, t)
-            } else {
-                transform
-            };
+fn geometry_point_instances(transforms: Vec<Mat4>) -> PointInstances {
+    let mut translations = Vec::new();
+    let mut rotations_axis = Vec::new();
+    let mut rotations_angle = Vec::new();
+    let mut scales = Vec::new();
 
-            // Transform a square with unit area centered at the origin.
-            // The position and vertex normal encode the translation and rotation.
-            // The face area encodes the scale.
-            let mut face = [
-                transform.transform_point3(vec3(-0.5, -0.5, 0.0)),
-                transform.transform_point3(vec3(0.5, -0.5, 0.0)),
-                transform.transform_point3(vec3(0.5, 0.5, 0.0)),
-                transform.transform_point3(vec3(-0.5, 0.5, 0.0)),
-            ];
+    for transform in transforms {
+        let (s, r, t) = transform.to_scale_rotation_translation();
 
-            if flipped {
-                face.reverse();
-            }
+        // TODO:Account for some parts being "flipped".
+        // This ensures applications don't need to handle negative scale.
+        // let flipped = transform.determinant() < 0.0;
+        // if flipped {
+        //     s = -s;
+        // }
 
-            face
-        })
-        .collect()
+        translations.push(t);
+
+        // Decomposing to euler seems to not always work.
+        // Just use an axis and angle since this better represents the quaternion.
+        let (axis, angle) = r.to_axis_angle();
+        rotations_axis.push(axis.into());
+        rotations_angle.push(angle);
+
+        scales.push(s);
+    }
+
+    PointInstances {
+        translations,
+        rotations_axis,
+        rotations_angle,
+        scales,
+    }
 }
 
 // TODO: Also instance studs to reduce memory usage?
@@ -525,7 +533,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn geometry_face_instances_flip() {
+    fn geometry_point_instances_flip() {
         // Some LDraw models use negative scaling.
         // Test that flipped parts have correct winding and orientation.
         let transforms = vec![
@@ -544,6 +552,7 @@ mod tests {
             ])
             .transpose(),
         ];
+        // TODO: Fix this test case.
         assert_eq!(
             vec![
                 [
@@ -559,7 +568,7 @@ mod tests {
                     vec3(1.0, 2.5, 3.5,),
                 ],
             ],
-            geometry_face_instances(transforms)
+            geometry_point_instances(transforms)
         );
     }
 }

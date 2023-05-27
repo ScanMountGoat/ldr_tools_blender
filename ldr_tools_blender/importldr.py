@@ -34,6 +34,8 @@ def import_ldraw(operator: bpy.types.Operator, filepath: str, ldraw_path: str, a
 
 
 def import_objects(filepath: str, ldraw_path: str, additional_paths: list[str], color_by_code: dict[int, LDrawColor], settings: GeometrySettings):
+    # Create an object for each part in the scene.
+    # This still uses instances the mesh data blocks for reduced memory usage.
     blender_mesh_cache = {}
     root_node, geometry_cache = ldr_tools_py.load_file(
         filepath, ldraw_path, additional_paths, settings)
@@ -43,83 +45,6 @@ def import_objects(filepath: str, ldraw_path: str, additional_paths: list[str], 
     # Account for Blender having a different coordinate system.
     root_obj.matrix_basis = mathutils.Matrix.Rotation(
         math.radians(-90.0), 4, 'X')
-
-
-def import_instanced(filepath: str, ldraw_path: str, additional_paths: list[str], color_by_code: dict[int, LDrawColor], settings: GeometrySettings):
-    # Instance each part on the points of a mesh.
-    # This avoids overhead from object creation for large scenes.
-    geometry_cache, geometry_face_instances = ldr_tools_py.load_file_instanced_faces(
-        filepath, ldraw_path, additional_paths, settings)
-
-    # First create all the meshes and materials.
-    blender_mesh_cache = {}
-    for name, color in geometry_face_instances:
-        geometry = geometry_cache[name]
-
-        mesh = create_colored_mesh_from_geometry(
-            name, color, color_by_code, geometry)
-
-        blender_mesh_cache[(name, color)] = mesh
-
-    # Instant each unique colored part on the faces of a mesh.
-    for (name, color), faces in geometry_face_instances.items():
-        instancer_mesh = create_instancer_mesh(
-            f'{name}_{color}_instancer', faces)
-
-        instancer_object = bpy.data.objects.new(
-            f'{name}_{color}_instancer', instancer_mesh)
-
-        # Account for Blender having a different coordinate system.
-        instancer_object.matrix_basis = mathutils.Matrix.Rotation(
-            math.radians(-90.0), 4, 'X')
-
-        bpy.context.collection.objects.link(instancer_object)
-
-        mesh = blender_mesh_cache[(name, color)]
-        instance_object = bpy.data.objects.new(
-            f'{name}_{color}_instance', mesh)
-        instance_object.parent = instancer_object
-        bpy.context.collection.objects.link(instance_object)
-        # Hide the original instanced object to avoid cluttering the viewport.
-        # Make sure the object is in the view layer before hiding.
-        instance_object.hide_set(True)
-        instance_object.hide_render = False
-
-        # Instance the mesh on the faces of the parent object.
-        instancer_object.instance_type = 'FACES'
-        instancer_object.use_instance_faces_scale = True
-        instancer_object.show_instancer_for_render = False
-        instancer_object.show_instancer_for_viewport = False
-
-
-def create_instancer_mesh(name: str, vertices: np.ndarray):
-    # Create a quad face for each part instance.
-    # The face's position, normal, and area encode the transform.
-    instancer_mesh = bpy.data.meshes.new(name)
-
-    vertex_indices = np.arange(vertices.shape[0], dtype=np.uint32)
-    loop_start = np.arange(0, vertex_indices.shape[0], 4, dtype=np.int32)
-    loop_total = np.full(loop_start.shape[0], 4, dtype=np.int32)
-
-    if vertices.shape[0] > 0:
-        # Using foreach_set is faster than bmesh or from_pydata.
-        # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
-        # We can assume the data is already a numpy array.
-        instancer_mesh.vertices.add(vertices.shape[0])
-        instancer_mesh.vertices.foreach_set('co', vertices.reshape(-1))
-
-        instancer_mesh.loops.add(vertex_indices.size)
-        instancer_mesh.loops.foreach_set(
-            'vertex_index', vertex_indices)
-
-        instancer_mesh.polygons.add(loop_start.size)
-        instancer_mesh.polygons.foreach_set(
-            'loop_start', loop_start)
-        instancer_mesh.polygons.foreach_set('loop_total', loop_total)
-
-    instancer_mesh.validate()
-    instancer_mesh.update()
-    return instancer_mesh
 
 
 def add_nodes(node: LDrawNode,
@@ -142,6 +67,7 @@ def add_nodes(node: LDrawNode,
             blender_mesh_cache[mesh_key] = mesh
             obj = bpy.data.objects.new(node.name, mesh)
         else:
+            # Use an existing mesh data block like with linked duplicates (alt+d).
             obj = bpy.data.objects.new(node.name, blender_mesh)
     else:
         # Create an empty by setting the data to None.
@@ -157,6 +83,142 @@ def add_nodes(node: LDrawNode,
         child_obj.parent = obj
 
     return obj
+
+
+def import_instanced(filepath: str, ldraw_path: str, additional_paths: list[str], color_by_code: dict[int, LDrawColor], settings: GeometrySettings):
+    # Instance each part on the points of a mesh.
+    # This avoids overhead from object creation for large scenes.
+    geometry_cache, geometry_point_instances = ldr_tools_py.load_file_instanced_points(
+        filepath, ldraw_path, additional_paths, settings)
+
+    # First create all the meshes and materials.
+    blender_mesh_cache = {}
+    for name, color in geometry_point_instances:
+        geometry = geometry_cache[name]
+
+        mesh = create_colored_mesh_from_geometry(
+            name, color, color_by_code, geometry)
+
+        blender_mesh_cache[(name, color)] = mesh
+
+    # Instant each unique colored part on the faces of a mesh.
+    for (name, color), instances in geometry_point_instances.items():
+        instancer_mesh = create_instancer_mesh(
+            f'{name}_{color}_instancer', instances)
+
+        instancer_object = bpy.data.objects.new(
+            f'{name}_{color}_instancer', instancer_mesh)
+
+        # Account for Blender having a different coordinate system.
+        instancer_object.matrix_basis = mathutils.Matrix.Rotation(
+            math.radians(-90.0), 4, 'X')
+
+        bpy.context.collection.objects.link(instancer_object)
+
+        mesh = blender_mesh_cache[(name, color)]
+        instance_object = bpy.data.objects.new(
+            f'{name}_{color}_instance', mesh)
+        instance_object.parent = instancer_object
+        bpy.context.collection.objects.link(instance_object)
+
+        # Hide the original instanced object to avoid cluttering the viewport.
+        # Make sure the object is in the view layer before hiding.
+        instance_object.hide_set(True)
+        instance_object.hide_render = False
+
+        # Set up geometry nodes for the actual instancing.
+        # Geometry nodes are more reliable than instancing on faces.
+        # This also avoids performance overhead from object creation.
+        create_geometry_node_instancing(instancer_object, instance_object)
+
+
+def create_geometry_node_instancing(instancer_object: bpy.types.Object, instance_object: bpy.types.Object):
+    modifier = instancer_object.modifiers.new(
+        name="GeometryNodes", type='NODES')
+    node_tree = bpy.data.node_groups.new('GeometryNodes', 'GeometryNodeTree')
+    modifier.node_group = node_tree
+    nodes = node_tree.nodes
+    links = node_tree.links
+
+    group_input = nodes.new('NodeGroupInput')
+    node_tree.inputs.new('NodeSocketGeometry', 'Geometry')
+
+    group_output = nodes.new('NodeGroupOutput')
+    node_tree.outputs.new('NodeSocketGeometry', 'Geometry')
+
+    # The instancer mesh's points define the instance translation.
+    instance_points = nodes.new(type="GeometryNodeInstanceOnPoints")
+    links.new(group_input.outputs["Geometry"],
+              instance_points.inputs["Points"])
+    links.new(instance_points.outputs["Instances"],
+              group_output.inputs["Geometry"])
+
+    # Set the instance mesh.
+    instance_info = nodes.new(type="GeometryNodeObjectInfo")
+    instance_info.inputs[0].default_value = instance_object
+    links.new(instance_info.outputs["Geometry"],
+              instance_points.inputs["Instance"])
+
+    # Scale instances from the custom color attribute.
+    scale_attribute = nodes.new(type="GeometryNodeInputNamedAttribute")
+    scale_attribute.data_type = 'FLOAT_VECTOR'
+    scale_attribute.inputs["Name"].default_value = "instance_scale"
+    links.new(scale_attribute.outputs["Attribute"],
+              instance_points.inputs["Scale"])
+
+    # Rotate instances from the custom color attributes.
+    rotation = nodes.new(type="FunctionNodeRotateEuler")
+    rotation.type = 'AXIS_ANGLE'
+
+    rot_axis_attribute = nodes.new(type="GeometryNodeInputNamedAttribute")
+    rot_axis_attribute.data_type = 'FLOAT_VECTOR'
+    rot_axis_attribute.inputs["Name"].default_value = "instance_rotation_axis"
+    links.new(rot_axis_attribute.outputs["Attribute"], rotation.inputs["Axis"])
+
+    rot_angle_attribute = nodes.new(type="GeometryNodeInputNamedAttribute")
+    rot_angle_attribute.data_type = 'FLOAT'
+    rot_angle_attribute.inputs["Name"].default_value = "instance_rotation_angle"
+
+    # TODO: Why does this not work?
+    links.new(
+        rot_angle_attribute.outputs["Attribute"], rotation.inputs["Angle"])
+
+    links.new(rotation.outputs["Rotation"], instance_points.inputs["Rotation"])
+
+
+def create_instancer_mesh(name: str, instances: ldr_tools_py.PointInstances):
+    # Create a vertex at each instance.
+    instancer_mesh = bpy.data.meshes.new(name)
+
+    positions = instances.translations
+    if positions.shape[0] > 0:
+        # Using foreach_set is faster than bmesh or from_pydata.
+        # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
+        # We can assume the data is already a numpy array.
+        instancer_mesh.vertices.add(positions.shape[0])
+        instancer_mesh.vertices.foreach_set('co', positions.reshape(-1))
+
+        # Encode rotation and scale into custom vertex color attributes.
+        # This allows geometry nodes to access the attributes later.
+        # We don't use vertex normals to avoid modifications by Blender.
+        scale_attribute = instancer_mesh.color_attributes.new(
+            name='instance_scale', type='FLOAT_VECTOR', domain='POINT')
+        scale_attribute.data.foreach_set(
+            'vector', instances.scales.reshape(-1))
+
+        rot_axis_attribute = instancer_mesh.color_attributes.new(
+            name='instance_rotation_axis', type='FLOAT_VECTOR', domain='POINT')
+        rot_axis_attribute.data.foreach_set(
+            'vector', instances.rotations_axis.reshape(-1))
+
+        rot_angle_attribute = instancer_mesh.color_attributes.new(
+            name='instance_rotation_angle', type='FLOAT', domain='POINT')
+        rot_angle_attribute.data.foreach_set(
+            'value', instances.rotations_angle.reshape(-1))
+
+    instancer_mesh.validate()
+    instancer_mesh.update()
+    return instancer_mesh
 
 
 def create_colored_mesh_from_geometry(name: str, color: int, color_by_code: dict[int, LDrawColor], geometry: LDrawGeometry):

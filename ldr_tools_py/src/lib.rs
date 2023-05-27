@@ -41,21 +41,12 @@ pub struct LDrawGeometry {
 
 impl LDrawGeometry {
     fn from_geometry(py: Python, geometry: ldr_tools::LDrawGeometry) -> Self {
-        let vertex_count = geometry.positions.len();
         let edge_count = geometry.edge_position_indices.len();
 
         // This flatten will be optimized in Release mode.
         // This avoids needing unsafe code.
         Self {
-            vertices: geometry
-                .positions
-                .into_iter()
-                .flat_map(|v| [v.x, v.y, v.z])
-                .collect::<Vec<f32>>()
-                .into_pyarray(py)
-                .reshape((vertex_count, 3))
-                .unwrap()
-                .into(),
+            vertices: pyarray_vec3(py, geometry.positions),
             vertex_indices: geometry.position_indices.into_pyarray(py).into(),
             face_start_indices: geometry.face_start_indices.into_pyarray(py).into(),
             face_sizes: geometry.face_sizes.into_pyarray(py).into(),
@@ -155,6 +146,26 @@ impl From<&GeometrySettings> for ldr_tools::GeometrySettings {
     }
 }
 
+#[pyclass(get_all, set_all)]
+#[derive(Debug, Clone)]
+pub struct PointInstances {
+    translations: PyObject,
+    rotations_axis: PyObject,
+    rotations_angle: PyObject,
+    scales: PyObject,
+}
+
+impl PointInstances {
+    fn from_instances(py: Python, instances: ldr_tools::PointInstances) -> Self {
+        Self {
+            translations: pyarray_vec3(py, instances.translations),
+            rotations_axis: pyarray_vec3(py, instances.rotations_axis),
+            rotations_angle: instances.rotations_angle.into_pyarray(py).into(),
+            scales: pyarray_vec3(py, instances.scales),
+        }
+    }
+}
+
 // TODO: Is it worth creating the scene structs here as well?
 #[pyfunction]
 fn load_file(
@@ -225,8 +236,9 @@ fn load_file_instanced(
     Ok((geometry_cache_py, geometry_world_transforms_py))
 }
 
+// TODO: Create structs for the scene.
 #[pyfunction]
-fn load_file_instanced_faces(
+fn load_file_instanced_points(
     py: Python,
     path: &str,
     ldraw_path: &str,
@@ -234,11 +246,15 @@ fn load_file_instanced_faces(
     settings: &GeometrySettings,
 ) -> PyResult<(
     HashMap<String, LDrawGeometry>,
-    HashMap<(String, u32), PyObject>,
+    HashMap<(String, u32), PointInstances>,
 )> {
     let start = std::time::Instant::now();
-    let scene =
-        ldr_tools::load_file_instanced_faces(path, ldraw_path, &additional_paths, &settings.into());
+    let scene = ldr_tools::load_file_instanced_points(
+        path,
+        ldraw_path,
+        &additional_paths,
+        &settings.into(),
+    );
 
     let geometry_cache_py = scene
         .geometry_cache
@@ -246,34 +262,15 @@ fn load_file_instanced_faces(
         .map(|(k, v)| (k, LDrawGeometry::from_geometry(py, v)))
         .collect();
 
-    let geometry_world_transforms_py = scene
-        .geometry_face_instances
+    let geometry_point_instances_py = scene
+        .geometry_point_instances
         .into_iter()
-        .map(|(k, v)| {
-            // Create a single numpy array of vertices for each part.
-            // This means Python code can avoid overhead from for loops.
-            // This flatten will be optimized in Release mode.
-            // This avoids needing unsafe code.
-            let vertex_count = v.len() * 4;
-            let transforms = v
-                .into_iter()
-                .flat_map(|[v0, v1, v2, v3]| {
-                    [v0.to_array(), v1.to_array(), v2.to_array(), v3.to_array()]
-                })
-                .flatten()
-                .collect::<Vec<f32>>()
-                .into_pyarray(py)
-                .reshape((vertex_count, 3))
-                .unwrap()
-                .into();
-
-            (k, transforms)
-        })
+        .map(|(k, v)| (k, PointInstances::from_instances(py, v)))
         .collect();
 
     println!("load_file_instanced_faces: {:?}", start.elapsed());
 
-    Ok((geometry_cache_py, geometry_world_transforms_py))
+    Ok((geometry_cache_py, geometry_point_instances_py))
 }
 
 #[pyfunction]
@@ -284,6 +281,20 @@ fn load_color_table(ldraw_path: &str) -> PyResult<HashMap<u32, LDrawColor>> {
         .collect())
 }
 
+fn pyarray_vec3(py: Python, values: Vec<ldr_tools::glam::Vec3>) -> PyObject {
+    // This flatten will be optimized in Release mode.
+    // This avoids needing unsafe code.
+    let count = values.len();
+    values
+        .into_iter()
+        .flat_map(|v| [v.x, v.y, v.z])
+        .collect::<Vec<f32>>()
+        .into_pyarray(py)
+        .reshape((count, 3))
+        .unwrap()
+        .into()
+}
+
 #[pymodule]
 fn ldr_tools_py(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<LDrawNode>()?;
@@ -291,10 +302,11 @@ fn ldr_tools_py(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<FaceColor>()?;
     m.add_class::<LDrawColor>()?;
     m.add_class::<GeometrySettings>()?;
+    m.add_class::<PointInstances>()?;
 
     m.add_function(wrap_pyfunction!(load_file, m)?)?;
     m.add_function(wrap_pyfunction!(load_file_instanced, m)?)?;
-    m.add_function(wrap_pyfunction!(load_file_instanced_faces, m)?)?;
+    m.add_function(wrap_pyfunction!(load_file_instanced_points, m)?)?;
     m.add_function(wrap_pyfunction!(load_color_table, m)?)?;
 
     Ok(())
