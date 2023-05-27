@@ -170,18 +170,19 @@ def create_geometry_node_instancing(instancer_object: bpy.types.Object, instance
     rotation = nodes.new(type="FunctionNodeRotateEuler")
     rotation.type = 'AXIS_ANGLE'
 
-    rot_axis_attribute = nodes.new(type="GeometryNodeInputNamedAttribute")
-    rot_axis_attribute.data_type = 'FLOAT_VECTOR'
-    rot_axis_attribute.inputs["Name"].default_value = "instance_rotation_axis"
-    links.new(rot_axis_attribute.outputs["Attribute"], rotation.inputs["Axis"])
+    rot_axis = nodes.new(type="GeometryNodeInputNamedAttribute")
+    rot_axis.data_type = 'FLOAT_VECTOR'
+    rot_axis.inputs["Name"].default_value = "instance_rotation_axis"
+    links.new(rot_axis.outputs["Attribute"], rotation.inputs["Axis"])
 
-    rot_angle_attribute = nodes.new(type="GeometryNodeInputNamedAttribute")
-    rot_angle_attribute.data_type = 'FLOAT'
-    rot_angle_attribute.inputs["Name"].default_value = "instance_rotation_angle"
+    # TODO: Why do named float attributes not link properly?
+    rot_angle = nodes.new(type="GeometryNodeInputNamedAttribute")
+    rot_angle.data_type = 'FLOAT_VECTOR'
+    rot_angle.inputs["Name"].default_value = "instance_rotation_angle"
 
-    # TODO: Why does this not work?
-    links.new(
-        rot_angle_attribute.outputs["Attribute"], rotation.inputs["Angle"])
+    separate = nodes.new(type="ShaderNodeSeparateXYZ")
+    links.new(rot_angle.outputs["Attribute"], separate.inputs["Vector"])
+    links.new(separate.outputs["X"], rotation.inputs["Angle"])
 
     links.new(rotation.outputs["Rotation"], instance_points.inputs["Rotation"])
 
@@ -198,23 +199,25 @@ def create_instancer_mesh(name: str, instances: ldr_tools_py.PointInstances):
         instancer_mesh.vertices.add(positions.shape[0])
         instancer_mesh.vertices.foreach_set('co', positions.reshape(-1))
 
-        # Encode rotation and scale into custom vertex color attributes.
+        # Encode rotation and scale into custom attributes.
         # This allows geometry nodes to access the attributes later.
-        # We don't use vertex normals to avoid modifications by Blender.
-        scale_attribute = instancer_mesh.color_attributes.new(
+        scale_attribute = instancer_mesh.attributes.new(
             name='instance_scale', type='FLOAT_VECTOR', domain='POINT')
         scale_attribute.data.foreach_set(
             'vector', instances.scales.reshape(-1))
 
-        rot_axis_attribute = instancer_mesh.color_attributes.new(
+        rot_axis_attribute = instancer_mesh.attributes.new(
             name='instance_rotation_axis', type='FLOAT_VECTOR', domain='POINT')
         rot_axis_attribute.data.foreach_set(
             'vector', instances.rotations_axis.reshape(-1))
 
-        rot_angle_attribute = instancer_mesh.color_attributes.new(
-            name='instance_rotation_angle', type='FLOAT', domain='POINT')
+        # TODO: Why do named float attributes not link properly?
+        angle_vec3 = np.zeros((positions.shape[0], 3))
+        angle_vec3[:,0] = instances.rotations_angle
+        rot_angle_attribute = instancer_mesh.attributes.new(
+            name='instance_rotation_angle', type='FLOAT_VECTOR', domain='POINT')
         rot_angle_attribute.data.foreach_set(
-            'value', instances.rotations_angle.reshape(-1))
+            'vector', angle_vec3.reshape(-1))
 
     instancer_mesh.validate()
     instancer_mesh.update()
