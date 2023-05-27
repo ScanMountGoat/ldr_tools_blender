@@ -14,3 +14,4 @@ phf =  { version = "0.11.1", features = ["macros"] }
 
 [dev-dependencies]
 indoc = "2"
+approx = "0.5.1"

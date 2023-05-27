@@ -42,12 +42,9 @@ fn rgba_linear(value: &weldr::Color, alpha: Option<u8>) -> [f32; 4] {
 
 fn speckle_rgba_linear(c: &weldr::ColourCmd) -> Option<[f32; 4]> {
     c.finish.as_ref().and_then(|f| match f {
-        weldr::ColorFinish::Material(m) => match m {
-            weldr::MaterialFinish::Speckle(speckle) => {
-                Some(rgba_linear(&speckle.value, speckle.alpha))
-            }
-            _ => None,
-        },
+        weldr::ColorFinish::Material(weldr::MaterialFinish::Speckle(speckle)) => {
+            Some(rgba_linear(&speckle.value, speckle.alpha))
+        }
         _ => None,
     })
 }

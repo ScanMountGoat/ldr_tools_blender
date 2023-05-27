@@ -108,6 +108,7 @@ pub struct LDrawSceneInstancedPoints {
     pub geometry_cache: HashMap<String, LDrawGeometry>,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct PointInstances {
     pub translations: Vec<Vec3>,
     pub rotations_axis: Vec<Vec3>,
@@ -221,12 +222,9 @@ fn ensure_studs(
 ) {
     // The replaced studs likely won't be referenced by existing files.
     // Make sure the selected stud type is in the source map.
-    match settings.stud_type {
-        StudType::Logo4 => {
-            weldr::parse("stud-logo4.dat", resolver, source_map).unwrap();
-            weldr::parse("stud2-logo4.dat", resolver, source_map).unwrap();
-        }
-        _ => (),
+    if settings.stud_type == StudType::Logo4 {
+        weldr::parse("stud-logo4.dat", resolver, source_map).unwrap();
+        weldr::parse("stud2-logo4.dat", resolver, source_map).unwrap();
     }
 }
 
@@ -346,13 +344,12 @@ pub fn load_file_instanced_points(
 ) -> LDrawSceneInstancedPoints {
     let scene = load_file_instanced(path, ldraw_path, additional_paths, settings);
 
-    // TODO: par_iter?
     let geometry_point_instances = scene
         .geometry_world_transforms
         .into_par_iter()
         .map(|(k, transforms)| {
-            let faces = geometry_point_instances(transforms);
-            (k, faces)
+            let instances = geometry_point_instances(transforms);
+            (k, instances)
         })
         .collect();
 
@@ -371,19 +368,12 @@ fn geometry_point_instances(transforms: Vec<Mat4>) -> PointInstances {
     for transform in transforms {
         let (s, r, t) = transform.to_scale_rotation_translation();
 
-        // TODO:Account for some parts being "flipped".
-        // This ensures applications don't need to handle negative scale.
-        // let flipped = transform.determinant() < 0.0;
-        // if flipped {
-        //     s = -s;
-        // }
-
         translations.push(t);
 
         // Decomposing to euler seems to not always work.
         // Just use an axis and angle since this better represents the quaternion.
         let (axis, angle) = r.to_axis_angle();
-        rotations_axis.push(axis.into());
+        rotations_axis.push(axis);
         rotations_angle.push(angle);
 
         scales.push(s);
@@ -530,12 +520,17 @@ fn has_geometry(source_file: &weldr::SourceFile) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use approx::assert_relative_eq;
+    use glam::vec3;
+
     use super::*;
 
     #[test]
     fn geometry_point_instances_flip() {
         // Some LDraw models use negative scaling.
-        // Test that flipped parts have correct winding and orientation.
+        // Test that decomposed transforms are correct.
+        // This used to break with instance on faces.
+        // Point instances seem to not need special handling for now.
         let transforms = vec![
             Mat4::from_cols_array_2d(&[
                 [0.0, 0.0, -1.0, 1.0],
@@ -552,23 +547,18 @@ mod tests {
             ])
             .transpose(),
         ];
-        // TODO: Fix this test case.
+
+        let instances = geometry_point_instances(transforms);
+
+        assert_relative_eq!(instances.rotations_axis[0].to_array()[..], [0.0, 1.0, 0.0]);
+        assert_relative_eq!(instances.rotations_axis[1].to_array()[..], [0.0, 1.0, 0.0]);
+
+        assert_relative_eq!(instances.rotations_angle[0], 4.712389);
+        assert_relative_eq!(instances.rotations_angle[1], 1.5707964);
+
         assert_eq!(
-            vec![
-                [
-                    vec3(1.0, 1.5, 2.5,),
-                    vec3(1.0, 1.5, 3.5,),
-                    vec3(1.0, 2.5, 3.5,),
-                    vec3(1.0, 2.5, 2.5,),
-                ],
-                [
-                    vec3(1.0, 1.5, 3.5,),
-                    vec3(1.0, 1.5, 2.5,),
-                    vec3(1.0, 2.5, 2.5,),
-                    vec3(1.0, 2.5, 3.5,),
-                ],
-            ],
-            geometry_point_instances(transforms)
+            instances.scales,
+            vec![vec3(1.0, 1.0, 1.0), vec3(-1.0, 1.0, 1.0)]
         );
     }
 }
