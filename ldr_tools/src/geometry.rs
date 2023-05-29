@@ -5,7 +5,9 @@ use rstar::{primitives::GeomWithData, RTree};
 use weldr::Command;
 
 use crate::{
-    replace_color, slope::is_grainy_slope, ColorCode, GeometrySettings, StudType, SCENE_SCALE,
+    replace_color,
+    slope::{is_grainy_slope, is_slope_piece},
+    ColorCode, GeometrySettings, StudType, SCENE_SCALE,
 };
 
 // TODO: use the edge information to calculate smooth normals directly in Rust?
@@ -28,11 +30,13 @@ pub struct FaceColor {
     pub is_grainy_slope: bool,
 }
 
+/// Settings that inherit or accumulate when recursing into subfiles.
 struct GeometryContext {
     current_color: ColorCode,
     transform: Mat4,
     inverted: bool,
     is_stud: bool,
+    is_slope: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,6 +108,7 @@ pub fn create_geometry(
         transform: Mat4::IDENTITY,
         inverted: false,
         is_stud: is_stud(name),
+        is_slope: is_slope_piece(name),
     };
 
     let mut vertex_map = VertexMap::new();
@@ -115,7 +120,6 @@ pub fn create_geometry(
         &mut vertex_map,
         source_file,
         source_map,
-        name,
         ctx,
         recursive,
         settings,
@@ -211,7 +215,6 @@ fn append_geometry(
     vertex_map: &mut VertexMap,
     source_file: &weldr::SourceFile,
     source_map: &weldr::SourceMap,
-    name: &str,
     ctx: GeometryContext,
     recursive: bool,
     settings: &GeometrySettings,
@@ -253,7 +256,6 @@ fn append_geometry(
                     current_inverted,
                     vertex_map,
                     color,
-                    name,
                     settings.weld_vertices,
                 );
             }
@@ -271,7 +273,6 @@ fn append_geometry(
                         current_inverted,
                         vertex_map,
                         color,
-                        name,
                         settings.weld_vertices,
                     );
                     add_triangle_face(
@@ -282,7 +283,6 @@ fn append_geometry(
                         current_inverted,
                         vertex_map,
                         color,
-                        name,
                         settings.weld_vertices,
                     );
                 } else {
@@ -297,7 +297,7 @@ fn append_geometry(
 
                     let face_color = FaceColor {
                         color: replace_color(q.color, ctx.current_color),
-                        is_grainy_slope: is_grainy_slope(&q.vertices, name),
+                        is_grainy_slope: is_grainy_slope(&q.vertices, ctx.is_slope, ctx.is_stud),
                     };
                     geometry.face_colors.push(face_color);
                 }
@@ -311,8 +311,9 @@ fn append_geometry(
                     let subfilename = replace_studs(subfile_cmd, settings.stud_type);
 
                     if let Some(subfile) = source_map.get(subfilename) {
-                        // Subfiles of studs should still be treated like studs.
+                        // Subfiles of slopes or studs are still slopes or studs.
                         let is_stud = ctx.is_stud || is_stud(subfilename);
+                        let is_slope = ctx.is_slope || is_slope_piece(subfilename);
 
                         // Set the walls of high contrast studs to black.
                         // TODO: Create custom stud files for better accuracy.
@@ -336,13 +337,14 @@ fn append_geometry(
                                 ctx.inverted
                             },
                             is_stud,
+                            is_slope,
                         };
 
                         // Don't invert additional subfile reference commands.
                         invert_next = false;
 
                         append_geometry(
-                            geometry, hard_edges, vertex_map, subfile, source_map, name, child_ctx,
+                            geometry, hard_edges, vertex_map, subfile, source_map, child_ctx,
                             recursive, settings,
                         );
                     }
@@ -383,7 +385,6 @@ fn add_triangle_face(
     current_inverted: bool,
     vertex_map: &mut VertexMap,
     color: u32,
-    name: &str,
     weld_vertices: bool,
 ) {
     add_face(
@@ -397,7 +398,7 @@ fn add_triangle_face(
 
     let face_color = FaceColor {
         color,
-        is_grainy_slope: is_grainy_slope(&vertices, name),
+        is_grainy_slope: is_grainy_slope(&vertices, ctx.is_slope, ctx.is_stud),
     };
     geometry.face_colors.push(face_color);
 }

@@ -93,13 +93,17 @@ static SLOPE_ANGLES: phf::Map<&'static str, i32> = phf_map! {
     "4195004.dat" => 45,
 };
 
-pub fn is_grainy_slope(face: &[Vec3], name: &str) -> bool {
+pub fn is_slope_piece(name: &str) -> bool {
     // TODO: some parts have suffixes like a or b or p?
-    if SLOPE_ANGLES.contains_key(name) {
+    SLOPE_ANGLES.contains_key(name)
+}
+
+pub fn is_grainy_slope(face: &[Vec3], is_slope: bool, is_stud: bool) -> bool {
+    // Studs are always smooth regardless of their slopes.
+    if is_slope && !is_stud {
         // Check if the vertical face angle is in the expected range.
         // This is the approach used by the previous ImportLDraw addon:
         // https://github.com/TobyLobster/ImportLDraw/blob/master/loadldraw/loadldraw.py
-        // TODO: Avoid applying this to studs.
         let normal = (face[1] - face[0]).cross(face[2] - face[0]).normalize();
         let cosine = normal.y.clamp(-1.0, 1.0);
         let angle_to_ground = cosine.acos().to_degrees() - 90.0;
