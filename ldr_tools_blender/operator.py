@@ -146,6 +146,7 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
             ('GeometryNodes', "Geometry Nodes", "Geometry node instances on an instancer mesh. Faster imports for large scenes but harder to edit.")
         ],
         description="The method to use for instancing part meshes",
+        # TODO: this doesn't set properly?
         default=preferences.instance_type
     )
 
