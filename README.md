@@ -30,7 +30,7 @@ Blender itself does not scale well with the number of objects created in the sce
 ## Projects
 ### ldr_tools
 A Rust library for working with LDraw files. This performs all the parsing and geometry handling. This project can be used in 
-other Rust projects by adding the following line to the `Cargo.toml`.  
+other Rust projects by adding the following line to the `Cargo.toml`. ldr_tools is used for loading models in the [ldr_wgpu](https://github.com/ScanMountGoat/ldr_wgpu) renderer.  
 
 `ldr_tools = { git = "https://github.com/ScanMountGoat/ldr_tools_blender" }` 
 
