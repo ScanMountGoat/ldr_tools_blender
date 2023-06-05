@@ -297,7 +297,7 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
 
         # Enable autosmooth to handle some cases where edges aren't split.
         mesh.use_auto_smooth = True
-        mesh.auto_smooth_angle = math.radians(60.0)
+        mesh.auto_smooth_angle = math.radians(89.0)
         mesh.polygons.foreach_set('use_smooth', [True] * len(mesh.polygons))
 
     return mesh
