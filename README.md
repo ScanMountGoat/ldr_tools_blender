@@ -42,7 +42,7 @@ to reduce the overhead for converting data from Rust to Python to Blender.
 The Blender addon for importing LDraw files making use of ldr_tools_py. This is not a pure Python project. See the building instructions for details on how to build this from source.
 
 ## Building
-The easiest way to see the steps used to create a new release is to check the [release.yaml](https://github.com/ScanMountGoat/ldr_tools_blender/blob/main/.github/workflows/release.yml) script that runs using Github actions. See [development](https://github.com/ScanMountGoat/ldr_tools_blender/blob/main/DEVELOPMENT.md) for working on your personal machine.  See [contributing](https://github.com/ScanMountGoat/ldr_tools_blender/blob/main/CONTRIBUTING.md) for contributing to this project.
+The easiest way to see the steps used to create a new release is to check the [release.yaml](https://github.com/ScanMountGoat/ldr_tools_blender/blob/main/.github/workflows/release.yml) script that runs using Github actions. See [development](https://github.com/ScanMountGoat/ldr_tools_blender/blob/main/DEVELOPMENT.md) for working on your personal machine.  See [contributing](https://github.com/ScanMountGoat/ldr_tools_blender/blob/main/CONTRIBUTING.md) for contributing to this project. Make sure to set the Python interpreter using the `PYO3_PYTHON` environment variable to Blender's Python binary or one with the same version!
 
 ## Copyrights
 LDraw™ is a trademark owned and licensed by the Jessiman Estate, which does not sponsor, endorse, or authorize this project.  
