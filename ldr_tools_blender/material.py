@@ -12,14 +12,19 @@ import bpy
 # https://stefanmuller.com/exploring-lego-material-part-3/
 
 
-def get_material(color_by_code: dict[int, LDrawColor], code: int, is_grainy_slope: bool) -> bpy.types.Material:
+def get_material(color_by_code: dict[int, LDrawColor], code: int, is_stud: bool, is_slope: bool) -> bpy.types.Material:
     # Cache materials by name.
     # This loads materials lazily to avoid creating unused colors.
     ldraw_color = color_by_code.get(code)
 
-    grain_code = 'grain' if is_grainy_slope else ''
-    name = f'{code} {ldraw_color.name} {grain_code}' if ldraw_color is not None else str(
-        code)
+    name = str(code)
+    if ldraw_color is not None:
+        name = f'{code} {ldraw_color.name}'
+        if is_stud:
+            name += ' stud'
+        if is_slope:
+            name += ' slope'
+
     material = bpy.data.materials.get(name)
 
     # TODO: Report warnings if a part contains an invalid color code.
@@ -128,16 +133,50 @@ def get_material(color_by_code: dict[int, LDrawColor], code: int, is_grainy_slop
                 make_shadows_transparent(material, bsdf)
 
             # Procedural normals.
-            # if not is_transmissive:
-            if is_grainy_slope:
-                normals_node = create_node_group(
-                    material, 'ldr_tools_slope_normal', create_slope_normals_node_group)
-            else:
-                normals_node = create_node_group(
-                    material, 'ldr_tools_normal', create_normals_node_group)
+            normals = create_node_group(
+                material, 'ldr_tools_normal', create_normals_node_group)
 
-            material.node_tree.links.new(
-                normals_node.outputs['Normal'], bsdf.inputs['Normal'])
+            if is_slope and not is_stud:
+                # Apply grainy normals to faces that aren't vertical or horizontal.
+                # TODO: Use non transformed normals using an attribute.
+                geometry_input = material.node_tree.nodes.new(
+                    'ShaderNodeNewGeometry')
+                separate = material.node_tree.nodes.new(
+                    'ShaderNodeSeparateXYZ')
+                material.node_tree.links.new(
+                    geometry_input.outputs['Normal'], separate.inputs['Vector'])
+
+                # Use normal.y to check if the face is horizontal (-1.0 or 1.0) or vertical (0.0).
+                # Any values in between are considered "slopes" and use grainy normals.
+                absolute = material.node_tree.nodes.new('ShaderNodeMath')
+                absolute.operation = 'ABSOLUTE'
+                material.node_tree.links.new(
+                    separate.outputs['Z'], absolute.inputs['Value'])
+
+                compare = material.node_tree.nodes.new('ShaderNodeMath')
+                compare.operation = 'COMPARE'
+                compare.inputs[1].default_value = 0.5
+                compare.inputs[2].default_value = 0.45
+                material.node_tree.links.new(
+                    absolute.outputs['Value'], compare.inputs['Value'])
+
+                slope_normals = create_node_group(
+                    material, 'ldr_tools_slope_normal', create_slope_normals_node_group)
+
+                mix_normals = material.node_tree.nodes.new('ShaderNodeMix')
+                mix_normals.data_type = 'VECTOR'
+                material.node_tree.links.new(
+                    compare.outputs['Value'], mix_normals.inputs['Factor'])
+                material.node_tree.links.new(
+                    normals.outputs['Normal'], mix_normals.inputs[4])
+                material.node_tree.links.new(
+                    slope_normals.outputs['Normal'], mix_normals.inputs[5])
+
+                # The second output is the vector output.
+                material.node_tree.links.new(mix_normals.outputs[1], bsdf.inputs['Normal'])
+            else:
+                material.node_tree.links.new(
+                    normals.outputs['Normal'], bsdf.inputs['Normal'])
 
     return material
 

@@ -37,6 +37,7 @@ pub struct LDrawGeometry {
     face_colors: Vec<FaceColor>,
     edges: PyObject,
     is_edge_sharp: Vec<bool>,
+    has_grainy_slopes: bool,
 }
 
 impl LDrawGeometry {
@@ -61,6 +62,7 @@ impl LDrawGeometry {
                 .unwrap()
                 .into(),
             is_edge_sharp: geometry.is_edge_sharp,
+            has_grainy_slopes: geometry.has_grainy_slopes,
         }
     }
 }
@@ -69,14 +71,14 @@ impl LDrawGeometry {
 #[derive(Debug, Clone)]
 pub struct FaceColor {
     color: u32,
-    is_grainy_slope: bool,
+    is_stud: bool,
 }
 
 impl From<ldr_tools::FaceColor> for FaceColor {
     fn from(f: ldr_tools::FaceColor) -> Self {
         Self {
             color: f.color,
-            is_grainy_slope: f.is_grainy_slope,
+            is_stud: f.is_stud,
         }
     }
 }

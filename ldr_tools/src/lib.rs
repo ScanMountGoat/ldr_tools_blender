@@ -27,6 +27,8 @@ const SCENE_SCALE: f32 = 0.01;
 pub struct LDrawNode {
     pub name: String,
     pub transform: Mat4,
+    /// The name of the geometry in [geometry_cache](struct.LDrawScene.html#structfield.geometry_cache)
+    /// or `None` for internal nodes.
     pub geometry_name: Option<String>, // TODO: Better way to share geometry?
     /// The current color set for this node.
     /// Overrides colors in the geometry if present.
@@ -176,9 +178,10 @@ struct GeometryInitDescriptor<'a> {
     recursive: bool,
 }
 
+// TODO: Add tests for this using files from models?
 // TODO: Add global scale parameters.
-// Adjust the draw ctx for iter to set a "global scale"?
-// Also add a per part gap scale matrix.
+// TODO: Adjust the draw ctx for iter to set a "global scale"?
+// TODO: Also add a per part gap scale matrix.
 pub fn load_file(
     path: &str,
     ldraw_path: &str,

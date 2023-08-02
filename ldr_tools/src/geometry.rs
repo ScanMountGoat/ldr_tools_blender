@@ -5,9 +5,7 @@ use rstar::{primitives::GeomWithData, RTree};
 use weldr::Command;
 
 use crate::{
-    replace_color,
-    slope::{is_grainy_slope, is_slope_piece},
-    ColorCode, GeometrySettings, StudType, SCENE_SCALE,
+    replace_color, slope::is_slope_piece, ColorCode, GeometrySettings, StudType, SCENE_SCALE,
 };
 
 // TODO: use the edge information to calculate smooth normals directly in Rust?
@@ -22,12 +20,16 @@ pub struct LDrawGeometry {
     pub face_colors: Vec<FaceColor>,
     pub edge_position_indices: Vec<[u32; 2]>,
     pub is_edge_sharp: Vec<bool>,
+    /// `true` if the geometry is part of a slope piece with grainy faces.
+    /// Some applications may want to apply a separate texture to faces
+    /// based on an angle threshold.
+    pub has_grainy_slopes: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct FaceColor {
     pub color: ColorCode,
-    pub is_grainy_slope: bool,
+    pub is_stud: bool,
 }
 
 /// Settings that inherit or accumulate when recursing into subfiles.
@@ -99,6 +101,7 @@ pub fn create_geometry(
         face_colors: Vec::new(),
         edge_position_indices: Vec::new(),
         is_edge_sharp: Vec::new(),
+        has_grainy_slopes: is_slope_piece(name),
     };
 
     // Start with inverted set to false since parts should never be inverted.
@@ -297,7 +300,7 @@ fn append_geometry(
 
                     let face_color = FaceColor {
                         color: replace_color(q.color, ctx.current_color),
-                        is_grainy_slope: is_grainy_slope(&q.vertices, ctx.is_slope, ctx.is_stud),
+                        is_stud: ctx.is_stud,
                     };
                     geometry.face_colors.push(face_color);
                 }
@@ -398,7 +401,7 @@ fn add_triangle_face(
 
     let face_color = FaceColor {
         color,
-        is_grainy_slope: is_grainy_slope(&vertices, ctx.is_slope, ctx.is_stud),
+        is_stud: ctx.is_stud,
     };
     geometry.face_colors.push(face_color);
 }
@@ -557,35 +560,35 @@ mod tests {
             vec![
                 FaceColor {
                     color: 7,
-                    is_grainy_slope: false
+                    is_stud: false
                 },
                 FaceColor {
                     color: 2,
-                    is_grainy_slope: false
+                    is_stud: false
                 },
                 FaceColor {
                     color: 3,
-                    is_grainy_slope: false
+                    is_stud: false
                 },
                 FaceColor {
                     color: 1,
-                    is_grainy_slope: false
+                    is_stud: false
                 },
                 FaceColor {
                     color: 4,
-                    is_grainy_slope: false
+                    is_stud: false
                 },
                 FaceColor {
                     color: 5,
-                    is_grainy_slope: false
+                    is_stud: false
                 },
                 FaceColor {
                     color: 7,
-                    is_grainy_slope: false
+                    is_stud: false
                 },
                 FaceColor {
                     color: 8,
-                    is_grainy_slope: false
+                    is_stud: false
                 },
             ],
             geometry.face_colors

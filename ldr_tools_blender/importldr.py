@@ -176,6 +176,7 @@ def create_geometry_node_instancing(instancer_object: bpy.types.Object, instance
     links.new(rot_axis.outputs["Attribute"], rotation.inputs["Axis"])
 
     # TODO: Why do named float attributes not link properly?
+    # TODO: Does each type have its own output?
     rot_angle = nodes.new(type="GeometryNodeInputNamedAttribute")
     rot_angle.data_type = 'FLOAT_VECTOR'
     rot_angle.inputs["Name"].default_value = "instance_rotation_angle"
@@ -213,7 +214,7 @@ def create_instancer_mesh(name: str, instances: ldr_tools_py.PointInstances):
 
         # TODO: Why do named float attributes not link properly?
         angle_vec3 = np.zeros((positions.shape[0], 3))
-        angle_vec3[:,0] = instances.rotations_angle
+        angle_vec3[:, 0] = instances.rotations_angle
         rot_angle_attribute = instancer_mesh.attributes.new(
             name='instance_rotation_angle', type='FLOAT_VECTOR', domain='POINT')
         rot_angle_attribute.data.foreach_set(
@@ -258,7 +259,7 @@ def assign_materials(mesh: bpy.types.Mesh, current_color: int, color_by_code: di
 
         # Cache materials by name.
         material = get_material(color_by_code, color,
-                                face_color.is_grainy_slope)
+                                face_color.is_stud, geometry.has_grainy_slopes)
 
         mesh.materials.append(material)
     else:
@@ -268,7 +269,7 @@ def assign_materials(mesh: bpy.types.Mesh, current_color: int, color_by_code: di
             color = current_color if face_color.color == 16 else face_color.color
 
             material = get_material(
-                color_by_code, color, face_color.is_grainy_slope)
+                color_by_code, color, face_color.is_stud, geometry.has_grainy_slopes)
             if mesh.materials.get(material.name) is None:
                 mesh.materials.append(material)
             face.material_index = mesh.materials.find(material.name)
