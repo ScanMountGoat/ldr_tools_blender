@@ -175,14 +175,13 @@ def create_geometry_node_instancing(instancer_object: bpy.types.Object, instance
     rot_axis.inputs["Name"].default_value = "instance_rotation_axis"
     links.new(rot_axis.outputs["Attribute"], rotation.inputs["Axis"])
 
-    # TODO: Why do named float attributes not link properly?
-    # TODO: Does each type have its own output?
     rot_angle = nodes.new(type="GeometryNodeInputNamedAttribute")
-    rot_angle.data_type = 'FLOAT_VECTOR'
+    rot_angle.data_type = 'FLOAT'
     rot_angle.inputs["Name"].default_value = "instance_rotation_angle"
 
     separate = nodes.new(type="ShaderNodeSeparateXYZ")
-    links.new(rot_angle.outputs["Attribute"], separate.inputs["Vector"])
+    # The second output is the float attribute when selecting a different type.
+    links.new(rot_angle.outputs[1], separate.inputs["Vector"])
     links.new(separate.outputs["X"], rotation.inputs["Angle"])
 
     links.new(rotation.outputs["Rotation"], instance_points.inputs["Rotation"])
@@ -212,13 +211,10 @@ def create_instancer_mesh(name: str, instances: ldr_tools_py.PointInstances):
         rot_axis_attribute.data.foreach_set(
             'vector', instances.rotations_axis.reshape(-1))
 
-        # TODO: Why do named float attributes not link properly?
-        angle_vec3 = np.zeros((positions.shape[0], 3))
-        angle_vec3[:, 0] = instances.rotations_angle
         rot_angle_attribute = instancer_mesh.attributes.new(
-            name='instance_rotation_angle', type='FLOAT_VECTOR', domain='POINT')
+            name='instance_rotation_angle', type='FLOAT', domain='POINT')
         rot_angle_attribute.data.foreach_set(
-            'vector', angle_vec3.reshape(-1))
+            'value', instances.rotations_angle)
 
     instancer_mesh.validate()
     instancer_mesh.update()
