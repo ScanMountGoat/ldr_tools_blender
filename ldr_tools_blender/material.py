@@ -136,20 +136,21 @@ def get_material(color_by_code: dict[int, LDrawColor], code: int, is_slope: bool
 
             if is_slope:
                 # Apply grainy normals to faces that aren't vertical or horizontal.
-                # TODO: Use non transformed normals using an attribute.
-                geometry_input = material.node_tree.nodes.new(
-                    'ShaderNodeNewGeometry')
+                # Use non transformed normals to not consider object rotation.
+                ldr_normals = material.node_tree.nodes.new('ShaderNodeAttribute')
+                ldr_normals.attribute_name = 'ldr_normals'
+
                 separate = material.node_tree.nodes.new(
                     'ShaderNodeSeparateXYZ')
                 material.node_tree.links.new(
-                    geometry_input.outputs['Normal'], separate.inputs['Vector'])
+                    ldr_normals.outputs['Vector'], separate.inputs['Vector'])
 
                 # Use normal.y to check if the face is horizontal (-1.0 or 1.0) or vertical (0.0).
                 # Any values in between are considered "slopes" and use grainy normals.
                 absolute = material.node_tree.nodes.new('ShaderNodeMath')
                 absolute.operation = 'ABSOLUTE'
                 material.node_tree.links.new(
-                    separate.outputs['Z'], absolute.inputs['Value'])
+                    separate.outputs['Y'], absolute.inputs['Value'])
 
                 compare = material.node_tree.nodes.new('ShaderNodeMath')
                 compare.operation = 'COMPARE'
@@ -160,7 +161,7 @@ def get_material(color_by_code: dict[int, LDrawColor], code: int, is_slope: bool
 
                 slope_normals = create_node_group(
                     material, 'ldr_tools_slope_normal', create_slope_normals_node_group)
-                
+
                 is_stud = material.node_tree.nodes.new('ShaderNodeAttribute')
                 is_stud.attribute_name = 'ldr_is_stud'
 
@@ -184,7 +185,8 @@ def get_material(color_by_code: dict[int, LDrawColor], code: int, is_slope: bool
                     slope_normals.outputs['Normal'], mix_normals.inputs[5])
 
                 # The second output is the vector output.
-                material.node_tree.links.new(mix_normals.outputs[1], bsdf.inputs['Normal'])
+                material.node_tree.links.new(
+                    mix_normals.outputs[1], bsdf.inputs['Normal'])
             else:
                 material.node_tree.links.new(
                     normals.outputs['Normal'], bsdf.inputs['Normal'])

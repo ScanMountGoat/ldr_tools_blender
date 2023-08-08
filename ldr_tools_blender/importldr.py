@@ -233,6 +233,17 @@ def create_colored_mesh_from_geometry(name: str, color: int, color_by_code: dict
 
     split_hard_edges(mesh)
 
+    # Add attributes needed to render grainy slopes properly.
+    if geometry.has_grainy_slopes:
+        # Get custom normals now that everything has been initialized.
+        # This won't include any object transforms.
+        mesh.calc_normals_split()
+        loop_normals = np.zeros(len(mesh.loops) * 3)
+        mesh.loops.foreach_get('normal', loop_normals)
+
+        normals = mesh.attributes.new(name='ldr_normals', type='FLOAT_VECTOR', domain='CORNER')
+        normals.data.foreach_set('vector', loop_normals)
+
     return mesh
 
 
@@ -298,9 +309,6 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
 
         # Add attributes needed to render grainy slopes properly.
         if geometry.has_grainy_slopes:
-            normals = mesh.attributes.new(name='ldr_normals', type='FLOAT_VECTOR', domain='POINT')
-            # normals.data.foreach_set('vector', instances.rotations_axis.reshape(-1))
-
             is_stud = mesh.attributes.new(name='ldr_is_stud', type='FLOAT', domain='FACE')
             is_stud.data.foreach_set('value', geometry.is_face_stud)
 
