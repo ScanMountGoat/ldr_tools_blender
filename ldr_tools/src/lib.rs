@@ -19,6 +19,7 @@ pub type ColorCode = u32;
 const CURRENT_COLOR: ColorCode = 16;
 
 mod color;
+mod edge_split;
 mod geometry;
 mod slope;
 
@@ -160,7 +161,7 @@ pub struct GeometrySettings {
     pub add_gap_between_parts: bool,
     // TODO: Create an enum for different stud types.
     pub stud_type: StudType,
-    pub weld_vertices: bool,
+    pub weld_vertices: bool, // TODO: default to true?
     pub primitive_resolution: PrimitiveResolution,
 }
 

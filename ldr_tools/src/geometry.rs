@@ -1,26 +1,24 @@
-use std::collections::HashSet;
-
 use glam::{Mat4, Vec3};
 use rstar::{primitives::GeomWithData, RTree};
 use weldr::Command;
 
 use crate::{
-    replace_color, slope::is_slope_piece, ColorCode, GeometrySettings, StudType, SCENE_SCALE,
+    edge_split::split_edges, replace_color, slope::is_slope_piece, ColorCode, GeometrySettings,
+    StudType, SCENE_SCALE,
 };
 
-// TODO: use the edge information to calculate smooth normals directly in Rust?
 // TODO: Document the data layout for these fields.
 #[derive(Debug, PartialEq)]
 pub struct LDrawGeometry {
-    pub positions: Vec<Vec3>,
-    pub position_indices: Vec<u32>,
+    pub vertices: Vec<Vec3>,
+    pub vertex_indices: Vec<u32>,
     pub face_start_indices: Vec<u32>,
     pub face_sizes: Vec<u32>,
     /// The colors of each face or a single element if all faces share a color.
     pub face_colors: Vec<ColorCode>,
     pub is_face_stud: Vec<bool>,
-    pub edge_position_indices: Vec<[u32; 2]>,
-    pub is_edge_sharp: Vec<bool>,
+    /// Indices for the end points of line type 2 edges.
+    pub edge_line_indices: Vec<[u32; 2]>,
     /// `true` if the geometry is part of a slope piece with grainy faces.
     /// Some applications may want to apply a separate texture to faces
     /// based on an angle threshold.
@@ -89,14 +87,13 @@ pub fn create_geometry(
     settings: &GeometrySettings,
 ) -> LDrawGeometry {
     let mut geometry = LDrawGeometry {
-        positions: Vec::new(),
-        position_indices: Vec::new(),
+        vertices: Vec::new(),
+        vertex_indices: Vec::new(),
         face_start_indices: Vec::new(),
         face_sizes: Vec::new(),
         face_colors: Vec::new(),
         is_face_stud: Vec::new(),
-        edge_position_indices: Vec::new(),
-        is_edge_sharp: Vec::new(),
+        edge_line_indices: Vec::new(),
         has_grainy_slopes: is_slope_piece(name),
     };
 
@@ -124,8 +121,23 @@ pub fn create_geometry(
         settings,
     );
 
-    geometry.is_edge_sharp =
-        get_sharp_edges(&geometry.edge_position_indices, &hard_edges, &vertex_map);
+    geometry.edge_line_indices = edge_indices(&hard_edges, &vertex_map);
+
+    // TODO: make this optional.
+    // TODO: Should this be disabled when not welding vertices?
+    if !geometry.edge_line_indices.is_empty() {
+        let (split_positions, split_indices) = split_edges(
+            &geometry.vertices,
+            &geometry.vertex_indices,
+            &geometry.face_start_indices,
+            &geometry.face_sizes,
+            &geometry.edge_line_indices,
+        );
+        geometry.vertices = split_positions;
+        geometry.vertex_indices = split_indices;
+        // TODO: Are the previous edge indices still valid at this point?
+        geometry.edge_line_indices = edge_indices(&hard_edges, &vertex_map);
+    }
 
     // Optimize the case where all face colors are the same.
     // This reduces overhead when processing data in Python.
@@ -137,13 +149,13 @@ pub fn create_geometry(
     }
 
     let min = geometry
-        .positions
+        .vertices
         .iter()
         .copied()
         .reduce(Vec3::min)
         .unwrap_or_default();
     let max = geometry
-        .positions
+        .vertices
         .iter()
         .copied()
         .reduce(Vec3::max)
@@ -158,7 +170,7 @@ pub fn create_geometry(
 
     // Apply the scale last to use LDUs as the unit for vertex welding.
     // This avoids small floating point comparisons for small scene scales.
-    for vertex in &mut geometry.positions {
+    for vertex in &mut geometry.vertices {
         *vertex *= scale;
     }
 
@@ -183,28 +195,20 @@ fn gaps_scale(dimensions: Vec3) -> Vec3 {
     }
 }
 
-fn get_sharp_edges(
-    edges: &[[u32; 2]],
-    hard_edges: &[[Vec3; 2]],
-    vertex_map: &VertexMap,
-) -> Vec<bool> {
+fn edge_indices(edges: &[[Vec3; 2]], vertex_map: &VertexMap) -> Vec<[u32; 2]> {
     // Find the edges marked as edges in the LDraw geometry.
     // These edges can be split by consuming applications later.
-    let mut hard_edge_indices = HashSet::new();
-    for [v0, v1] in hard_edges.iter() {
+    let mut edge_indices = Vec::new();
+    for [v0, v1] in edges.iter() {
         // TODO: Why is get_nearest not enough to find some indices?
         let i0 = vertex_map.get_nearest(v0.to_array());
         let i1 = vertex_map.get_nearest(v1.to_array());
         if let (Some(i0), Some(i1)) = (i0, i1) {
-            hard_edge_indices.insert((i0, i1));
-            hard_edge_indices.insert((i1, i0));
+            edge_indices.push([i0, i1]);
         }
     }
 
-    edges
-        .iter()
-        .map(|[v0, v1]| hard_edge_indices.contains(&(*v0, *v1)))
-        .collect()
+    edge_indices
 }
 
 // TODO: simplify the parameters on these functions.
@@ -414,7 +418,7 @@ fn add_face<const N: usize>(
     vertex_map: &mut VertexMap,
     weld_vertices: bool,
 ) {
-    let starting_index = geometry.position_indices.len() as u32;
+    let starting_index = geometry.vertex_indices.len() as u32;
     let mut indices =
         vertices.map(|v| insert_vertex(geometry, transform, v, vertex_map, weld_vertices));
 
@@ -423,13 +427,7 @@ fn add_face<const N: usize>(
         indices.reverse();
     }
 
-    geometry.position_indices.extend_from_slice(&indices);
-    for i in 0..indices.len() {
-        // A face (0,1,2) will have edges (0,1), (1,2), (2,0).
-        geometry
-            .edge_position_indices
-            .push([indices[i], indices[(i + 1) % N]]);
-    }
+    geometry.vertex_indices.extend_from_slice(&indices);
     geometry.face_start_indices.push(starting_index);
     geometry.face_sizes.push(N as u32);
 }
@@ -442,15 +440,15 @@ fn insert_vertex(
     weld_vertices: bool,
 ) -> u32 {
     let new_vertex = transform.transform_point3(vertex);
-    let new_index = geometry.positions.len() as u32;
+    let new_index = geometry.vertices.len() as u32;
 
     if !weld_vertices {
-        geometry.positions.push(new_vertex);
+        geometry.vertices.push(new_vertex);
         new_index
     } else if let Some(index) = vertex_map.insert(new_index, new_vertex.to_array()) {
         index
     } else {
-        geometry.positions.push(new_vertex);
+        geometry.vertices.push(new_vertex);
         new_index
     }
 }
@@ -537,11 +535,8 @@ mod tests {
         );
 
         // TODO: Also test vertex positions and transforms.
-        assert_eq!(6, geometry.positions.len());
-        assert_eq!(
-            3 + 4 + 3 + 3 + 3 + 4 + 3 + 4,
-            geometry.position_indices.len()
-        );
+        assert_eq!(6, geometry.vertices.len());
+        assert_eq!(3 + 4 + 3 + 3 + 3 + 4 + 3 + 4, geometry.vertex_indices.len());
         assert_eq!(vec![3, 4, 3, 3, 3, 4, 3, 4], geometry.face_sizes);
         assert_eq!(
             vec![0, 3, 7, 10, 13, 16, 20, 23],
@@ -578,7 +573,7 @@ mod tests {
             },
         );
 
-        assert_eq!(vec![0, 1, 2, 0, 1, 2], geometry.position_indices);
+        assert_eq!(vec![0, 1, 2, 0, 1, 2], geometry.vertex_indices);
         assert_eq!(vec![3, 3], geometry.face_sizes);
     }
 
@@ -610,7 +605,7 @@ mod tests {
             },
         );
 
-        assert_eq!(vec![2, 1, 0, 2, 1, 0], geometry.position_indices);
+        assert_eq!(vec![2, 1, 0, 2, 1, 0], geometry.vertex_indices);
         assert_eq!(vec![3, 3], geometry.face_sizes);
     }
 
@@ -655,7 +650,7 @@ mod tests {
 
         assert_eq!(
             vec![0, 1, 2, 5, 4, 3, 2, 1, 0, 3, 4, 5],
-            geometry.position_indices
+            geometry.vertex_indices
         );
         assert_eq!(vec![3, 3, 3, 3], geometry.face_sizes);
     }

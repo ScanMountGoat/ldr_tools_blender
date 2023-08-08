@@ -26,7 +26,7 @@ impl From<ldr_tools::LDrawNode> for LDrawNode {
     }
 }
 
-// Use numpy arrays for reduced overhead.
+// Use numpy arrays (PyObject) for reduced overhead.
 #[pyclass(get_all)]
 #[derive(Debug, Clone)]
 pub struct LDrawGeometry {
@@ -36,34 +36,32 @@ pub struct LDrawGeometry {
     face_sizes: PyObject,
     face_colors: PyObject,
     is_face_stud: Vec<bool>,
-    edges: PyObject,
-    is_edge_sharp: Vec<bool>,
+    edge_line_indices: PyObject,
     has_grainy_slopes: bool,
 }
 
 impl LDrawGeometry {
     fn from_geometry(py: Python, geometry: ldr_tools::LDrawGeometry) -> Self {
-        let edge_count = geometry.edge_position_indices.len();
+        let sharp_edge_count = geometry.edge_line_indices.len();
 
         // This flatten will be optimized in Release mode.
         // This avoids needing unsafe code.
         Self {
-            vertices: pyarray_vec3(py, geometry.positions),
-            vertex_indices: geometry.position_indices.into_pyarray(py).into(),
+            vertices: pyarray_vec3(py, geometry.vertices),
+            vertex_indices: geometry.vertex_indices.into_pyarray(py).into(),
             face_start_indices: geometry.face_start_indices.into_pyarray(py).into(),
             face_sizes: geometry.face_sizes.into_pyarray(py).into(),
             face_colors: geometry.face_colors.into_pyarray(py).into(),
             is_face_stud: geometry.is_face_stud,
-            edges: geometry
-                .edge_position_indices
+            edge_line_indices: geometry
+                .edge_line_indices
                 .into_iter()
                 .flatten()
                 .collect::<Vec<u32>>()
                 .into_pyarray(py)
-                .reshape((edge_count, 2))
+                .reshape((sharp_edge_count, 2))
                 .unwrap()
                 .into(),
-            is_edge_sharp: geometry.is_edge_sharp,
             has_grainy_slopes: geometry.has_grainy_slopes,
         }
     }

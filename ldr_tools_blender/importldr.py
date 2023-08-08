@@ -231,8 +231,6 @@ def create_colored_mesh_from_geometry(name: str, color: int, color_by_code: dict
     mesh.validate()
     mesh.update()
 
-    split_hard_edges(mesh)
-
     # Add attributes needed to render grainy slopes properly.
     if geometry.has_grainy_slopes:
         # Get custom normals now that everything has been initialized.
@@ -241,21 +239,11 @@ def create_colored_mesh_from_geometry(name: str, color: int, color_by_code: dict
         loop_normals = np.zeros(len(mesh.loops) * 3)
         mesh.loops.foreach_get('normal', loop_normals)
 
-        normals = mesh.attributes.new(name='ldr_normals', type='FLOAT_VECTOR', domain='CORNER')
+        normals = mesh.attributes.new(
+            name='ldr_normals', type='FLOAT_VECTOR', domain='CORNER')
         normals.data.foreach_set('vector', loop_normals)
 
     return mesh
-
-
-def split_hard_edges(mesh):
-    bm = bmesh.new()
-    bm.from_mesh(mesh)
-
-    # The edge smooth state is set when creating the mesh geometry.
-    bmesh.ops.split_edges(bm, edges=[e for e in bm.edges if not e.smooth])
-
-    bm.to_mesh(mesh)
-    bm.free()
 
 
 def assign_materials(mesh: bpy.types.Mesh, current_color: int, color_by_code: dict[int, LDrawColor], geometry: LDrawGeometry):
@@ -298,10 +286,6 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
             'loop_start', geometry.face_start_indices)
         mesh.polygons.foreach_set('loop_total', geometry.face_sizes)
 
-        mesh.edges.add(geometry.edges.shape[0])
-        mesh.edges.foreach_set('vertices', geometry.edges.reshape(-1))
-        mesh.edges.foreach_set('use_edge_sharp', geometry.is_edge_sharp)
-
         # Enable autosmooth to handle some cases where edges aren't split.
         mesh.use_auto_smooth = True
         mesh.auto_smooth_angle = math.radians(89.0)
@@ -309,7 +293,8 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
 
         # Add attributes needed to render grainy slopes properly.
         if geometry.has_grainy_slopes:
-            is_stud = mesh.attributes.new(name='ldr_is_stud', type='FLOAT', domain='FACE')
+            is_stud = mesh.attributes.new(
+                name='ldr_is_stud', type='FLOAT', domain='FACE')
             is_stud.data.foreach_set('value', geometry.is_face_stud)
 
     return mesh
