@@ -251,21 +251,20 @@ def assign_materials(mesh: bpy.types.Mesh, current_color: int, color_by_code: di
     if len(geometry.face_colors) == 1:
         # Geometry is cached with code 16, so also handle color replacement.
         face_color = geometry.face_colors[0]
-        color = current_color if face_color.color == 16 else face_color.color
+        color = current_color if face_color == 16 else face_color
 
         # Cache materials by name.
         material = get_material(color_by_code, color,
-                                face_color.is_stud, geometry.has_grainy_slopes)
-
+                                geometry.has_grainy_slopes)
         mesh.materials.append(material)
     else:
         # Handle the case where not all faces have the same color.
         # This includes patterned (printed) parts and stickers.
-        for (face, face_color) in zip(mesh.polygons, geometry.face_colors):
-            color = current_color if face_color.color == 16 else face_color.color
+        for face, face_color in zip(mesh.polygons, geometry.face_colors):
+            color = current_color if face_color == 16 else face_color
 
             material = get_material(
-                color_by_code, color, face_color.is_stud, geometry.has_grainy_slopes)
+                color_by_code, color, geometry.has_grainy_slopes)
             if mesh.materials.get(material.name) is None:
                 mesh.materials.append(material)
             face.material_index = mesh.materials.find(material.name)
@@ -296,5 +295,13 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
         mesh.use_auto_smooth = True
         mesh.auto_smooth_angle = math.radians(89.0)
         mesh.polygons.foreach_set('use_smooth', [True] * len(mesh.polygons))
+
+        # Add attributes needed to render grainy slopes properly.
+        if geometry.has_grainy_slopes:
+            normals = mesh.attributes.new(name='ldr_normals', type='FLOAT_VECTOR', domain='POINT')
+            # normals.data.foreach_set('vector', instances.rotations_axis.reshape(-1))
+
+            is_stud = mesh.attributes.new(name='ldr_is_stud', type='FLOAT', domain='FACE')
+            is_stud.data.foreach_set('value', geometry.is_face_stud)
 
     return mesh

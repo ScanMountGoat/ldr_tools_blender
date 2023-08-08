@@ -1,4 +1,3 @@
-use glam::Vec3;
 use phf::phf_set;
 
 static SLOPE_PIECES: phf::Set<&'static str> = phf_set! {

@@ -17,19 +17,14 @@ pub struct LDrawGeometry {
     pub face_start_indices: Vec<u32>,
     pub face_sizes: Vec<u32>,
     /// The colors of each face or a single element if all faces share a color.
-    pub face_colors: Vec<FaceColor>,
+    pub face_colors: Vec<ColorCode>,
+    pub is_face_stud: Vec<bool>,
     pub edge_position_indices: Vec<[u32; 2]>,
     pub is_edge_sharp: Vec<bool>,
     /// `true` if the geometry is part of a slope piece with grainy faces.
     /// Some applications may want to apply a separate texture to faces
     /// based on an angle threshold.
     pub has_grainy_slopes: bool,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct FaceColor {
-    pub color: ColorCode,
-    pub is_stud: bool,
 }
 
 /// Settings that inherit or accumulate when recursing into subfiles.
@@ -99,6 +94,7 @@ pub fn create_geometry(
         face_start_indices: Vec::new(),
         face_sizes: Vec::new(),
         face_colors: Vec::new(),
+        is_face_stud: Vec::new(),
         edge_position_indices: Vec::new(),
         is_edge_sharp: Vec::new(),
         has_grainy_slopes: is_slope_piece(name),
@@ -298,11 +294,9 @@ fn append_geometry(
                         settings.weld_vertices,
                     );
 
-                    let face_color = FaceColor {
-                        color: replace_color(q.color, ctx.current_color),
-                        is_stud: ctx.is_stud,
-                    };
+                    let face_color = replace_color(q.color, ctx.current_color);
                     geometry.face_colors.push(face_color);
+                    geometry.is_face_stud.push(ctx.is_stud);
                 }
             }
             Command::Line(line_cmd) => {
@@ -399,11 +393,8 @@ fn add_triangle_face(
         weld_vertices,
     );
 
-    let face_color = FaceColor {
-        color,
-        is_stud: ctx.is_stud,
-    };
-    geometry.face_colors.push(face_color);
+    geometry.face_colors.push(color);
+    geometry.is_face_stud.push(ctx.is_stud);
 }
 
 fn invert_winding(winding: Winding, invert: bool) -> Winding {
@@ -556,43 +547,7 @@ mod tests {
             vec![0, 3, 7, 10, 13, 16, 20, 23],
             geometry.face_start_indices
         );
-        assert_eq!(
-            vec![
-                FaceColor {
-                    color: 7,
-                    is_stud: false
-                },
-                FaceColor {
-                    color: 2,
-                    is_stud: false
-                },
-                FaceColor {
-                    color: 3,
-                    is_stud: false
-                },
-                FaceColor {
-                    color: 1,
-                    is_stud: false
-                },
-                FaceColor {
-                    color: 4,
-                    is_stud: false
-                },
-                FaceColor {
-                    color: 5,
-                    is_stud: false
-                },
-                FaceColor {
-                    color: 7,
-                    is_stud: false
-                },
-                FaceColor {
-                    color: 8,
-                    is_stud: false
-                },
-            ],
-            geometry.face_colors
-        );
+        assert_eq!(vec![7, 2, 3, 1, 4, 5, 7, 8,], geometry.face_colors);
     }
 
     #[test]

@@ -34,7 +34,8 @@ pub struct LDrawGeometry {
     vertex_indices: PyObject,
     face_start_indices: PyObject,
     face_sizes: PyObject,
-    face_colors: Vec<FaceColor>,
+    face_colors: PyObject,
+    is_face_stud: Vec<bool>,
     edges: PyObject,
     is_edge_sharp: Vec<bool>,
     has_grainy_slopes: bool,
@@ -51,7 +52,8 @@ impl LDrawGeometry {
             vertex_indices: geometry.position_indices.into_pyarray(py).into(),
             face_start_indices: geometry.face_start_indices.into_pyarray(py).into(),
             face_sizes: geometry.face_sizes.into_pyarray(py).into(),
-            face_colors: geometry.face_colors.into_iter().map(Into::into).collect(),
+            face_colors: geometry.face_colors.into_pyarray(py).into(),
+            is_face_stud: geometry.is_face_stud,
             edges: geometry
                 .edge_position_indices
                 .into_iter()
@@ -63,22 +65,6 @@ impl LDrawGeometry {
                 .into(),
             is_edge_sharp: geometry.is_edge_sharp,
             has_grainy_slopes: geometry.has_grainy_slopes,
-        }
-    }
-}
-
-#[pyclass(get_all)]
-#[derive(Debug, Clone)]
-pub struct FaceColor {
-    color: u32,
-    is_stud: bool,
-}
-
-impl From<ldr_tools::FaceColor> for FaceColor {
-    fn from(f: ldr_tools::FaceColor) -> Self {
-        Self {
-            color: f.color,
-            is_stud: f.is_stud,
         }
     }
 }
@@ -301,7 +287,6 @@ fn pyarray_vec3(py: Python, values: Vec<ldr_tools::glam::Vec3>) -> PyObject {
 fn ldr_tools_py(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<LDrawNode>()?;
     m.add_class::<LDrawGeometry>()?;
-    m.add_class::<FaceColor>()?;
     m.add_class::<LDrawColor>()?;
     m.add_class::<GeometrySettings>()?;
     m.add_class::<PointInstances>()?;

@@ -12,7 +12,7 @@ import bpy
 # https://stefanmuller.com/exploring-lego-material-part-3/
 
 
-def get_material(color_by_code: dict[int, LDrawColor], code: int, is_stud: bool, is_slope: bool) -> bpy.types.Material:
+def get_material(color_by_code: dict[int, LDrawColor], code: int, is_slope: bool) -> bpy.types.Material:
     # Cache materials by name.
     # This loads materials lazily to avoid creating unused colors.
     ldraw_color = color_by_code.get(code)
@@ -20,8 +20,6 @@ def get_material(color_by_code: dict[int, LDrawColor], code: int, is_stud: bool,
     name = str(code)
     if ldraw_color is not None:
         name = f'{code} {ldraw_color.name}'
-        if is_stud:
-            name += ' stud'
         if is_slope:
             name += ' slope'
 
@@ -136,7 +134,7 @@ def get_material(color_by_code: dict[int, LDrawColor], code: int, is_stud: bool,
             normals = create_node_group(
                 material, 'ldr_tools_normal', create_normals_node_group)
 
-            if is_slope and not is_stud:
+            if is_slope:
                 # Apply grainy normals to faces that aren't vertical or horizontal.
                 # TODO: Use non transformed normals using an attribute.
                 geometry_input = material.node_tree.nodes.new(
@@ -162,11 +160,24 @@ def get_material(color_by_code: dict[int, LDrawColor], code: int, is_stud: bool,
 
                 slope_normals = create_node_group(
                     material, 'ldr_tools_slope_normal', create_slope_normals_node_group)
+                
+                is_stud = material.node_tree.nodes.new('ShaderNodeAttribute')
+                is_stud.attribute_name = 'ldr_is_stud'
 
+                # Don't apply the grainy slopes to any faces marked as studs.
+                # We use an attribute here to avoid per face material assignment.
+                subtract_studs = material.node_tree.nodes.new('ShaderNodeMath')
+                subtract_studs.operation = 'SUBTRACT'
+                material.node_tree.links.new(
+                    compare.outputs['Value'], subtract_studs.inputs[0])
+                material.node_tree.links.new(
+                    is_stud.outputs[2], subtract_studs.inputs[1])
+
+                # Choose between grainy and smooth normals depending on the face.
                 mix_normals = material.node_tree.nodes.new('ShaderNodeMix')
                 mix_normals.data_type = 'VECTOR'
                 material.node_tree.links.new(
-                    compare.outputs['Value'], mix_normals.inputs['Factor'])
+                    subtract_studs.outputs['Value'], mix_normals.inputs['Factor'])
                 material.node_tree.links.new(
                     normals.outputs['Normal'], mix_normals.inputs[4])
                 material.node_tree.links.new(
