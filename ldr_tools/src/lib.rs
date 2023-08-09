@@ -173,6 +173,7 @@ fn replace_color(color: ColorCode, current_color: ColorCode) -> ColorCode {
     }
 }
 
+#[derive(Debug)]
 struct GeometryInitDescriptor<'a> {
     source_file: &'a weldr::SourceFile,
     current_color: ColorCode,
@@ -183,21 +184,14 @@ struct GeometryInitDescriptor<'a> {
 // TODO: Add global scale parameters.
 // TODO: Adjust the draw ctx for iter to set a "global scale"?
 // TODO: Also add a per part gap scale matrix.
+#[tracing::instrument]
 pub fn load_file(
     path: &str,
     ldraw_path: &str,
     additional_paths: &[&str],
     settings: &GeometrySettings,
 ) -> LDrawScene {
-    let resolver = DiskResolver::new_from_library(
-        ldraw_path,
-        additional_paths.iter().cloned(),
-        settings.primitive_resolution,
-    );
-    let mut source_map = weldr::SourceMap::new();
-    ensure_studs(settings, &resolver, &mut source_map);
-
-    let main_model_name = weldr::parse(path, &resolver, &mut source_map).unwrap();
+    let (source_map, main_model_name) = parse_file(path, ldraw_path, additional_paths, settings);
     let source_file = source_map.get(&main_model_name).unwrap();
 
     // Collect the scene hierarchy and geometry descriptors.
@@ -217,6 +211,25 @@ pub fn load_file(
         root_node,
         geometry_cache,
     }
+}
+
+#[tracing::instrument]
+fn parse_file(
+    path: &str,
+    ldraw_path: &str,
+    additional_paths: &[&str],
+    settings: &GeometrySettings,
+) -> (weldr::SourceMap, String) {
+    let resolver = DiskResolver::new_from_library(
+        ldraw_path,
+        additional_paths.iter().cloned(),
+        settings.primitive_resolution,
+    );
+    let mut source_map = weldr::SourceMap::new();
+    ensure_studs(settings, &resolver, &mut source_map);
+
+    let main_model_name = weldr::parse(path, &resolver, &mut source_map).unwrap();
+    (source_map, main_model_name)
 }
 
 fn ensure_studs(
@@ -303,12 +316,14 @@ fn load_node<'a>(
     }
 }
 
+#[tracing::instrument]
 fn create_geometry_cache(
     geometry_descriptors: HashMap<String, GeometryInitDescriptor>,
     source_map: &weldr::SourceMap,
     settings: &GeometrySettings,
 ) -> HashMap<String, LDrawGeometry> {
     // Create the actual geometry in parallel to improve performance.
+    // TODO: The workload is incredibly uneven across threads.
     geometry_descriptors
         .into_par_iter()
         .map(|(name, descriptor)| {
@@ -340,6 +355,7 @@ fn scaled_transform(transform: &Mat4) -> Mat4 {
     transform
 }
 
+#[tracing::instrument]
 pub fn load_file_instanced_points(
     path: &str,
     ldraw_path: &str,
@@ -363,6 +379,7 @@ pub fn load_file_instanced_points(
     }
 }
 
+#[tracing::instrument]
 fn geometry_point_instances(transforms: Vec<Mat4>) -> PointInstances {
     let mut translations = Vec::new();
     let mut rotations_axis = Vec::new();
@@ -395,21 +412,14 @@ fn geometry_point_instances(transforms: Vec<Mat4>) -> PointInstances {
 /// Find the world transforms for each geometry.
 /// This allows applications to more easily use instancing.
 // TODO: Take AsRef<Path> instead?
+#[tracing::instrument]
 pub fn load_file_instanced(
     path: &str,
     ldraw_path: &str,
     additional_paths: &[&str],
     settings: &GeometrySettings,
 ) -> LDrawSceneInstanced {
-    let resolver = DiskResolver::new_from_library(
-        ldraw_path,
-        additional_paths.iter().cloned(),
-        settings.primitive_resolution,
-    );
-    let mut source_map = weldr::SourceMap::new();
-    ensure_studs(settings, &resolver, &mut source_map);
-
-    let main_model_name = weldr::parse(path, &resolver, &mut source_map).unwrap();
+    let (source_map, main_model_name) = parse_file(path, ldraw_path, additional_paths, settings);
     let source_file = source_map.get(&main_model_name).unwrap();
 
     // Find the world transforms for each geometry.
