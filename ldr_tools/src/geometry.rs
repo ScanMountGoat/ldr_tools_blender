@@ -78,6 +78,7 @@ impl VertexMap {
     }
 }
 
+#[tracing::instrument]
 pub fn create_geometry(
     source_file: &weldr::SourceFile,
     source_map: &weldr::SourceMap,
@@ -133,10 +134,9 @@ pub fn create_geometry(
             &geometry.face_sizes,
             &geometry.edge_line_indices,
         );
+        // The edge indices are still valid since splitting only adds new vertices.
         geometry.vertices = split_positions;
         geometry.vertex_indices = split_indices;
-        // TODO: Are the previous edge indices still valid at this point?
-        geometry.edge_line_indices = edge_indices(&hard_edges, &vertex_map);
     }
 
     // Optimize the case where all face colors are the same.
@@ -344,6 +344,8 @@ fn append_geometry(
                         // Don't invert additional subfile reference commands.
                         invert_next = false;
 
+                        // TODO: Cache the processed geometry for studs?
+                        // TODO: Will studs ever need to be welded to other geometry?
                         append_geometry(
                             geometry, hard_edges, vertex_map, subfile, source_map, child_ctx,
                             recursive, settings,

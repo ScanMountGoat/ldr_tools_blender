@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
 
 /// Calculate new vertices and indices by splitting the edges in `edges_to_split`.
 /// The geometry must be triangulated!
@@ -55,33 +55,8 @@ pub fn split_edges<T: Copy>(
         &mut new_adjacent_faces,
     );
 
-    reindex_vertices(split_vertex_indices, split_vertices)
-}
-
-fn reindex_vertices<T: Copy>(
-    split_vertex_indices: Vec<u32>,
-    split_vertices: Vec<T>,
-) -> (Vec<T>, Vec<u32>) {
-    // Reindex to use the indices 0..N.
-    // Truncate the split vertices to length N.
-    let mut verts = Vec::new();
-    let mut indices = Vec::new();
-    let mut remapped_indices = HashMap::new();
-
-    // Map each index to a new index.
-    // Use this mapping to create the new vertices as well.
-    for index in split_vertex_indices {
-        if let Some(new_index) = remapped_indices.get(&index) {
-            indices.push(*new_index);
-        } else {
-            let new_index = remapped_indices.len() as u32;
-            verts.push(split_vertices[index as usize]);
-            indices.push(new_index);
-            remapped_indices.insert(index, new_index);
-        }
-    }
-
-    (verts, indices)
+    // TODO: Reindex the vertices to reduce unneeded duplicate elements.
+    (split_vertices, split_vertex_indices)
 }
 
 fn adjacent_faces<T>(
@@ -345,7 +320,7 @@ mod tests {
 
         let indices = vec![0, 1, 2, 2, 1, 3];
         assert_eq!(
-            (vec![0.0, 1.0, 2.0, 3.0], indices.clone()),
+            (vec![0.0, 1.0, 2.0, 3.0, 2.0], vec![0, 1, 2, 2, 1, 3]),
             split_edges(&[0.0, 1.0, 2.0, 3.0], &indices, &[0, 3], &[3, 3], &[[2, 3]])
         );
     }
@@ -360,7 +335,10 @@ mod tests {
 
         let indices = vec![0, 1, 2, 2, 1, 3, 3, 1, 4, 3, 4, 5];
         assert_eq!(
-            (vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0], indices.clone()),
+            (
+                vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 1.0, 2.0, 3.0, 3.0, 4.0],
+                vec![0, 1, 2, 2, 1, 3, 3, 1, 4, 3, 4, 5]
+            ),
             split_edges(
                 &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
                 &indices,
@@ -379,15 +357,15 @@ mod tests {
         // 0 - 1 - 5
 
         // The edge 1-3 splits the quads in two.
-        // 2 - 3    4 - 7
+        // 2 - 3    8 - 4
         // | \ |    | \ |
-        // 0 - 1    5 - 6
+        // 0 - 1    7 - 5
 
         let indices = vec![0, 1, 2, 2, 1, 3, 3, 1, 5, 3, 5, 4];
         assert_eq!(
             (
-                vec![0.0, 1.0, 2.0, 3.0, 3.0, 1.0, 5.0, 4.0],
-                vec![0, 1, 2, 2, 1, 3, 4, 5, 6, 4, 6, 7]
+                vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 1.0, 3.0, 3.0],
+                vec![0, 1, 2, 2, 1, 3, 8, 7, 5, 8, 5, 4]
             ),
             split_edges(
                 &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
@@ -407,15 +385,15 @@ mod tests {
         // 0 - 1 - 4
 
         // The edge 1-2 splits the quads in two.
-        // 3 - 2    7 - 6
+        // 3 - 2    7 - 5
         // |   |    |   |
-        // 0 - 1    4 - 5
+        // 0 - 1    6 - 4
 
         let indices = vec![0, 1, 2, 3, 1, 4, 5, 2];
         assert_eq!(
             (
-                vec![0.0, 1.0, 2.0, 3.0, 1.0, 4.0, 5.0, 2.0],
-                vec![0, 1, 2, 3, 4, 5, 6, 7]
+                vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 2.0],
+                vec![0, 1, 2, 3, 6, 4, 5, 7]
             ),
             split_edges(
                 &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
@@ -435,14 +413,14 @@ mod tests {
         // 2 - 1 - 5
 
         // After splitting sharp edges.
-        // 3 - 2 - 5
+        // 3 - 0 - 4
         // | / | / |
-        // 0 - 1 - 4
+        // 2 - 1 - 5
 
         assert_eq!(
             (
-                vec![2.0, 1.0, 0.0, 3.0, 5.0, 4.0],
-                vec![0, 1, 2, 3, 0, 2, 1, 4, 5, 2, 1, 5]
+                vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 0.0, 0.0, 1.0, 1.0, 2.0, 4.0],
+                vec![2, 1, 0, 3, 2, 0, 1, 5, 4, 0, 1, 4]
             ),
             split_edges(
                 &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
