@@ -1,6 +1,6 @@
 # ldr_tools_blender [![GitHub release (latest by date including pre-releases)](https://img.shields.io/github/v/release/ScanMountGoat/ldr_tools_blender?include_prereleases)](https://github.com/ScanMountGoat/ldr_tools_blender/releases/latest)
 
-![falcon](https://user-images.githubusercontent.com/23301691/225458929-e1870792-6125-443b-af49-fc047b6c8167.jpg)
+![falcon](https://github.com/ScanMountGoat/ldr_tools_blender/assets/23301691/95e8fd91-9509-4fef-af90-9597e1c0a43d)
 > Cycles render of [10179-1 Millennium Falcon UCS (LDraw OMR)](https://omr.ldraw.org/files/347)
 
 An addon for importing LDraw files into Blender 3.3 or later. Report bugs or request new features in [issues](https://github.com/ScanMountGoat/ldr_tools_blender/issues). Download the latest version from [releases](https://github.com/ScanMountGoat/ldr_tools_blender/releases).
