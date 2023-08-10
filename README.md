@@ -25,7 +25,7 @@ Upgrading the addon requires uninstalling the addon, downloading the latest vers
 ## Performance
 This project is built from the ground up with performance in mind. The ldr_tools_blender addon can easily handle very large models with hundreds of thousands of parts. The addon will always instance geometry by part name and color to reduce memory usage and improve import times. Memory usage will be similar for both methods.
 
-Blender itself does not scale well with the number of objects created in the scene. For large scenes with more than 50000 parts, it's recommended to check "Instance on faces" before importing. This instances each part on the faces of a hidden mesh, which makes the individual objects harder to edit but avoids most of the Blender overhead for scenes with high object counts.
+Blender itself does not scale well with the number of objects created in the scene. For large scenes with more than 10000 parts, it's recommended to use "Geometry Nodes" as the instance type before importing. Geometry nodes make the individual objects harder to edit but avoids most of the Blender overhead for scenes with high object counts.
 
 ## Projects
 ### ldr_tools
