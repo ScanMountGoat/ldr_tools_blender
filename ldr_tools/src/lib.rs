@@ -4,7 +4,7 @@ use std::{
 };
 
 use geometry::create_geometry;
-use glam::{vec4, Mat4, Vec3};
+use glam::{Mat4, Vec3};
 use rayon::prelude::*;
 use weldr::{Command, FileRefResolver, ResolveError};
 
@@ -22,8 +22,6 @@ mod color;
 mod edge_split;
 mod geometry;
 mod slope;
-
-const SCENE_SCALE: f32 = 0.01;
 
 pub struct LDrawNode {
     pub name: String,
@@ -305,11 +303,9 @@ fn load_node<'a>(
         }
     }
 
-    let transform = scaled_transform(transform);
-
     LDrawNode {
         name: filename.to_string(),
-        transform,
+        transform: *transform,
         geometry_name: geometry,
         current_color,
         children,
@@ -345,14 +341,6 @@ fn create_geometry_cache(
             (name, geometry)
         })
         .collect()
-}
-
-fn scaled_transform(transform: &Mat4) -> Mat4 {
-    // Only scale the translation so that the scale doesn't accumulate.
-    // TODO: Is this the best way to handle scale?
-    let mut transform = *transform;
-    transform.w_axis *= vec4(SCENE_SCALE, SCENE_SCALE, SCENE_SCALE, 1.0);
-    transform
 }
 
 #[tracing::instrument]
@@ -472,7 +460,7 @@ fn load_node_instanced<'a>(
         geometry_world_transforms
             .entry((filename.to_string(), current_color))
             .or_insert(Vec::new())
-            .push(scaled_transform(world_transform));
+            .push(*world_transform);
     } else if has_geometry(source_file) {
         // Just add geometry for this node.
         // Use the current color at this node since this geometry might not be referenced elsewhere.
@@ -489,7 +477,7 @@ fn load_node_instanced<'a>(
         geometry_world_transforms
             .entry((filename.to_string(), current_color))
             .or_insert(Vec::new())
-            .push(scaled_transform(world_transform));
+            .push(*world_transform);
     }
 
     // Recursion is already handled for parts.

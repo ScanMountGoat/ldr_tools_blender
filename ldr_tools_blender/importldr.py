@@ -43,8 +43,11 @@ def import_objects(filepath: str, ldraw_path: str, additional_paths: list[str], 
     root_obj = add_nodes(root_node, geometry_cache,
                          blender_mesh_cache, color_by_code)
     # Account for Blender having a different coordinate system.
-    root_obj.matrix_basis = mathutils.Matrix.Rotation(
-        math.radians(-90.0), 4, 'X')
+    # Apply a scene scale to match the previous version.
+    # TODO: make scene scale configurable.
+    # root_obj.matrix_basis = mathutils.Matrix.Rotation(math.radians(-90.0), 4, 'X')
+    root_obj.rotation_euler = mathutils.Euler((math.radians(-90.0), 0.0, 0.0), 'XYZ')
+    root_obj.scale = (0.01, 0.01, 0.01)
 
 
 def add_nodes(node: LDrawNode,

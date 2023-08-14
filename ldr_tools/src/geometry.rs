@@ -4,7 +4,7 @@ use weldr::Command;
 
 use crate::{
     edge_split::split_edges, replace_color, slope::is_slope_piece, ColorCode, GeometrySettings,
-    StudType, SCENE_SCALE,
+    StudType,
 };
 
 // TODO: Document the data layout for these fields.
@@ -59,7 +59,7 @@ impl VertexMap {
     fn get(&self, v: [f32; 3]) -> Option<u32> {
         // Return the value already in the map or None.
         // Dimensions in LDUs tend to be large, so use a large threshold.
-        let epsilon = 0.001;
+        let epsilon = 0.01;
         self.rtree
             .locate_within_distance(v, epsilon * epsilon)
             .next()
@@ -163,9 +163,9 @@ pub fn create_geometry(
     let dimensions = max - min;
 
     let scale = if settings.add_gap_between_parts {
-        gaps_scale(dimensions) * SCENE_SCALE
+        gaps_scale(dimensions)
     } else {
-        Vec3::splat(SCENE_SCALE)
+        Vec3::ONE
     };
 
     // Apply the scale last to use LDUs as the unit for vertex welding.
