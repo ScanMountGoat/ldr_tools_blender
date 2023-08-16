@@ -99,11 +99,13 @@ pub struct LDrawScene {
 }
 
 pub struct LDrawSceneInstanced {
+    pub main_model_name: String,
     pub geometry_world_transforms: HashMap<(String, ColorCode), Vec<Mat4>>,
     pub geometry_cache: HashMap<String, LDrawGeometry>,
 }
 
 pub struct LDrawSceneInstancedPoints {
+    pub main_model_name: String,
     /// Decomposed instance transforms for unique part and color.
     pub geometry_point_instances: HashMap<(String, ColorCode), PointInstances>,
     pub geometry_cache: HashMap<String, LDrawGeometry>,
@@ -362,6 +364,7 @@ pub fn load_file_instanced_points(
         .collect();
 
     LDrawSceneInstancedPoints {
+        main_model_name: scene.main_model_name,
         geometry_point_instances,
         geometry_cache: scene.geometry_cache,
     }
@@ -427,6 +430,7 @@ pub fn load_file_instanced(
     let geometry_cache = create_geometry_cache(geometry_descriptors, &source_map, settings);
 
     LDrawSceneInstanced {
+        main_model_name,
         geometry_world_transforms,
         geometry_cache,
     }

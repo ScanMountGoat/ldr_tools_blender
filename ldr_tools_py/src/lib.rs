@@ -26,6 +26,29 @@ impl From<ldr_tools::LDrawNode> for LDrawNode {
     }
 }
 
+#[pyclass(get_all)]
+#[derive(Debug, Clone)]
+pub struct LDrawScene {
+    pub root_node: LDrawNode,
+    pub geometry_cache: HashMap<String, LDrawGeometry>,
+}
+
+#[pyclass(get_all)]
+#[derive(Debug, Clone)]
+pub struct LDrawSceneInstanced {
+    pub main_model_name: String,
+    pub geometry_world_transforms: HashMap<(String, u32), PyObject>,
+    pub geometry_cache: HashMap<String, LDrawGeometry>,
+}
+
+#[pyclass(get_all)]
+#[derive(Debug, Clone)]
+pub struct LDrawSceneInstancedPoints {
+    pub main_model_name: String,
+    pub geometry_point_instances: HashMap<(String, u32), PointInstances>,
+    pub geometry_cache: HashMap<String, LDrawGeometry>,
+}
+
 // Use numpy arrays (PyObject) for reduced overhead.
 #[pyclass(get_all)]
 #[derive(Debug, Clone)]
@@ -152,7 +175,6 @@ impl PointInstances {
     }
 }
 
-// TODO: Is it worth creating the scene structs here as well?
 #[pyfunction]
 fn load_file(
     py: Python,
@@ -160,18 +182,22 @@ fn load_file(
     ldraw_path: &str,
     additional_paths: Vec<&str>,
     settings: &GeometrySettings,
-) -> PyResult<(LDrawNode, HashMap<String, LDrawGeometry>)> {
+) -> PyResult<LDrawScene> {
     // TODO: This timing code doesn't need to be here.
     let start = std::time::Instant::now();
     let scene = ldr_tools::load_file(path, ldraw_path, &additional_paths, &settings.into());
 
-    let geometry_cache_py = scene
+    let geometry_cache = scene
         .geometry_cache
         .into_iter()
         .map(|(k, v)| (k, LDrawGeometry::from_geometry(py, v)))
         .collect();
     println!("load_file: {:?}", start.elapsed());
-    Ok((scene.root_node.into(), geometry_cache_py))
+
+    Ok(LDrawScene {
+        root_node: scene.root_node.into(),
+        geometry_cache,
+    })
 }
 
 #[pyfunction]
@@ -181,21 +207,18 @@ fn load_file_instanced(
     ldraw_path: &str,
     additional_paths: Vec<&str>,
     settings: &GeometrySettings,
-) -> PyResult<(
-    HashMap<String, LDrawGeometry>,
-    HashMap<(String, u32), PyObject>,
-)> {
+) -> PyResult<LDrawSceneInstanced> {
     let start = std::time::Instant::now();
     let scene =
         ldr_tools::load_file_instanced(path, ldraw_path, &additional_paths, &settings.into());
 
-    let geometry_cache_py = scene
+    let geometry_cache = scene
         .geometry_cache
         .into_iter()
         .map(|(k, v)| (k, LDrawGeometry::from_geometry(py, v)))
         .collect();
 
-    let geometry_world_transforms_py = scene
+    let geometry_world_transforms = scene
         .geometry_world_transforms
         .into_iter()
         .map(|(k, v)| {
@@ -219,10 +242,13 @@ fn load_file_instanced(
 
     println!("load_file_instanced: {:?}", start.elapsed());
 
-    Ok((geometry_cache_py, geometry_world_transforms_py))
+    Ok(LDrawSceneInstanced {
+        main_model_name: scene.main_model_name,
+        geometry_world_transforms,
+        geometry_cache,
+    })
 }
 
-// TODO: Create structs for the scene.
 #[pyfunction]
 fn load_file_instanced_points(
     py: Python,
@@ -230,10 +256,7 @@ fn load_file_instanced_points(
     ldraw_path: &str,
     additional_paths: Vec<&str>,
     settings: &GeometrySettings,
-) -> PyResult<(
-    HashMap<String, LDrawGeometry>,
-    HashMap<(String, u32), PointInstances>,
-)> {
+) -> PyResult<LDrawSceneInstancedPoints> {
     let start = std::time::Instant::now();
     let scene = ldr_tools::load_file_instanced_points(
         path,
@@ -242,13 +265,13 @@ fn load_file_instanced_points(
         &settings.into(),
     );
 
-    let geometry_cache_py = scene
+    let geometry_cache = scene
         .geometry_cache
         .into_iter()
         .map(|(k, v)| (k, LDrawGeometry::from_geometry(py, v)))
         .collect();
 
-    let geometry_point_instances_py = scene
+    let geometry_point_instances = scene
         .geometry_point_instances
         .into_iter()
         .map(|(k, v)| (k, PointInstances::from_instances(py, v)))
@@ -256,7 +279,11 @@ fn load_file_instanced_points(
 
     println!("load_file_instanced_points: {:?}", start.elapsed());
 
-    Ok((geometry_cache_py, geometry_point_instances_py))
+    Ok(LDrawSceneInstancedPoints {
+        main_model_name: scene.main_model_name,
+        geometry_point_instances,
+        geometry_cache,
+    })
 }
 
 #[pyfunction]

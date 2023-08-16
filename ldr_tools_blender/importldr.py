@@ -37,16 +37,16 @@ def import_objects(filepath: str, ldraw_path: str, additional_paths: list[str], 
     # Create an object for each part in the scene.
     # This still uses instances the mesh data blocks for reduced memory usage.
     blender_mesh_cache = {}
-    root_node, geometry_cache = ldr_tools_py.load_file(
+    scene = ldr_tools_py.load_file(
         filepath, ldraw_path, additional_paths, settings)
 
-    root_obj = add_nodes(root_node, geometry_cache,
+    root_obj = add_nodes(scene.root_node, scene.geometry_cache,
                          blender_mesh_cache, color_by_code)
     # Account for Blender having a different coordinate system.
     # Apply a scene scale to match the previous version.
     # TODO: make scene scale configurable.
-    # root_obj.matrix_basis = mathutils.Matrix.Rotation(math.radians(-90.0), 4, 'X')
-    root_obj.rotation_euler = mathutils.Euler((math.radians(-90.0), 0.0, 0.0), 'XYZ')
+    root_obj.rotation_euler = mathutils.Euler(
+        (math.radians(-90.0), 0.0, 0.0), 'XYZ')
     root_obj.scale = (0.01, 0.01, 0.01)
 
 
@@ -91,30 +91,35 @@ def add_nodes(node: LDrawNode,
 def import_instanced(filepath: str, ldraw_path: str, additional_paths: list[str], color_by_code: dict[int, LDrawColor], settings: GeometrySettings):
     # Instance each part on the points of a mesh.
     # This avoids overhead from object creation for large scenes.
-    geometry_cache, geometry_point_instances = ldr_tools_py.load_file_instanced_points(
+    scene = ldr_tools_py.load_file_instanced_points(
         filepath, ldraw_path, additional_paths, settings)
 
     # First create all the meshes and materials.
     blender_mesh_cache = {}
-    for name, color in geometry_point_instances:
-        geometry = geometry_cache[name]
+    for name, color in scene.geometry_point_instances:
+        geometry = scene.geometry_cache[name]
 
         mesh = create_colored_mesh_from_geometry(
             name, color, color_by_code, geometry)
 
         blender_mesh_cache[(name, color)] = mesh
 
+    root_obj = bpy.data.objects.new(scene.main_model_name, None)
+    # Account for Blender having a different coordinate system.
+    # TODO: make scene scale configurable.
+    root_obj.rotation_euler = mathutils.Euler(
+        (math.radians(-90.0), 0.0, 0.0), 'XYZ')
+    root_obj.scale = (0.01, 0.01, 0.01)
+    bpy.context.collection.objects.link(root_obj)
+
     # Instant each unique colored part on the faces of a mesh.
-    for (name, color), instances in geometry_point_instances.items():
+    for (name, color), instances in scene.geometry_point_instances.items():
         instancer_mesh = create_instancer_mesh(
             f'{name}_{color}_instancer', instances)
 
         instancer_object = bpy.data.objects.new(
             f'{name}_{color}_instancer', instancer_mesh)
-
-        # Account for Blender having a different coordinate system.
-        instancer_object.matrix_basis = mathutils.Matrix.Rotation(
-            math.radians(-90.0), 4, 'X')
+        instancer_object.parent = root_obj
 
         bpy.context.collection.objects.link(instancer_object)
 
