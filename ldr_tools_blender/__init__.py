@@ -6,7 +6,7 @@ bl_info = {
     "description": "Import LDraw models in .mpd .ldr .l3b and .dat formats",
     "author": "ScanMountGoat (SMG)",
     "version": (0, 2, 0),
-    "blender": (3, 6, 0),
+    "blender": (4, 0, 0),
     "location": "File > Import",
     "warning": "",
     "doc_url": "https://github.com/ScanMountGoat/ldr_tools_blender/wiki",
@@ -18,14 +18,18 @@ bl_info = {
 def menuImport(self, context):
     self.layout.operator(operator.ImportOperator.bl_idname,
                          text="LDraw (.mpd/.ldr/.dat)")
-    
-classes = [operator.ImportOperator, operator.LIST_OT_NewItem, operator.LIST_OT_DeleteItem]
+
+
+classes = [operator.ImportOperator,
+           operator.LIST_OT_NewItem, operator.LIST_OT_DeleteItem]
+
 
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
 
-    bpy.types.Scene.ldr_path_to_add = bpy.props.StringProperty(name="", description="Additional LDraw parts path")
+    bpy.types.Scene.ldr_path_to_add = bpy.props.StringProperty(
+        name="", description="Additional LDraw parts path")
 
     bpy.types.TOPBAR_MT_file_import.append(menuImport)
 

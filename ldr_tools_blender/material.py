@@ -54,11 +54,11 @@ def get_material(color_by_code: dict[int, LDrawColor], code: int, is_slope: bool
 
             # RANDOM_WALK_FIXED_RADIUS is more accurate but appears white on edges.
             # Use a less accurate SSS method instead.
-            bsdf.subsurface_method = 'BURLEY'
-            bsdf.inputs['Subsurface Color'].default_value = [r, g, b, 1.0]
+            # bsdf.subsurface_method = 'BURLEY'
+            # bsdf.inputs['Subsurface Color'].default_value = [r, g, b, 1.0]
             # TODO: This is in Blender units and should depend on scene scale
-            bsdf.inputs['Subsurface Radius'].default_value = [0.02, 0.02, 0.02]
-            bsdf.inputs['Subsurface'].default_value = 1.0
+            # bsdf.inputs['Subsurface Radius'].default_value = [0.02, 0.02, 0.02]
+            bsdf.inputs['Subsurface Weight'].default_value = 1.0
 
             # Procedural roughness.
             roughness_node = create_node_group(
@@ -113,18 +113,16 @@ def get_material(color_by_code: dict[int, LDrawColor], code: int, is_slope: bool
                     mix_rgb.outputs['Color'], bsdf.inputs['Base Color'])
 
             if is_transmissive:
-                bsdf.inputs['Transmission'].default_value = 1.0
+                bsdf.inputs['Transmission Weight'].default_value = 1.0
                 bsdf.inputs['IOR'].default_value = 1.55
 
                 if ldraw_color.finish_name == 'Rubber':
                     # Make the transparent rubber appear cloudy.
                     roughness_node.inputs['Min'].default_value = 0.1
                     roughness_node.inputs['Max'].default_value = 0.35
-                    bsdf.inputs['Transmission Roughness'].default_value = 0.25
                 else:
                     roughness_node.inputs['Min'].default_value = 0.01
                     roughness_node.inputs['Max'].default_value = 0.15
-                    bsdf.inputs['Transmission Roughness'].default_value = 0.075
 
                 # Disable shadow casting for transparent materials.
                 # This avoids making transparent parts too dark.
@@ -137,7 +135,8 @@ def get_material(color_by_code: dict[int, LDrawColor], code: int, is_slope: bool
             if is_slope:
                 # Apply grainy normals to faces that aren't vertical or horizontal.
                 # Use non transformed normals to not consider object rotation.
-                ldr_normals = material.node_tree.nodes.new('ShaderNodeAttribute')
+                ldr_normals = material.node_tree.nodes.new(
+                    'ShaderNodeAttribute')
                 ldr_normals.attribute_name = 'ldr_normals'
 
                 separate = material.node_tree.nodes.new(
@@ -226,14 +225,17 @@ def create_roughness_node_group(name: str) -> bpy.types.NodeTree:
     node_group_node_tree = bpy.data.node_groups.new(
         name, 'ShaderNodeTree')
 
-    node_group_node_tree.outputs.new('NodeSocketFloat', 'Roughness')
+    node_group_node_tree.interface.new_socket(
+        in_out='OUTPUT', socket_type='NodeSocketFloat', name='Roughness')
 
     inner_nodes = node_group_node_tree.nodes
     inner_links = node_group_node_tree.links
 
     input_node = inner_nodes.new('NodeGroupInput')
-    node_group_node_tree.inputs.new('NodeSocketFloat', 'Min')
-    node_group_node_tree.inputs.new('NodeSocketFloat', 'Max')
+    node_group_node_tree.interface.new_socket(
+        in_out='INPUT', socket_type='NodeSocketFloat', name='Min')
+    node_group_node_tree.interface.new_socket(
+        in_out='INPUT', socket_type='NodeSocketFloat', name='Max')
 
     # TODO: Create frame called "smudges" or at least name the nodes.
     noise = inner_nodes.new('ShaderNodeTexNoise')
@@ -260,14 +262,17 @@ def create_speckle_node_group(name: str) -> bpy.types.NodeTree:
     node_group_node_tree = bpy.data.node_groups.new(
         name, 'ShaderNodeTree')
 
-    node_group_node_tree.outputs.new('NodeSocketFloat', 'Fac')
+    node_group_node_tree.interface.new_socket(
+        in_out='OUTPUT', socket_type='NodeSocketFloat', name='Fac')
 
     inner_nodes = node_group_node_tree.nodes
     inner_links = node_group_node_tree.links
 
     input_node = inner_nodes.new('NodeGroupInput')
-    node_group_node_tree.inputs.new('NodeSocketFloat', 'Min')
-    node_group_node_tree.inputs.new('NodeSocketFloat', 'Max')
+    node_group_node_tree.interface.new_socket(
+        in_out='INPUT', socket_type='NodeSocketFloat', name='Min')
+    node_group_node_tree.interface.new_socket(
+        in_out='INPUT', socket_type='NodeSocketFloat', name='Max')
 
     noise = inner_nodes.new('ShaderNodeTexNoise')
     noise.inputs['Scale'].default_value = 15.0
@@ -291,7 +296,8 @@ def create_speckle_node_group(name: str) -> bpy.types.NodeTree:
 def create_normals_node_group(name: str) -> bpy.types.NodeTree:
     node_group_node_tree = bpy.data.node_groups.new(name, 'ShaderNodeTree')
 
-    node_group_node_tree.outputs.new('NodeSocketVector', 'Normal')
+    node_group_node_tree.interface.new_socket(
+        in_out='OUTPUT', socket_type='NodeSocketVector', name='Normal')
 
     nodes = node_group_node_tree.nodes
     links = node_group_node_tree.links
@@ -331,7 +337,8 @@ def create_normals_node_group(name: str) -> bpy.types.NodeTree:
 def create_slope_normals_node_group(name: str) -> bpy.types.NodeTree:
     node_group_node_tree = bpy.data.node_groups.new(name, 'ShaderNodeTree')
 
-    node_group_node_tree.outputs.new('NodeSocketVector', 'Normal')
+    node_group_node_tree.interface.new_socket(
+        in_out='OUTPUT', socket_type='NodeSocketVector', name='Normal')
 
     nodes = node_group_node_tree.nodes
     links = node_group_node_tree.links

@@ -149,10 +149,12 @@ def create_geometry_node_instancing(instancer_object: bpy.types.Object, instance
     links = node_tree.links
 
     group_input = nodes.new('NodeGroupInput')
-    node_tree.inputs.new('NodeSocketGeometry', 'Geometry')
+    node_tree.interface.new_socket(
+        in_out='INPUT', socket_type='NodeSocketGeometry', name='Geometry')
 
     group_output = nodes.new('NodeGroupOutput')
-    node_tree.outputs.new('NodeSocketGeometry', 'Geometry')
+    node_tree.interface.new_socket(
+        in_out='OUTPUT', socket_type='NodeSocketGeometry', name='Geometry')
 
     # The instancer mesh's points define the instance translation.
     instance_points = nodes.new(type="GeometryNodeInstanceOnPoints")
