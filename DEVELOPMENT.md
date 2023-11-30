@@ -45,7 +45,7 @@ Sample scripts for different operating systems are provided below. Note that the
 ### Windows
 ```bat
 @REM reload.bat
-set OUTPUT=C:\Users\<username>\AppData\Roaming\Blender Foundation\Blender\3.3\scripts\addons\ldr_tools_blender
+set OUTPUT=C:\Users\<username>\AppData\Roaming\Blender Foundation\Blender\4.0\scripts\addons\ldr_tools_blender
 xcopy /E/I/Y "ldr_tools_blender" "%OUTPUT%" 
 copy /y "target\release\ldr_tools_py.dll" "%OUTPUT%\ldr_tools_py.pyd"
 ```
@@ -53,7 +53,7 @@ copy /y "target\release\ldr_tools_py.dll" "%OUTPUT%\ldr_tools_py.pyd"
 ### MacOS
 ```sh
 # reload.sh
-OUTPUT="/Users/<username>/library/Application Support/Blender/3.3/scripts/addons/ldr_tools_blender/"
+OUTPUT="$HOME/library/Application Support/Blender/4.0/scripts/addons/ldr_tools_blender/"
 cp -a ldr_tools_blender/. "$OUTPUT"
 cp target/release/libldr_tools_py.dylib "$OUTPUT/ldr_tools_py.so"
 ```
