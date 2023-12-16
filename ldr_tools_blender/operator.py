@@ -1,7 +1,7 @@
 import os
 import json
 import bpy
-from bpy.props import StringProperty, EnumProperty
+from bpy.props import StringProperty, EnumProperty, BoolProperty
 from bpy_extras.io_utils import ImportHelper
 from typing import Any
 import platform
@@ -60,6 +60,7 @@ class Preferences():
         self.ldraw_path = find_ldraw_library()
         self.instance_type = 'LinkedDuplicates'
         self.additional_paths = []
+        self.add_gap_between_parts = True
 
     def from_dict(self, dict: dict[str, Any]):
         # Fill in defaults for any missing values.
@@ -69,6 +70,8 @@ class Preferences():
             'instance_type', defaults.instance_type)
         self.additional_paths = dict.get(
             'additional_paths', defaults.additional_paths)
+        self.add_gap_between_parts = dict.get(
+            'add_gap_between_parts', defaults.add_gap_between_parts)
 
     def save(self):
         with open(Preferences.preferences_path, 'w+') as file:
@@ -142,12 +145,20 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
     instance_type: EnumProperty(
         name="Instance Type",
         items=[
-            ('LinkedDuplicates', "Linked Duplicates", "Objects with linked mesh data blocks (Alt+D). Easy to edit."),
-            ('GeometryNodes', "Geometry Nodes", "Geometry node instances on an instancer mesh. Faster imports for large scenes but harder to edit.")
+            ('LinkedDuplicates', "Linked Duplicates",
+             "Objects with linked mesh data blocks (Alt+D). Easy to edit."),
+            ('GeometryNodes', "Geometry Nodes",
+             "Geometry node instances on an instancer mesh. Faster imports for large scenes but harder to edit.")
         ],
         description="The method to use for instancing part meshes",
         # TODO: this doesn't set properly?
         default=preferences.instance_type
+    )
+
+    add_gap_between_parts: BoolProperty(
+        name="Gap Between Parts",
+        description="Scale to add a small gap horizontally between parts",
+        default=preferences.add_gap_between_parts
     )
 
     def draw(self, context):
@@ -155,6 +166,7 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         layout.use_property_split = True
         layout.prop(self, "ldraw_path")
         layout.prop(self, "instance_type")
+        layout.prop(self, "add_gap_between_parts")
 
         # TODO: File selector?
         # TODO: Come up with better UI for this?
@@ -172,11 +184,12 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         # Update from the UI values to support saving them to disk later.
         ImportOperator.preferences.ldraw_path = self.ldraw_path
         ImportOperator.preferences.instance_type = self.instance_type
+        ImportOperator.preferences.add_gap_between_parts = self.add_gap_between_parts
 
         import time
         start = time.time()
         import_ldraw(self, self.filepath, self.ldraw_path, ImportOperator.preferences.additional_paths,
-                    self.instance_type)
+                     self.instance_type, self.add_gap_between_parts)
         end = time.time()
         print(f'Import: {end - start}')
 

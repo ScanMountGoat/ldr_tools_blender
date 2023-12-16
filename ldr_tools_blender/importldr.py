@@ -14,12 +14,13 @@ from .material import get_material
 # TODO: Add type hints for all functions.
 
 
-def import_ldraw(operator: bpy.types.Operator, filepath: str, ldraw_path: str, additional_paths: list[str], instance_type: str):
+def import_ldraw(operator: bpy.types.Operator, filepath: str, ldraw_path: str,
+                 additional_paths: list[str], instance_type: str, add_gap_between_parts: bool):
     color_by_code = ldr_tools_py.load_color_table(ldraw_path)
 
     settings = GeometrySettings()
     settings.triangulate = False
-    settings.add_gap_between_parts = True
+    settings.add_gap_between_parts = add_gap_between_parts
     settings.logo_on_studs = True
     # Required for calculated normals.
     settings.weld_vertices = True

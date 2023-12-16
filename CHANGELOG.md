@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### unreleased
+### Added
+* Added an option to enable or disable the gap between parts when importing.
+
 ### Changed
 * Changed supported Blender version to 4.0 or later.
 
