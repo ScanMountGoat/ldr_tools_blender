@@ -163,9 +163,9 @@ pub fn create_geometry(
     let dimensions = max - min;
 
     let scale = if settings.add_gap_between_parts {
-        gaps_scale(dimensions)
+        gaps_scale(dimensions) * settings.scene_scale
     } else {
-        Vec3::ONE
+        Vec3::splat(settings.scene_scale)
     };
 
     // Apply the scale last to use LDUs as the unit for vertex welding.

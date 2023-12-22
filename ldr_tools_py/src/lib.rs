@@ -118,6 +118,7 @@ pub struct GeometrySettings {
     add_gap_between_parts: bool,
     logo_on_studs: bool,
     weld_vertices: bool,
+    scene_scale: f32,
 }
 
 #[pymethods]
@@ -135,6 +136,7 @@ impl From<ldr_tools::GeometrySettings> for GeometrySettings {
             add_gap_between_parts: value.add_gap_between_parts,
             logo_on_studs: value.stud_type == StudType::Logo4,
             weld_vertices: value.weld_vertices,
+            scene_scale: value.scene_scale,
         }
     }
 }
@@ -151,6 +153,7 @@ impl From<&GeometrySettings> for ldr_tools::GeometrySettings {
             },
             weld_vertices: value.weld_vertices,
             primitive_resolution: ldr_tools::PrimitiveResolution::Normal,
+            scene_scale: value.scene_scale,
         }
     }
 }

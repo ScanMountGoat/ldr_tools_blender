@@ -4,7 +4,7 @@ use std::{
 };
 
 use geometry::create_geometry;
-use glam::{Mat4, Vec3};
+use glam::{vec4, Mat4, Vec3};
 use rayon::prelude::*;
 use weldr::{Command, FileRefResolver, ResolveError};
 
@@ -155,7 +155,7 @@ impl Default for PrimitiveResolution {
 }
 
 // TODO: Come up with a better name.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct GeometrySettings {
     pub triangulate: bool,
     pub add_gap_between_parts: bool,
@@ -163,6 +163,20 @@ pub struct GeometrySettings {
     pub stud_type: StudType,
     pub weld_vertices: bool, // TODO: default to true?
     pub primitive_resolution: PrimitiveResolution,
+    pub scene_scale: f32,
+}
+
+impl Default for GeometrySettings {
+    fn default() -> Self {
+        Self {
+            triangulate: Default::default(),
+            add_gap_between_parts: Default::default(),
+            stud_type: Default::default(),
+            weld_vertices: Default::default(),
+            primitive_resolution: Default::default(),
+            scene_scale: 1.0,
+        }
+    }
 }
 
 fn replace_color(color: ColorCode, current_color: ColorCode) -> ColorCode {
@@ -203,6 +217,7 @@ pub fn load_file(
         &source_map,
         &mut geometry_descriptors,
         CURRENT_COLOR,
+        settings,
     );
 
     let geometry_cache = create_geometry_cache(geometry_descriptors, &source_map, settings);
@@ -252,6 +267,7 @@ fn load_node<'a>(
     source_map: &'a weldr::SourceMap,
     geometry_descriptors: &mut HashMap<String, GeometryInitDescriptor<'a>>,
     current_color: ColorCode,
+    settings: &GeometrySettings,
 ) -> LDrawNode {
     let mut children = Vec::new();
     let mut geometry = None;
@@ -298,6 +314,7 @@ fn load_node<'a>(
                         source_map,
                         geometry_descriptors,
                         child_color,
+                        settings,
                     );
                     children.push(child_node);
                 }
@@ -305,9 +322,11 @@ fn load_node<'a>(
         }
     }
 
+    let transform = scaled_transform(transform, settings.scene_scale);
+
     LDrawNode {
         name: filename.to_string(),
-        transform: *transform,
+        transform,
         geometry_name: geometry,
         current_color,
         children,
@@ -343,6 +362,14 @@ fn create_geometry_cache(
             (name, geometry)
         })
         .collect()
+}
+
+fn scaled_transform(transform: &Mat4, scale: f32) -> Mat4 {
+    // Only scale the translation so that the scale doesn't accumulate.
+    // TODO: Is this the best way to handle scale?
+    let mut transform = *transform;
+    transform.w_axis *= vec4(scale, scale, scale, 1.0);
+    transform
 }
 
 #[tracing::instrument]
@@ -425,6 +452,7 @@ pub fn load_file_instanced(
         &mut geometry_descriptors,
         &mut geometry_world_transforms,
         CURRENT_COLOR,
+        settings,
     );
 
     let geometry_cache = create_geometry_cache(geometry_descriptors, &source_map, settings);
@@ -445,6 +473,7 @@ fn load_node_instanced<'a>(
     geometry_descriptors: &mut HashMap<String, GeometryInitDescriptor<'a>>,
     geometry_world_transforms: &mut HashMap<(String, ColorCode), Vec<Mat4>>,
     current_color: ColorCode,
+    settings: &GeometrySettings,
 ) {
     // TODO: Find a way to avoid repetition.
     let is_part = is_part(source_file, filename);
@@ -463,8 +492,8 @@ fn load_node_instanced<'a>(
         // Also key by the color in case a part appears in multiple colors.
         geometry_world_transforms
             .entry((filename.to_string(), current_color))
-            .or_insert(Vec::new())
-            .push(*world_transform);
+            .or_default()
+            .push(scaled_transform(world_transform, settings.scene_scale));
     } else if has_geometry(source_file) {
         // Just add geometry for this node.
         // Use the current color at this node since this geometry might not be referenced elsewhere.
@@ -480,8 +509,8 @@ fn load_node_instanced<'a>(
         // Also key by the color in case a part appears in multiple colors.
         geometry_world_transforms
             .entry((filename.to_string(), current_color))
-            .or_insert(Vec::new())
-            .push(*world_transform);
+            .or_default()
+            .push(scaled_transform(world_transform, settings.scene_scale));
     }
 
     // Recursion is already handled for parts.
@@ -503,6 +532,7 @@ fn load_node_instanced<'a>(
                         geometry_descriptors,
                         geometry_world_transforms,
                         child_color,
+                        settings,
                     );
                 }
             }

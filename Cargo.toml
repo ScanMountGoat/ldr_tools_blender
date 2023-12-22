@@ -1,5 +1,3 @@
 [workspace]
 members = ["ldr_tools", "ldr_tools_py"]
-
-[profile.release]
-debug = true
+resolver = "2"

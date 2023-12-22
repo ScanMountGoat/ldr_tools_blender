@@ -22,6 +22,7 @@ def import_ldraw(operator: bpy.types.Operator, filepath: str, ldraw_path: str,
     settings.triangulate = False
     settings.add_gap_between_parts = add_gap_between_parts
     settings.logo_on_studs = True
+    settings.scene_scale = 1.0
     # Required for calculated normals.
     settings.weld_vertices = True
 
