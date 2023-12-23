@@ -3,7 +3,7 @@
 ![falcon](https://github.com/ScanMountGoat/ldr_tools_blender/assets/23301691/95e8fd91-9509-4fef-af90-9597e1c0a43d)
 > Cycles render of [10179-1 Millennium Falcon UCS (LDraw OMR)](https://omr.ldraw.org/files/347)
 
-An addon for importing LDraw files into Blender 3.6 or later. Check out [discussions](https://github.com/ScanMountGoat/ldr_tools_blender/discussions) for reading announcements, asking questions, or suggesting new features. Report bugs or request new features in [issues](https://github.com/ScanMountGoat/ldr_tools_blender/issues). Download the latest version from [releases](https://github.com/ScanMountGoat/ldr_tools_blender/releases).
+An addon for importing LDraw files into Blender 4.0 or later. Check out [discussions](https://github.com/ScanMountGoat/ldr_tools_blender/discussions) for reading announcements, asking questions, or suggesting new features. Report bugs or request new features in [issues](https://github.com/ScanMountGoat/ldr_tools_blender/issues). Download the latest version from [releases](https://github.com/ScanMountGoat/ldr_tools_blender/releases).
 
 ## Features
 The goal of this project is to provided a reliable and performant way to import digital LEGO models into modern versions of Blender for rendering. This includes importing and rendering [Bricklink Studio](https://www.bricklink.com/v3/studio/download.page) models or models built with [LDraw editing programs](https://www.ldraw.org/downloads-2/third-party-software.html). Studio models should be exported as LDraw under File > Export As in Studio before importing into Blender.
@@ -14,13 +14,13 @@ The goal of this project is to provided a reliable and performant way to import 
 
 ## Getting Started
 1. Install the [LDraw parts library](https://www.ldraw.org/help/getting-started.html) if you haven't already. Bricklink Studio bundles its own LDraw library and should be detected automatically by the addon.
-2. Download the appropriate version of the addon for your system from [releases](https://github.com/ScanMountGoat/ldr_tools_blender/releases).
+2. Download the appropriate version of the addon for your system from [releases](https://github.com/ScanMountGoat/ldr_tools_blender/releases). For older Blender versions, download one of the previous releases.
 3. In Blender, navigate to Edit > Preferences > Addon and click Install. Select the zip downloaded in step 2. Do not extract the zip file!
 4. The addons menu should now allow you to check the ldr_tools_blender addon to enable it.
 5. Import an LDraw model into Blender by clicking File > Import > LDraw and selecting a .mpd or .ldr file.
 
 ## Uninstalling/Upgrading
-Upgrading the addon requires uninstalling the addon, downloading the latest version from releases, and then reinstalling the addon. On some operating systems, it may be necessary to disable the addon, restart Blender, and then uninstall the addon. This workaround seems to only be necessary on Windows.
+Upgrading the addon requires uninstalling the addon, downloading the latest version from releases, and then reinstalling the addon. On some operating systems, it may be necessary to disable the addon, restart Blender, and then uninstall the addon. This workaround is only be necessary on Windows.
 
 ## Performance
 This project is built from the ground up with performance in mind. The ldr_tools_blender addon can easily handle very large models with hundreds of thousands of parts. The addon will always instance geometry by part name and color to reduce memory usage and improve import times. Memory usage will be similar for both methods.
