@@ -52,13 +52,13 @@ def get_material(color_by_code: dict[int, LDrawColor], code: int, is_slope: bool
             # Transparent colors specify an alpha of 128 / 255.
             is_transmissive = a <= 0.6
 
-            # RANDOM_WALK_FIXED_RADIUS is more accurate but appears white on edges.
-            # Use a less accurate SSS method instead.
-            # bsdf.subsurface_method = 'BURLEY'
-            # bsdf.inputs['Subsurface Color'].default_value = [r, g, b, 1.0]
+            # RANDOM_WALK is more accurate but has discoloration around thin corners.
             # TODO: This is in Blender units and should depend on scene scale
-            # bsdf.inputs['Subsurface Radius'].default_value = [0.02, 0.02, 0.02]
+            bsdf.subsurface_method = 'BURLEY'
+            # Use a less accurate SSS method instead.
+            bsdf.inputs['Subsurface Radius'].default_value = [r, g, b]
             bsdf.inputs['Subsurface Weight'].default_value = 1.0
+            bsdf.inputs['Subsurface Scale'].default_value = 0.025
 
             # Procedural roughness.
             roughness_node = create_node_group(
@@ -311,7 +311,7 @@ def create_normals_node_group(name: str) -> bpy.types.NodeTree:
     # Faces of bricks are never perfectly flat.
     # Create a very low frequency noise to break up highlights
     noise = nodes.new('ShaderNodeTexNoise')
-    noise.inputs['Scale'].default_value = 2.0
+    noise.inputs['Scale'].default_value = 0.01  # TODO: scene scale?
     noise.inputs['Detail'].default_value = 1.0
     noise.inputs['Roughness'].default_value = 1.0
     noise.inputs['Distortion'].default_value = 0.0
