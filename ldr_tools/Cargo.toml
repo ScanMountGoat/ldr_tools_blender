@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-glam = "0.23.0"
-weldr = { git = "https://github.com/ScanMountGoat/weldr", rev = "c9ae933" }
+glam = "0.25.0"
+weldr = { git = "https://github.com/ScanMountGoat/weldr", rev = "647eaea" }
 rstar = "0.10.0"
 rayon = "1.7.0"
 phf =  { version = "0.11.1", features = ["macros"] }
