@@ -162,31 +162,25 @@ def create_geometry_node_instancing(instancer_object: bpy.types.Object, instance
     links.new(instance_info.outputs["Geometry"],
               instance_points.inputs["Instance"])
 
-    # Scale instances from the custom color attribute.
+    # Scale instances from the custom attribute.
     scale_attribute = nodes.new(type="GeometryNodeInputNamedAttribute")
     scale_attribute.data_type = 'FLOAT_VECTOR'
     scale_attribute.inputs["Name"].default_value = "instance_scale"
     links.new(scale_attribute.outputs["Attribute"],
               instance_points.inputs["Scale"])
 
-    # Rotate instances from the custom color attributes.
-    rotation = nodes.new(type="FunctionNodeRotateEuler")
-    rotation.type = 'AXIS_ANGLE'
-
+    # Rotate instances from the custom attributes.
     rot_axis = nodes.new(type="GeometryNodeInputNamedAttribute")
     rot_axis.data_type = 'FLOAT_VECTOR'
     rot_axis.inputs["Name"].default_value = "instance_rotation_axis"
-    links.new(rot_axis.outputs["Attribute"], rotation.inputs["Axis"])
 
     rot_angle = nodes.new(type="GeometryNodeInputNamedAttribute")
     rot_angle.data_type = 'FLOAT'
     rot_angle.inputs["Name"].default_value = "instance_rotation_angle"
 
-    separate = nodes.new(type="ShaderNodeSeparateXYZ")
-    # The second output is the float attribute when selecting a different type.
-    links.new(rot_angle.outputs[1], separate.inputs["Vector"])
-    links.new(separate.outputs["X"], rotation.inputs["Angle"])
-
+    rotation = nodes.new(type="FunctionNodeAxisAngleToRotation")
+    links.new(rot_axis.outputs["Attribute"], rotation.inputs["Axis"])
+    links.new(rot_angle.outputs["Attribute"], rotation.inputs["Angle"])
     links.new(rotation.outputs["Rotation"], instance_points.inputs["Rotation"])
 
 
