@@ -15,13 +15,20 @@ from .material import get_material
 
 
 def import_ldraw(operator: bpy.types.Operator, filepath: str, ldraw_path: str,
-                 additional_paths: list[str], instance_type: str, add_gap_between_parts: bool):
+                 additional_paths: list[str], instance_type: str, stud_type: str, add_gap_between_parts: bool):
     color_by_code = ldr_tools_py.load_color_table(ldraw_path)
 
     settings = GeometrySettings()
     settings.triangulate = False
     settings.add_gap_between_parts = add_gap_between_parts
-    settings.logo_on_studs = True
+    if stud_type == 'Disabled':
+        settings.stud_type = ldr_tools_py.StudType.Disabled
+    elif stud_type == 'Normal':
+        settings.stud_type = ldr_tools_py.StudType.Normal
+    elif stud_type == 'Logo4':
+        settings.stud_type = ldr_tools_py.StudType.Logo4
+    elif stud_type == 'HighContrast':
+        settings.stud_type = ldr_tools_py.StudType.HighContrast
     settings.scene_scale = 1.0
     # Required for calculated normals.
     settings.weld_vertices = True
@@ -247,7 +254,7 @@ def create_colored_mesh_from_geometry(name: str, color: int, color_by_code: dict
     if geometry.has_grainy_slopes:
         # Get custom normals now that everything has been initialized.
         # This won't include any object transforms.
-        mesh.calc_normals_split()
+        # mesh.calc_normals_split()
         loop_normals = np.zeros(len(mesh.loops) * 3)
         mesh.loops.foreach_get('normal', loop_normals)
 
@@ -298,10 +305,11 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
             'loop_start', geometry.face_start_indices)
         mesh.polygons.foreach_set('loop_total', geometry.face_sizes)
 
-        # Enable autosmooth to handle some cases where edges aren't split.
-        mesh.use_auto_smooth = True
-        mesh.auto_smooth_angle = math.radians(89.0)
-        mesh.polygons.foreach_set('use_smooth', [True] * len(mesh.polygons))
+        # TODO: Enable autosmooth to handle some cases where edges aren't split.
+        # TODO: Just do this in ldr_tools and set custom normals?
+        # mesh.use_auto_smooth = True
+        # mesh.auto_smooth_angle = math.radians(89.0)
+        # mesh.polygons.foreach_set('use_smooth', [True] * len(mesh.polygons))
 
         # Add attributes needed to render grainy slopes properly.
         if geometry.has_grainy_slopes:

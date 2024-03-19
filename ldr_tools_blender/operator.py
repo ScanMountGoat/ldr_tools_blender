@@ -59,6 +59,7 @@ class Preferences():
     def __init__(self):
         self.ldraw_path = find_ldraw_library()
         self.instance_type = 'LinkedDuplicates'
+        self.stud_type = 'Logo4'
         self.additional_paths = []
         self.add_gap_between_parts = True
 
@@ -68,6 +69,8 @@ class Preferences():
         self.ldraw_path = dict.get('ldraw_path', defaults.ldraw_path)
         self.instance_type = dict.get(
             'instance_type', defaults.instance_type)
+        self.stud_type = dict.get(
+            'stud_type', defaults.stud_type)
         self.additional_paths = dict.get(
             'additional_paths', defaults.additional_paths)
         self.add_gap_between_parts = dict.get(
@@ -155,6 +158,19 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         default=preferences.instance_type
     )
 
+    stud_type: EnumProperty(
+        name="Stud Type",
+        items=[
+            ('Disabled', "Disabled", "No studs"),
+            ('Normal', "Normal", "Studs without logos"),
+            ('Logo4', "Logo4", "Studs with modeled LEGO logos"),
+            ('HighContrast', "High Contrast", "Studs with instruction style colors")
+        ],
+        description="The type of stud for imported parts",
+        # TODO: this doesn't set properly?
+        default=preferences.stud_type
+    )
+
     add_gap_between_parts: BoolProperty(
         name="Gap Between Parts",
         description="Scale to add a small gap horizontally between parts",
@@ -166,6 +182,7 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         layout.use_property_split = True
         layout.prop(self, "ldraw_path")
         layout.prop(self, "instance_type")
+        layout.prop(self, "stud_type")
         layout.prop(self, "add_gap_between_parts")
 
         # TODO: File selector?
@@ -184,12 +201,13 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         # Update from the UI values to support saving them to disk later.
         ImportOperator.preferences.ldraw_path = self.ldraw_path
         ImportOperator.preferences.instance_type = self.instance_type
+        ImportOperator.preferences.stud_type = self.stud_type
         ImportOperator.preferences.add_gap_between_parts = self.add_gap_between_parts
 
         import time
         start = time.time()
         import_ldraw(self, self.filepath, self.ldraw_path, ImportOperator.preferences.additional_paths,
-                     self.instance_type, self.add_gap_between_parts)
+                     self.instance_type, self.stud_type, self.add_gap_between_parts)
         end = time.time()
         print(f'Import: {end - start}')
 

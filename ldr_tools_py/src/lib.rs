@@ -1,8 +1,34 @@
 use std::collections::HashMap;
 
-use ldr_tools::StudType;
 use numpy::IntoPyArray;
 use pyo3::prelude::*;
+
+macro_rules! python_enum {
+    ($py_ty:ident, $rust_ty:ty, $( $i:ident ),+) => {
+        #[pyclass]
+        #[derive(Debug, Clone, Copy)]
+        pub enum $py_ty {
+            $($i),*
+        }
+
+        // These will generate a compile error if variant names don't match.
+        impl From<$rust_ty> for $py_ty {
+            fn from(value: $rust_ty) -> Self {
+                match value {
+                    $(<$rust_ty>::$i => Self::$i),*
+                }
+            }
+        }
+
+        impl From<$py_ty> for $rust_ty {
+            fn from(value: $py_ty) -> Self {
+                match value {
+                    $(<$py_ty>::$i => Self::$i),*
+                }
+            }
+        }
+    };
+}
 
 #[pyclass(get_all)]
 #[derive(Debug, Clone)]
@@ -110,16 +136,24 @@ impl From<ldr_tools::LDrawColor> for LDrawColor {
     }
 }
 
-// TODO: make a proper enum for the stud type.
 #[pyclass(get_all, set_all)]
 #[derive(Debug, Clone)]
 pub struct GeometrySettings {
     triangulate: bool,
     add_gap_between_parts: bool,
-    logo_on_studs: bool,
+    stud_type: StudType,
     weld_vertices: bool,
     scene_scale: f32,
 }
+
+python_enum!(
+    StudType,
+    ldr_tools::StudType,
+    Disabled,
+    Normal,
+    Logo4,
+    HighContrast
+);
 
 #[pymethods]
 impl GeometrySettings {
@@ -134,7 +168,7 @@ impl From<ldr_tools::GeometrySettings> for GeometrySettings {
         Self {
             triangulate: value.triangulate,
             add_gap_between_parts: value.add_gap_between_parts,
-            logo_on_studs: value.stud_type == StudType::Logo4,
+            stud_type: value.stud_type.into(),
             weld_vertices: value.weld_vertices,
             scene_scale: value.scene_scale,
         }
@@ -146,11 +180,7 @@ impl From<&GeometrySettings> for ldr_tools::GeometrySettings {
         Self {
             triangulate: value.triangulate,
             add_gap_between_parts: value.add_gap_between_parts,
-            stud_type: if value.logo_on_studs {
-                StudType::Logo4
-            } else {
-                StudType::Normal
-            },
+            stud_type: value.stud_type.into(),
             weld_vertices: value.weld_vertices,
             primitive_resolution: ldr_tools::PrimitiveResolution::Normal,
             scene_scale: value.scene_scale,
@@ -317,6 +347,7 @@ fn ldr_tools_py(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<LDrawGeometry>()?;
     m.add_class::<LDrawColor>()?;
     m.add_class::<GeometrySettings>()?;
+    m.add_class::<StudType>()?;
     m.add_class::<PointInstances>()?;
 
     m.add_function(wrap_pyfunction!(load_file, m)?)?;

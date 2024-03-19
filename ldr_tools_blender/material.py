@@ -349,10 +349,10 @@ def create_slope_normals_node_group(name: str) -> bpy.types.NodeTree:
     bevel.inputs['Radius'].default_value = 0.01
 
     # TODO: Set node positions.
-    noise = nodes.new('ShaderNodeTexMusgrave')
+    noise = nodes.new('ShaderNodeTexNoise')
     noise.inputs['Scale'].default_value = 125.0
     noise.inputs['Detail'].default_value = 3.0
-    noise.inputs['Dimension'].default_value = 1.0
+    noise.inputs['Roughness'].default_value = 0.5
     noise.inputs['Lacunarity'].default_value = 2.0
 
     bump = nodes.new('ShaderNodeBump')
