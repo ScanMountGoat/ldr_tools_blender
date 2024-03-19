@@ -7,6 +7,7 @@ from typing import Any
 import platform
 
 from .importldr import import_ldraw
+from . import ldr_tools_py
 
 
 def find_ldraw_library() -> str:
@@ -60,6 +61,7 @@ class Preferences():
         self.ldraw_path = find_ldraw_library()
         self.instance_type = 'LinkedDuplicates'
         self.stud_type = 'Logo4'
+        self.primitive_resolution = 'Normal'
         self.additional_paths = []
         self.add_gap_between_parts = True
 
@@ -71,6 +73,8 @@ class Preferences():
             'instance_type', defaults.instance_type)
         self.stud_type = dict.get(
             'stud_type', defaults.stud_type)
+        self.primitive_resolution = dict.get(
+            'primitive_resolution', defaults.primitive_resolution)
         self.additional_paths = dict.get(
             'additional_paths', defaults.additional_paths)
         self.add_gap_between_parts = dict.get(
@@ -171,6 +175,18 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         default=preferences.stud_type
     )
 
+    primitive_resolution: EnumProperty(
+        name="Resolution",
+        items=[
+            ('Low', "Low", "Low resolution 8 segment primitives"),
+            ('Normal', "Normal", "Normal resolution 16 segment primitives"),
+            ('High', "High", "High resolution 48 segment primitives"),
+        ],
+        description="The segment quality for part primitives",
+        # TODO: this doesn't set properly?
+        default=preferences.primitive_resolution
+    )
+
     add_gap_between_parts: BoolProperty(
         name="Gap Between Parts",
         description="Scale to add a small gap horizontally between parts",
@@ -183,6 +199,7 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         layout.prop(self, "ldraw_path")
         layout.prop(self, "instance_type")
         layout.prop(self, "stud_type")
+        layout.prop(self, "primitive_resolution")
         layout.prop(self, "add_gap_between_parts")
 
         # TODO: File selector?
@@ -202,15 +219,45 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         ImportOperator.preferences.ldraw_path = self.ldraw_path
         ImportOperator.preferences.instance_type = self.instance_type
         ImportOperator.preferences.stud_type = self.stud_type
+        ImportOperator.preferences.primitive_resolution = self.primitive_resolution
         ImportOperator.preferences.add_gap_between_parts = self.add_gap_between_parts
+
+        settings = self.get_settings()
 
         import time
         start = time.time()
-        import_ldraw(self, self.filepath, self.ldraw_path, ImportOperator.preferences.additional_paths,
-                     self.instance_type, self.stud_type, self.add_gap_between_parts)
+        import_ldraw(self, self.filepath, self.ldraw_path,
+                     ImportOperator.preferences.additional_paths, self.instance_type, settings)
         end = time.time()
         print(f'Import: {end - start}')
 
         # Save preferences to disk for loading next time.
         ImportOperator.preferences.save()
         return {'FINISHED'}
+
+    def get_settings(self):
+        settings = ldr_tools_py.GeometrySettings()
+        settings.triangulate = False
+        settings.add_gap_between_parts = self.add_gap_between_parts
+
+        if self.stud_type == 'Disabled':
+            settings.stud_type = ldr_tools_py.StudType.Disabled
+        elif self.stud_type == 'Normal':
+            settings.stud_type = ldr_tools_py.StudType.Normal
+        elif self.stud_type == 'Logo4':
+            settings.stud_type = ldr_tools_py.StudType.Logo4
+        elif self.stud_type == 'HighContrast':
+            settings.stud_type = ldr_tools_py.StudType.HighContrast
+
+        if self.primitive_resolution == 'Low':
+            settings.primitive_resolution = ldr_tools_py.PrimitiveResolution.Low
+        elif self.primitive_resolution == 'Normal':
+            settings.primitive_resolution = ldr_tools_py.PrimitiveResolution.Normal
+        elif self.primitive_resolution == 'High':
+            settings.primitive_resolution = ldr_tools_py.PrimitiveResolution.High
+
+        settings.scene_scale = 1.0
+        # Required for calculated normals.
+        settings.weld_vertices = True
+
+        return settings

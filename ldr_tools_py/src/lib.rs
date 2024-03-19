@@ -143,6 +143,7 @@ pub struct GeometrySettings {
     add_gap_between_parts: bool,
     stud_type: StudType,
     weld_vertices: bool,
+    primitive_resolution: PrimitiveResolution,
     scene_scale: f32,
 }
 
@@ -153,6 +154,14 @@ python_enum!(
     Normal,
     Logo4,
     HighContrast
+);
+
+python_enum!(
+    PrimitiveResolution,
+    ldr_tools::PrimitiveResolution,
+    Low,
+    Normal,
+    High
 );
 
 #[pymethods]
@@ -170,6 +179,7 @@ impl From<ldr_tools::GeometrySettings> for GeometrySettings {
             add_gap_between_parts: value.add_gap_between_parts,
             stud_type: value.stud_type.into(),
             weld_vertices: value.weld_vertices,
+            primitive_resolution: value.primitive_resolution.into(),
             scene_scale: value.scene_scale,
         }
     }
@@ -182,7 +192,7 @@ impl From<&GeometrySettings> for ldr_tools::GeometrySettings {
             add_gap_between_parts: value.add_gap_between_parts,
             stud_type: value.stud_type.into(),
             weld_vertices: value.weld_vertices,
-            primitive_resolution: ldr_tools::PrimitiveResolution::Normal,
+            primitive_resolution: value.primitive_resolution.into(),
             scene_scale: value.scene_scale,
         }
     }
@@ -347,7 +357,8 @@ fn ldr_tools_py(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<LDrawGeometry>()?;
     m.add_class::<LDrawColor>()?;
     m.add_class::<GeometrySettings>()?;
-    m.add_class::<StudType>()?;
+    m.add_class::<StudType>()?;    
+    m.add_class::<PrimitiveResolution>()?;
     m.add_class::<PointInstances>()?;
 
     m.add_function(wrap_pyfunction!(load_file, m)?)?;

@@ -2,7 +2,6 @@ import bpy
 import numpy as np
 import mathutils
 import math
-import bmesh
 
 # TODO: Create a pyi type stub file?
 from . import ldr_tools_py
@@ -15,23 +14,8 @@ from .material import get_material
 
 
 def import_ldraw(operator: bpy.types.Operator, filepath: str, ldraw_path: str,
-                 additional_paths: list[str], instance_type: str, stud_type: str, add_gap_between_parts: bool):
+                 additional_paths: list[str], instance_type: str, settings: GeometrySettings):
     color_by_code = ldr_tools_py.load_color_table(ldraw_path)
-
-    settings = GeometrySettings()
-    settings.triangulate = False
-    settings.add_gap_between_parts = add_gap_between_parts
-    if stud_type == 'Disabled':
-        settings.stud_type = ldr_tools_py.StudType.Disabled
-    elif stud_type == 'Normal':
-        settings.stud_type = ldr_tools_py.StudType.Normal
-    elif stud_type == 'Logo4':
-        settings.stud_type = ldr_tools_py.StudType.Logo4
-    elif stud_type == 'HighContrast':
-        settings.stud_type = ldr_tools_py.StudType.HighContrast
-    settings.scene_scale = 1.0
-    # Required for calculated normals.
-    settings.weld_vertices = True
 
     # TODO: Add an option to make the lowest point have a height of 0 using obj.dimensions?
     if instance_type == 'GeometryNodes':
