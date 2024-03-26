@@ -3,7 +3,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## unreleased
+## 0.4.0 - 2024-03-26
 ### Added
 * Added an option to adjust the part primitive resolution.
 * Added an option to select the stud type.
@@ -11,14 +11,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 * Changed supported Blender version to 4.1 or later.
 
-### 0.3.0 - 2023-12-03
+## 0.3.0 - 2023-12-03
 ### Added
 * Added an option to enable or disable the gap between parts when importing.
 
 ### Changed
 * Changed supported Blender version to 4.0.
 
-### 0.2.0 - 2023-08-10
+## 0.2.0 - 2023-08-10
 ### Added
 * Added `models/colors.ldr` for testing all current LDraw colors.
 * Added `models/slopes.ldr` for testing grainy slope materials.
