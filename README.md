@@ -3,7 +3,7 @@
 ![falcon](https://github.com/ScanMountGoat/ldr_tools_blender/assets/23301691/95e8fd91-9509-4fef-af90-9597e1c0a43d)
 > Cycles render of [10179-1 Millennium Falcon UCS (LDraw OMR)](https://omr.ldraw.org/files/347)
 
-An addon for importing LDraw files into Blender 4.0 or later. Check out [discussions](https://github.com/ScanMountGoat/ldr_tools_blender/discussions) for reading announcements, asking questions, or suggesting new features. Report bugs or request new features in [issues](https://github.com/ScanMountGoat/ldr_tools_blender/issues). Download the latest version from [releases](https://github.com/ScanMountGoat/ldr_tools_blender/releases).
+An addon for importing LDraw files into Blender 4.0. Check out [discussions](https://github.com/ScanMountGoat/ldr_tools_blender/discussions) for reading announcements, asking questions, or suggesting new features. Report bugs or request new features in [issues](https://github.com/ScanMountGoat/ldr_tools_blender/issues). Download the latest version from [releases](https://github.com/ScanMountGoat/ldr_tools_blender/releases).
 
 ## Features
 The goal of this project is to provided a reliable and performant way to import digital LEGO models into modern versions of Blender for rendering. This includes importing and rendering [Bricklink Studio](https://www.bricklink.com/v3/studio/download.page) models or models built with [LDraw editing programs](https://www.ldraw.org/downloads-2/third-party-software.html). Studio models should be exported as LDraw under File > Export As in Studio before importing into Blender.
@@ -24,8 +24,7 @@ Upgrading the addon requires uninstalling the addon, downloading the latest vers
 
 ## Performance
 This project is built from the ground up with performance in mind. The ldr_tools_blender addon can easily handle very large models with hundreds of thousands of parts. The addon will always instance geometry by part name and color to reduce memory usage and improve import times. Memory usage will be similar for both methods.
-
-Blender itself does not scale well with the number of objects created in the scene. For large scenes with more than 10000 parts, it's recommended to use "Geometry Nodes" as the instance type before importing. Geometry nodes make the individual objects harder to edit but avoids most of the Blender overhead for scenes with high object counts.
+Blender itself does not scale well with the number of objects created in the scene. For large scenes with more than 10000 parts, it's recommended to use "Geometry Nodes" as the instance type before importing. Geometry nodes make the individual objects harder to edit but avoids most of the Blender overhead for scenes with high object counts. For very large scenes that don't need to be rendered up close, setting the stud type to "Normal" to remove stud logos can greatly reduce memory usage and improve import times.
 
 ## Projects
 ### ldr_tools
