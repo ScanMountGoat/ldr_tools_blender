@@ -124,10 +124,6 @@ def get_material(color_by_code: dict[int, LDrawColor], code: int, is_slope: bool
                     roughness_node.inputs['Min'].default_value = 0.01
                     roughness_node.inputs['Max'].default_value = 0.15
 
-                # Disable shadow casting for transparent materials.
-                # This avoids making transparent parts too dark.
-                make_shadows_transparent(material, bsdf)
-
             # Procedural normals.
             normals = create_node_group(
                 material, 'ldr_tools_normal', create_normals_node_group)
@@ -201,24 +197,6 @@ def create_node_group(material: bpy.types.Material, name: str, create_group: Cal
     node = material.node_tree.nodes.new(type='ShaderNodeGroup')
     node.node_tree = node_tree
     return node
-
-
-def make_shadows_transparent(material, bsdf):
-    mix_shader = material.node_tree.nodes.new('ShaderNodeMixShader')
-    light_path = material.node_tree.nodes.new('ShaderNodeLightPath')
-    transparent_bsdf = material.node_tree.nodes.new(
-        'ShaderNodeBsdfTransparent')
-    output_node = material.node_tree.nodes.get('Material Output')
-
-    material.node_tree.links.new(
-        light_path.outputs['Is Shadow Ray'], mix_shader.inputs['Fac'])
-    material.node_tree.links.new(
-        bsdf.outputs['BSDF'], mix_shader.inputs[1])
-    material.node_tree.links.new(
-        transparent_bsdf.outputs['BSDF'], mix_shader.inputs[2])
-
-    material.node_tree.links.new(
-        mix_shader.outputs['Shader'], output_node.inputs['Surface'])
 
 
 def create_roughness_node_group(name: str) -> bpy.types.NodeTree:

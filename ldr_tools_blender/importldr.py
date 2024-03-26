@@ -287,7 +287,7 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
         # TODO: Just do this in ldr_tools and set custom normals?
         # mesh.use_auto_smooth = True
         # mesh.auto_smooth_angle = math.radians(89.0)
-        # mesh.polygons.foreach_set('use_smooth', [True] * len(mesh.polygons))
+        mesh.polygons.foreach_set('use_smooth', [True] * len(mesh.polygons))
 
         # Add attributes needed to render grainy slopes properly.
         if geometry.has_grainy_slopes:
