@@ -11,17 +11,21 @@ bl_info = {
     "warning": "",
     "doc_url": "https://github.com/ScanMountGoat/ldr_tools_blender/wiki",
     "tracker_url": "https://github.com/ScanMountGoat/ldr_tools_blender/issues",
-    "category": "Import-Export"
+    "category": "Import-Export",
 }
 
 
 def menuImport(self, context):
-    self.layout.operator(operator.ImportOperator.bl_idname,
-                         text="LDraw (.mpd/.ldr/.dat)")
+    self.layout.operator(
+        operator.ImportOperator.bl_idname, text="LDraw (.mpd/.ldr/.dat)"
+    )
 
 
-classes = [operator.ImportOperator,
-           operator.LIST_OT_NewItem, operator.LIST_OT_DeleteItem]
+classes = [
+    operator.ImportOperator,
+    operator.LIST_OT_NewItem,
+    operator.LIST_OT_DeleteItem,
+]
 
 
 def register():
@@ -29,7 +33,8 @@ def register():
         bpy.utils.register_class(cls)
 
     bpy.types.Scene.ldr_path_to_add = bpy.props.StringProperty(
-        name="", description="Additional LDraw parts path")
+        name="", description="Additional LDraw parts path"
+    )
 
     bpy.types.TOPBAR_MT_file_import.append(menuImport)
 
