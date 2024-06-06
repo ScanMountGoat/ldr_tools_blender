@@ -21,7 +21,7 @@ version to avoid any issues when building.
 ### Building the Libraries
 Building the library code is as simple as running `cargo build --release` from terminal or command line. Don't forget the `--release` since debug builds in Rust will not perform well. Note that the Python extension module in the `target/` directory will only work for the version of Python used when building. 
 
-When building for Blender, the Python interpreter used when building must match the version used by Blender. The easiest way to do this is to activate a virtual environment with the appropriate verson or use the Python bundled with Blender itself. See the [PyO3 guide](https://pyo3.rs) for details. The Python path should be set appropriately depending on the version and location of Blender. For MacOS and Blender 3.6, the build command would be `PYO3_PYTHON="/Applications/Blender.app/Contents/Resources/3.6/python/bin/python3.10" cargo build --release`. 
+When building for Blender, the Python interpreter used when building must match the version used by Blender. The easiest way to do this is to activate a virtual environment with the appropriate verson or use the Python bundled with Blender itself. See the [PyO3 guide](https://pyo3.rs) for details.
 
 ### Building the Addon
 The Blender addon uses the Rust code to simplify the addon code and take advantage of the performance and reliability of Rust. A precompiled binary is not provided for ldr_tools_py, so it will need to be built before installing the addon in Blender. Follow the instructions to build the libaries. This will generate a file like `target/release/ldr_tools_py.dll` or `target/release/libldr_tools_py.dylib`. Change the extension from `.dll` to `.pyd` or `.dylib` to `.so` depending on the platform. The `lib` prefix should also be removed from the filename. This compiled file can be imported like any other Python module. If the import fails, check that the file is in the correct folder, has the right extension, and was compiled using the correct Python version.
@@ -45,7 +45,7 @@ Sample scripts for different operating systems are provided below. Note that the
 ### Windows
 ```bat
 @REM reload.bat
-set OUTPUT=%appdata%\Blender Foundation\Blender\4.0\scripts\addons\ldr_tools_blender
+set OUTPUT=%appdata%\Blender Foundation\Blender\4.1\scripts\addons\ldr_tools_blender
 xcopy /E/I/Y "ldr_tools_blender" "%OUTPUT%" 
 copy /y "target\release\ldr_tools_py.dll" "%OUTPUT%\ldr_tools_py.pyd"
 ```
@@ -53,7 +53,7 @@ copy /y "target\release\ldr_tools_py.dll" "%OUTPUT%\ldr_tools_py.pyd"
 ### MacOS
 ```sh
 # reload.sh
-OUTPUT="$HOME/library/Application Support/Blender/4.0/scripts/addons/ldr_tools_blender/"
+OUTPUT="$HOME/library/Application Support/Blender/4.1/scripts/addons/ldr_tools_blender/"
 cp -a ldr_tools_blender/. "$OUTPUT"
 cp target/release/libldr_tools_py.dylib "$OUTPUT/ldr_tools_py.so"
 ```
