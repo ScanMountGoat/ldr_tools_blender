@@ -15,7 +15,7 @@ Blender's docs describe the Python API for the current version with all the type
 
 ## Building
 ### Prerequisites
-This project uses both Python and Rust code.The latest version of the Rust toolchain can be installed from https://www.rust-lang.org/. The Python version must match Blender's Python version for the ldr_tools_py module to import properly. This is currently Python 3.10 for Blender 3.3 or later. It's recommended to create and activate virtual environment with the appropriate Python 
+This project uses both Python and Rust code.The latest version of the Rust toolchain can be installed from https://www.rust-lang.org/. The Python version must match Blender's Python version for the ldr_tools_py module to import properly. It's recommended to create and activate virtual environment with the appropriate Python 
 version to avoid any issues when building.
 
 ### Building the Libraries
