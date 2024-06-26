@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## unreleased
+### Fixed
+* Fixed an issue where importing would fail if the UI language was not set to English.
+
 ## 0.4.0 - 2024-03-26
 ### Added
 * Added an option to adjust the part primitive resolution.

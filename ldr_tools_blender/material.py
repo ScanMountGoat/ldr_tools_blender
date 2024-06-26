@@ -32,10 +32,19 @@ def get_material(
         material = bpy.data.materials.new(name)
         material.use_nodes = True
 
+        # Create the nodes from scratch to ensure the required nodes are present.
+        # This avoids hard coding names like "Material Output" that depend on the UI language.
+        material.node_tree.nodes.clear()
+
+        nodes = material.node_tree.nodes
+        links = material.node_tree.links
+
+        bsdf = nodes.new("ShaderNodeBsdfPrincipled")
+        output_node = nodes.new("ShaderNodeOutputMaterial")
+        links.new(bsdf.outputs["BSDF"], output_node.inputs["Surface"])
+
         # TODO: Error if color is missing?
         if ldraw_color is not None:
-            bsdf = material.node_tree.nodes["Principled BSDF"]
-
             # Alpha is specified using transmission instead.
             r, g, b, a = ldraw_color.rgba_linear
 
@@ -67,9 +76,7 @@ def get_material(
                 material, "ldr_tools_roughness", create_roughness_node_group
             )
 
-            material.node_tree.links.new(
-                roughness_node.outputs["Roughness"], bsdf.inputs["Roughness"]
-            )
+            links.new(roughness_node.outputs["Roughness"], bsdf.inputs["Roughness"])
 
             # Normal opaque materials.
             roughness_node.inputs["Min"].default_value = 0.075
@@ -105,18 +112,14 @@ def get_material(
                 speckle_node.inputs["Max"].default_value = 0.6
 
                 # Blend between the two speckle colors.
-                mix_rgb = material.node_tree.nodes.new("ShaderNodeMixRGB")
+                mix_rgb = nodes.new("ShaderNodeMixRGB")
 
-                material.node_tree.links.new(
-                    speckle_node.outputs["Fac"], mix_rgb.inputs["Fac"]
-                )
+                links.new(speckle_node.outputs["Fac"], mix_rgb.inputs["Fac"])
                 mix_rgb.inputs[1].default_value = [r, g, b, 1.0]
                 speckle_r, speckle_g, speckle_b, _ = ldraw_color.speckle_rgba_linear
                 mix_rgb.inputs[2].default_value = [speckle_r, speckle_g, speckle_b, 1.0]
 
-                material.node_tree.links.new(
-                    mix_rgb.outputs["Color"], bsdf.inputs["Base Color"]
-                )
+                links.new(mix_rgb.outputs["Color"], bsdf.inputs["Base Color"])
 
             if is_transmissive:
                 bsdf.inputs["Transmission Weight"].default_value = 1.0
@@ -138,69 +141,49 @@ def get_material(
             if is_slope:
                 # Apply grainy normals to faces that aren't vertical or horizontal.
                 # Use non transformed normals to not consider object rotation.
-                ldr_normals = material.node_tree.nodes.new("ShaderNodeAttribute")
+                ldr_normals = nodes.new("ShaderNodeAttribute")
                 ldr_normals.attribute_name = "ldr_normals"
 
-                separate = material.node_tree.nodes.new("ShaderNodeSeparateXYZ")
-                material.node_tree.links.new(
-                    ldr_normals.outputs["Vector"], separate.inputs["Vector"]
-                )
+                separate = nodes.new("ShaderNodeSeparateXYZ")
+                links.new(ldr_normals.outputs["Vector"], separate.inputs["Vector"])
 
                 # Use normal.y to check if the face is horizontal (-1.0 or 1.0) or vertical (0.0).
                 # Any values in between are considered "slopes" and use grainy normals.
-                absolute = material.node_tree.nodes.new("ShaderNodeMath")
+                absolute = nodes.new("ShaderNodeMath")
                 absolute.operation = "ABSOLUTE"
-                material.node_tree.links.new(
-                    separate.outputs["Y"], absolute.inputs["Value"]
-                )
+                links.new(separate.outputs["Y"], absolute.inputs["Value"])
 
-                compare = material.node_tree.nodes.new("ShaderNodeMath")
+                compare = nodes.new("ShaderNodeMath")
                 compare.operation = "COMPARE"
                 compare.inputs[1].default_value = 0.5
                 compare.inputs[2].default_value = 0.45
-                material.node_tree.links.new(
-                    absolute.outputs["Value"], compare.inputs["Value"]
-                )
+                links.new(absolute.outputs["Value"], compare.inputs["Value"])
 
                 slope_normals = create_node_group(
                     material, "ldr_tools_slope_normal", create_slope_normals_node_group
                 )
 
-                is_stud = material.node_tree.nodes.new("ShaderNodeAttribute")
+                is_stud = nodes.new("ShaderNodeAttribute")
                 is_stud.attribute_name = "ldr_is_stud"
 
                 # Don't apply the grainy slopes to any faces marked as studs.
                 # We use an attribute here to avoid per face material assignment.
-                subtract_studs = material.node_tree.nodes.new("ShaderNodeMath")
+                subtract_studs = nodes.new("ShaderNodeMath")
                 subtract_studs.operation = "SUBTRACT"
-                material.node_tree.links.new(
-                    compare.outputs["Value"], subtract_studs.inputs[0]
-                )
-                material.node_tree.links.new(
-                    is_stud.outputs[2], subtract_studs.inputs[1]
-                )
+                links.new(compare.outputs["Value"], subtract_studs.inputs[0])
+                links.new(is_stud.outputs[2], subtract_studs.inputs[1])
 
                 # Choose between grainy and smooth normals depending on the face.
-                mix_normals = material.node_tree.nodes.new("ShaderNodeMix")
+                mix_normals = nodes.new("ShaderNodeMix")
                 mix_normals.data_type = "VECTOR"
-                material.node_tree.links.new(
-                    subtract_studs.outputs["Value"], mix_normals.inputs["Factor"]
-                )
-                material.node_tree.links.new(
-                    normals.outputs["Normal"], mix_normals.inputs[4]
-                )
-                material.node_tree.links.new(
-                    slope_normals.outputs["Normal"], mix_normals.inputs[5]
-                )
+                links.new(subtract_studs.outputs["Value"], mix_normals.inputs["Factor"])
+                links.new(normals.outputs["Normal"], mix_normals.inputs[4])
+                links.new(slope_normals.outputs["Normal"], mix_normals.inputs[5])
 
                 # The second output is the vector output.
-                material.node_tree.links.new(
-                    mix_normals.outputs[1], bsdf.inputs["Normal"]
-                )
+                links.new(mix_normals.outputs[1], bsdf.inputs["Normal"])
             else:
-                material.node_tree.links.new(
-                    normals.outputs["Normal"], bsdf.inputs["Normal"]
-                )
+                links.new(normals.outputs["Normal"], bsdf.inputs["Normal"])
 
     return material
 
