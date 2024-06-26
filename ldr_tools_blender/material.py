@@ -40,7 +40,9 @@ def get_material(
         links = material.node_tree.links
 
         bsdf = nodes.new("ShaderNodeBsdfPrincipled")
+        bsdf.location = (-240, 462)
         output_node = nodes.new("ShaderNodeOutputMaterial")
+        output_node.location = (60, 462)
         links.new(bsdf.outputs["BSDF"], output_node.inputs["Surface"])
 
         # TODO: Error if color is missing?
@@ -75,6 +77,7 @@ def get_material(
             roughness_node = create_node_group(
                 material, "ldr_tools_roughness", create_roughness_node_group
             )
+            roughness_node.location = (-430, 500)
 
             links.new(roughness_node.outputs["Roughness"], bsdf.inputs["Roughness"])
 
@@ -137,45 +140,54 @@ def get_material(
             normals = create_node_group(
                 material, "ldr_tools_normal", create_normals_node_group
             )
+            normals.location = (-620, 202)
 
             if is_slope:
                 # Apply grainy normals to faces that aren't vertical or horizontal.
                 # Use non transformed normals to not consider object rotation.
                 ldr_normals = nodes.new("ShaderNodeAttribute")
                 ldr_normals.attribute_name = "ldr_normals"
+                ldr_normals.location = (-1600, 400)
 
                 separate = nodes.new("ShaderNodeSeparateXYZ")
                 links.new(ldr_normals.outputs["Vector"], separate.inputs["Vector"])
+                separate.location = (-1400, 400)
 
                 # Use normal.y to check if the face is horizontal (-1.0 or 1.0) or vertical (0.0).
                 # Any values in between are considered "slopes" and use grainy normals.
                 absolute = nodes.new("ShaderNodeMath")
                 absolute.operation = "ABSOLUTE"
+                absolute.location = (-1200, 400)
                 links.new(separate.outputs["Y"], absolute.inputs["Value"])
 
                 compare = nodes.new("ShaderNodeMath")
                 compare.operation = "COMPARE"
                 compare.inputs[1].default_value = 0.5
                 compare.inputs[2].default_value = 0.45
+                compare.location = (-1000, 400)
                 links.new(absolute.outputs["Value"], compare.inputs["Value"])
 
                 slope_normals = create_node_group(
                     material, "ldr_tools_slope_normal", create_slope_normals_node_group
                 )
+                slope_normals.location = (-630, 100)
 
                 is_stud = nodes.new("ShaderNodeAttribute")
                 is_stud.attribute_name = "ldr_is_stud"
+                is_stud.location = (-1000, 200)
 
                 # Don't apply the grainy slopes to any faces marked as studs.
                 # We use an attribute here to avoid per face material assignment.
                 subtract_studs = nodes.new("ShaderNodeMath")
                 subtract_studs.operation = "SUBTRACT"
+                subtract_studs.location = (-800, 400)
                 links.new(compare.outputs["Value"], subtract_studs.inputs[0])
                 links.new(is_stud.outputs[2], subtract_studs.inputs[1])
 
                 # Choose between grainy and smooth normals depending on the face.
                 mix_normals = nodes.new("ShaderNodeMix")
                 mix_normals.data_type = "VECTOR"
+                mix_normals.location = (-430, 330)
                 links.new(subtract_studs.outputs["Value"], mix_normals.inputs["Factor"])
                 links.new(normals.outputs["Normal"], mix_normals.inputs[4])
                 links.new(slope_normals.outputs["Normal"], mix_normals.inputs[5])
