@@ -3,7 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## unreleased
+## 0.4.1 - 2024-08-05
+### Changed
+* Adjusted node positions of generated materials.
+
 ### Fixed
 * Fixed an issue where importing would fail if the UI language was not set to English.
 
