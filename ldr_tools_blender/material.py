@@ -109,6 +109,7 @@ def get_material(
                 speckle_node = create_node_group(
                     material, "ldr_tools_speckle", create_speckle_node_group
                 )
+                speckle_node.location = (-620, 700)
 
                 # Adjust the thresholds to control speckle size and density.
                 speckle_node.inputs["Min"].default_value = 0.5
@@ -116,6 +117,7 @@ def get_material(
 
                 # Blend between the two speckle colors.
                 mix_rgb = nodes.new("ShaderNodeMixRGB")
+                mix_rgb.location = (-430, 700)
 
                 links.new(speckle_node.outputs["Fac"], mix_rgb.inputs["Fac"])
                 mix_rgb.inputs[1].default_value = [r, g, b, 1.0]
@@ -225,6 +227,7 @@ def create_roughness_node_group(name: str) -> bpy.types.NodeTree:
     inner_links = node_group_node_tree.links
 
     input_node = inner_nodes.new("NodeGroupInput")
+    input_node.location = (-480, -300)
     node_group_node_tree.interface.new_socket(
         in_out="INPUT", socket_type="NodeSocketFloat", name="Min"
     )
@@ -234,6 +237,7 @@ def create_roughness_node_group(name: str) -> bpy.types.NodeTree:
 
     # TODO: Create frame called "smudges" or at least name the nodes.
     noise = inner_nodes.new("ShaderNodeTexNoise")
+    noise.location = (-480, 0)
     noise.inputs["Scale"].default_value = 4.0
     noise.inputs["Detail"].default_value = 2.0
     noise.inputs["Roughness"].default_value = 0.5
@@ -241,11 +245,13 @@ def create_roughness_node_group(name: str) -> bpy.types.NodeTree:
 
     # Easier to configure than a color ramp since the input is 1D.
     map_range = inner_nodes.new("ShaderNodeMapRange")
+    map_range.location = (-240, 0)
     inner_links.new(noise.outputs["Fac"], map_range.inputs["Value"])
     inner_links.new(input_node.outputs["Min"], map_range.inputs["To Min"])
     inner_links.new(input_node.outputs["Max"], map_range.inputs["To Max"])
 
     output_node = inner_nodes.new("NodeGroupOutput")
+    output_node.location = (0, 0)
 
     inner_links.new(map_range.outputs["Result"], output_node.inputs["Roughness"])
 
@@ -263,6 +269,7 @@ def create_speckle_node_group(name: str) -> bpy.types.NodeTree:
     inner_links = node_group_node_tree.links
 
     input_node = inner_nodes.new("NodeGroupInput")
+    input_node.location = (-480, -300)
     node_group_node_tree.interface.new_socket(
         in_out="INPUT", socket_type="NodeSocketFloat", name="Min"
     )
@@ -271,6 +278,7 @@ def create_speckle_node_group(name: str) -> bpy.types.NodeTree:
     )
 
     noise = inner_nodes.new("ShaderNodeTexNoise")
+    noise.location = (-480, 0)
     noise.inputs["Scale"].default_value = 15.0
     noise.inputs["Detail"].default_value = 6.0
     noise.inputs["Roughness"].default_value = 1.0
@@ -278,11 +286,13 @@ def create_speckle_node_group(name: str) -> bpy.types.NodeTree:
 
     # Easier to configure than a color ramp since the input is 1D.
     map_range = inner_nodes.new("ShaderNodeMapRange")
+    map_range.location = (-240, 0)
     inner_links.new(noise.outputs["Fac"], map_range.inputs["Value"])
     inner_links.new(input_node.outputs["Min"], map_range.inputs["From Min"])
     inner_links.new(input_node.outputs["Max"], map_range.inputs["From Max"])
 
     output_node = inner_nodes.new("NodeGroupOutput")
+    output_node.location = (0, 0)
 
     inner_links.new(map_range.outputs["Result"], output_node.inputs["Fac"])
 
@@ -300,24 +310,28 @@ def create_normals_node_group(name: str) -> bpy.types.NodeTree:
     links = node_group_node_tree.links
 
     output_node = nodes.new("NodeGroupOutput")
+    output_node.location = (0, 0)
 
     bevel = nodes.new("ShaderNodeBevel")
+    bevel.location = (-480, -300)
     bevel.inputs["Radius"].default_value = 0.01
 
-    # TODO: Set node positions.
     # Faces of bricks are never perfectly flat.
     # Create a very low frequency noise to break up highlights
     noise = nodes.new("ShaderNodeTexNoise")
+    noise.location = (-480, 0)
     noise.inputs["Scale"].default_value = 0.01  # TODO: scene scale?
     noise.inputs["Detail"].default_value = 1.0
     noise.inputs["Roughness"].default_value = 1.0
     noise.inputs["Distortion"].default_value = 0.0
 
     bump = nodes.new("ShaderNodeBump")
+    bump.location = (-240, 0)
     bump.inputs["Strength"].default_value = 1.0
     bump.inputs["Distance"].default_value = 0.01
 
     tex_coord = nodes.new("ShaderNodeTexCoord")
+    tex_coord.location = (-720, 0)
 
     links.new(bevel.outputs["Normal"], bump.inputs["Normal"])
 
@@ -339,22 +353,26 @@ def create_slope_normals_node_group(name: str) -> bpy.types.NodeTree:
     links = node_group_node_tree.links
 
     output_node = nodes.new("NodeGroupOutput")
+    output_node.location = (0, 0)
 
     bevel = nodes.new("ShaderNodeBevel")
+    bevel.location = (-480, -300)
     bevel.inputs["Radius"].default_value = 0.01
 
-    # TODO: Set node positions.
     noise = nodes.new("ShaderNodeTexNoise")
+    noise.location = (-480, 0)
     noise.inputs["Scale"].default_value = 125.0
     noise.inputs["Detail"].default_value = 3.0
     noise.inputs["Roughness"].default_value = 0.5
     noise.inputs["Lacunarity"].default_value = 2.0
 
     bump = nodes.new("ShaderNodeBump")
+    bump.location = (-240, 0)
     bump.inputs["Strength"].default_value = 0.5
     bump.inputs["Distance"].default_value = 0.005
 
     tex_coord = nodes.new("ShaderNodeTexCoord")
+    tex_coord.location = (-720, 0)
 
     links.new(bevel.outputs["Normal"], bump.inputs["Normal"])
 
