@@ -3,7 +3,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## unreleased
+## 0.4.2 - 2024-08-20
 ### Fixed
 * Fixed an issue where paths relative to the current file would not resolve properly.
 * Fixed an issue where file loading did not correctly ignore case of subfiles.
