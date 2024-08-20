@@ -275,32 +275,32 @@ fn load_node<'a>(
     settings: &GeometrySettings,
 ) -> LDrawNode {
     let mut children = Vec::new();
-    let mut geometry = None;
+    let mut geometry_name = None;
 
     if is_part(source_file, filename) || has_geometry(source_file) {
         // Create geometry if the node is a part.
         // Use the special color code to reuse identical parts in different colors.
         geometry_descriptors
-            .entry(filename.to_string())
+            .entry(filename.to_lowercase())
             .or_insert_with(|| GeometryInitDescriptor {
                 source_file,
                 current_color: CURRENT_COLOR,
                 recursive: true,
             });
 
-        geometry = Some(filename.to_string());
+        geometry_name = Some(filename.to_lowercase());
     } else if has_geometry(source_file) {
         // Just add geometry for this node.
         // Use the current color at this node since this geometry might not be referenced elsewhere.
         geometry_descriptors
-            .entry(filename.to_string())
+            .entry(filename.to_lowercase())
             .or_insert_with(|| GeometryInitDescriptor {
                 source_file,
                 current_color,
                 recursive: false,
             });
 
-        geometry = Some(filename.to_string());
+        geometry_name = Some(filename.to_lowercase());
     } else {
         for cmd in &source_file.cmds {
             if let Command::SubFileRef(sfr_cmd) = cmd {
@@ -332,7 +332,7 @@ fn load_node<'a>(
     LDrawNode {
         name: filename.to_string(),
         transform,
-        geometry_name: geometry,
+        geometry_name,
         current_color,
         children,
     }
@@ -486,7 +486,7 @@ fn load_node_instanced<'a>(
         // Create geometry if the node is a part.
         // Use the special color code to reuse identical parts in different colors.
         geometry_descriptors
-            .entry(filename.to_string())
+            .entry(filename.to_lowercase())
             .or_insert_with(|| GeometryInitDescriptor {
                 source_file,
                 current_color: CURRENT_COLOR,
@@ -496,14 +496,14 @@ fn load_node_instanced<'a>(
         // Add another instance of the current geometry.
         // Also key by the color in case a part appears in multiple colors.
         geometry_world_transforms
-            .entry((filename.to_string(), current_color))
+            .entry((filename.to_lowercase(), current_color))
             .or_default()
             .push(scaled_transform(world_transform, settings.scene_scale));
     } else if has_geometry(source_file) {
         // Just add geometry for this node.
         // Use the current color at this node since this geometry might not be referenced elsewhere.
         geometry_descriptors
-            .entry(filename.to_string())
+            .entry(filename.to_lowercase())
             .or_insert_with(|| GeometryInitDescriptor {
                 source_file,
                 current_color,
@@ -513,7 +513,7 @@ fn load_node_instanced<'a>(
         // Add another instance of the current geometry.
         // Also key by the color in case a part appears in multiple colors.
         geometry_world_transforms
-            .entry((filename.to_string(), current_color))
+            .entry((filename.to_lowercase(), current_color))
             .or_default()
             .push(scaled_transform(world_transform, settings.scene_scale));
     }
@@ -547,7 +547,7 @@ fn load_node_instanced<'a>(
 
 fn is_part(_source_file: &weldr::SourceFile, filename: &str) -> bool {
     // TODO: Check the part type rather than the extension.
-    filename.ends_with(".dat")
+    filename.to_lowercase().ends_with(".dat")
 }
 
 fn has_geometry(source_file: &weldr::SourceFile) -> bool {

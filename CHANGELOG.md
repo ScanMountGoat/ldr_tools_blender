@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## unreleased
 ### Fixed
 * Fixed an issue where paths relative to the current file would not resolve properly.
+* Fixed an issue where file loading did not correctly ignore case of subfiles.
 
 ## 0.4.1 - 2024-08-05
 ### Changed
