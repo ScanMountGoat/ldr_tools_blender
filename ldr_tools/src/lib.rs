@@ -235,11 +235,16 @@ fn parse_file(
     additional_paths: &[&str],
     settings: &GeometrySettings,
 ) -> (weldr::SourceMap, String) {
-    let resolver = DiskResolver::new_from_library(
+    let mut resolver = DiskResolver::new_from_library(
         ldraw_path,
         additional_paths.iter().cloned(),
         settings.primitive_resolution,
     );
+    // Resolve paths relative to the current file.
+    if let Some(parent) = Path::new(path).parent() {
+        resolver.base_paths.insert(0, parent.to_owned());
+    }
+
     let mut source_map = weldr::SourceMap::new();
     ensure_studs(settings, &resolver, &mut source_map);
 

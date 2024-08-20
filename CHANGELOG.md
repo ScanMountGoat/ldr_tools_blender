@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## unreleased
+### Fixed
+* Fixed an issue where paths relative to the current file would not resolve properly.
+
 ## 0.4.1 - 2024-08-05
 ### Changed
 * Adjusted node positions of generated materials.
