@@ -1,4 +1,5 @@
-use glam::{Mat4, Vec3};
+use base64::prelude::*;
+use glam::{Mat4, Vec2, Vec3};
 use rstar::{primitives::GeomWithData, RTree};
 use weldr::Command;
 
@@ -23,6 +24,8 @@ pub struct LDrawGeometry {
     /// Some applications may want to apply a separate texture to faces
     /// based on an angle threshold.
     pub has_grainy_slopes: bool,
+    pub textures: Vec<Vec<u8>>,
+    pub texmaps: Vec<Option<TextureMap>>,
 }
 
 /// Settings that inherit or accumulate when recursing into subfiles.
@@ -32,6 +35,67 @@ struct GeometryContext {
     inverted: bool,
     is_stud: bool,
     is_slope: bool,
+    studio_textures: Vec<PendingStudioTexture>,
+}
+
+#[derive(Clone)]
+struct PendingStudioTexture {
+    #[allow(dead_code)]
+    index: usize,
+    #[allow(dead_code)]
+    transform: Option<Mat4>,
+    path: Vec<i32>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct TextureMap {
+    pub texture_index: usize,
+    pub uvs: Vec<Vec2>,
+}
+
+impl PendingStudioTexture {
+    // TODO: the images probably need names based on their file of origin
+    fn parse(line: &str, path: &[i32], textures: &mut Vec<Vec<u8>>) -> Option<Self> {
+        let words = line.split_whitespace().collect::<Vec<_>>();
+        if words.get(0) != Some(&"PE_TEX_INFO") {
+            return None;
+        }
+
+        let image: &str;
+        let mut transform = None::<Mat4>;
+        if let Some((cells, [img])) = words[1..].split_at_checked(16) {
+            let mut iter = cells.iter().filter_map(|c| c.parse::<f32>().ok());
+            let (x, y, z) = (iter.next()?, iter.next()?, -iter.next()?);
+            let (a, b, c) = (iter.next()?, iter.next()?, -iter.next()?);
+            let (d, e, f) = (iter.next()?, iter.next()?, -iter.next()?);
+            let (g, h, i) = (-iter.next()?, -iter.next()?, iter.next()?);
+
+            transform = Some(Mat4::from_cols_array_2d(&[
+                [a, d, g, 0.0],
+                [b, e, h, 0.0],
+                [c, f, i, 0.0],
+                [x, y, z, 1.0],
+            ]));
+
+            // TODO: flip the Z axis
+
+            image = img;
+        } else if words.len() == 2 {
+            image = words[1];
+        } else {
+            return None;
+        }
+
+        let image = BASE64_STANDARD.decode(image).ok()?;
+        let index = textures.len();
+        textures.push(image);
+        let path = path.to_owned();
+        Some(Self {
+            index,
+            transform,
+            path,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,6 +160,8 @@ pub fn create_geometry(
         is_face_stud: Vec::new(),
         edge_line_indices: Vec::new(),
         has_grainy_slopes: is_slope_piece(name),
+        textures: vec![],
+        texmaps: vec![],
     };
 
     // Start with inverted set to false since parts should never be inverted.
@@ -106,6 +172,7 @@ pub fn create_geometry(
         inverted: false,
         is_stud: is_stud(name),
         is_slope: is_slope_piece(name),
+        studio_textures: vec![],
     };
 
     let mut vertex_map = VertexMap::new();
@@ -211,6 +278,15 @@ fn edge_indices(edges: &[[Vec3; 2]], vertex_map: &VertexMap) -> Vec<[u32; 2]> {
     edge_indices
 }
 
+fn parse_tex_path(line: &str) -> Option<Vec<i32>> {
+    let body = line.strip_prefix("PE_TEX_PATH ")?;
+    let mut path = vec![];
+    for word in body.split_whitespace() {
+        path.push(word.parse().ok()?);
+    }
+    Some(path)
+}
+
 // TODO: simplify the parameters on these functions.
 fn append_geometry(
     geometry: &mut LDrawGeometry,
@@ -218,7 +294,7 @@ fn append_geometry(
     vertex_map: &mut VertexMap,
     source_file: &weldr::SourceFile,
     source_map: &weldr::SourceMap,
-    ctx: GeometryContext,
+    mut ctx: GeometryContext,
     recursive: bool,
     settings: &GeometrySettings,
 ) {
@@ -236,16 +312,44 @@ fn append_geometry(
 
     let mut invert_next = false;
 
+    let mut tex_path_index = 0;
+    let mut current_tex_path = vec![];
+
+    let (mut active_textures, pending_textures) = ctx
+        .studio_textures
+        .drain(..)
+        .partition(|t| t.path.is_empty());
+
+    ctx.studio_textures = pending_textures;
+
     for cmd in &source_file.cmds {
         match cmd {
             Command::Comment(c) => {
                 // TODO: Add proper parsing to weldr.
-                for word in c.text.split_whitespace() {
-                    match word {
-                        "CCW" => current_winding = Winding::Ccw,
-                        "CW" => current_winding = Winding::Cw,
-                        "INVERTNEXT" => invert_next = true,
-                        _ => (),
+                if c.text.starts_with("PE_TEX_PATH ") {
+                    if let Some(path) = parse_tex_path(&c.text) {
+                        current_tex_path = path;
+                    }
+                } else if c.text.starts_with("PE_TEX_INFO ") {
+                    if let Some(tex_info) = PendingStudioTexture::parse(
+                        &c.text,
+                        &current_tex_path,
+                        &mut geometry.textures,
+                    ) {
+                        if matches!(*tex_info.path, [] | [-1]) {
+                            active_textures.push(tex_info);
+                        } else {
+                            ctx.studio_textures.push(tex_info);
+                        }
+                    }
+                } else {
+                    for word in c.text.split_whitespace() {
+                        match word {
+                            "CCW" => current_winding = Winding::Ccw,
+                            "CW" => current_winding = Winding::Cw,
+                            "INVERTNEXT" => invert_next = true,
+                            _ => (),
+                        }
                     }
                 }
             }
@@ -327,6 +431,15 @@ fn append_geometry(
                             replace_color(subfile_cmd.color, ctx.current_color)
                         };
 
+                        let mut child_textures = vec![];
+                        for texture in &ctx.studio_textures {
+                            if texture.path.get(0) == Some(&tex_path_index) {
+                                let mut texture = texture.clone();
+                                texture.path.remove(0);
+                                child_textures.push(texture);
+                            }
+                        }
+
                         // The determinant is checked in each file.
                         // It should not be included in the child's context.
                         let child_ctx = GeometryContext {
@@ -339,6 +452,7 @@ fn append_geometry(
                             },
                             is_stud,
                             is_slope,
+                            studio_textures: child_textures,
                         };
 
                         // Don't invert additional subfile reference commands.
@@ -350,6 +464,8 @@ fn append_geometry(
                             geometry, hard_edges, vertex_map, subfile, source_map, child_ctx,
                             recursive, settings,
                         );
+
+                        tex_path_index += 1;
                     }
                 }
             }
