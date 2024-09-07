@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 use numpy::IntoPyArray;
@@ -87,6 +88,8 @@ pub struct LDrawGeometry {
     is_face_stud: Vec<bool>,
     edge_line_indices: PyObject,
     has_grainy_slopes: bool,
+    textures: Vec<Cow<'static, [u8]>>, // marshaled as list[bytes]
+    texmaps: Vec<Option<TextureMap>>,
 }
 
 impl LDrawGeometry {
@@ -112,6 +115,28 @@ impl LDrawGeometry {
                 .unwrap()
                 .into(),
             has_grainy_slopes: geometry.has_grainy_slopes,
+            textures: geometry.textures.into_iter().map(Cow::Owned).collect(),
+            texmaps: geometry
+                .texmaps
+                .into_iter()
+                .map(|maybe_texmap| maybe_texmap.map(TextureMap::from))
+                .collect(),
+        }
+    }
+}
+
+#[pyclass(get_all)]
+#[derive(Debug, Clone)]
+pub struct TextureMap {
+    texture_index: usize,
+    uvs: Vec<[f32; 2]>,
+}
+
+impl From<ldr_tools::TextureMap> for TextureMap {
+    fn from(tm: ldr_tools::TextureMap) -> Self {
+        Self {
+            texture_index: tm.texture_index,
+            uvs: tm.uvs.into_iter().map(|v| [v.x, v.y]).collect(),
         }
     }
 }
@@ -357,7 +382,7 @@ fn ldr_tools_py(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<LDrawGeometry>()?;
     m.add_class::<LDrawColor>()?;
     m.add_class::<GeometrySettings>()?;
-    m.add_class::<StudType>()?;    
+    m.add_class::<StudType>()?;
     m.add_class::<PrimitiveResolution>()?;
     m.add_class::<PointInstances>()?;
 

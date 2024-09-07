@@ -1,4 +1,5 @@
 use base64::prelude::*;
+
 use glam::{Mat4, Vec2, Vec3};
 use rstar::{primitives::GeomWithData, RTree};
 use weldr::Command;
@@ -50,6 +51,8 @@ struct PendingStudioTexture {
 #[derive(Debug, PartialEq)]
 pub struct TextureMap {
     pub texture_index: usize,
+    // TODO: smallvec or dense array,
+    // this is a relatively inefficient design to get something working
     pub uvs: Vec<Vec2>,
 }
 
@@ -322,6 +325,11 @@ fn append_geometry(
 
     ctx.studio_textures = pending_textures;
 
+    if active_textures.len() > 1 {
+        // TODO: at least narrow it down to one that intersects with the face being operated on
+        println!("warning: multiple active textures. ignoring all but one");
+    }
+
     for cmd in &source_file.cmds {
         match cmd {
             Command::Comment(c) => {
@@ -337,6 +345,9 @@ fn append_geometry(
                         &mut geometry.textures,
                     ) {
                         if matches!(*tex_info.path, [] | [-1]) {
+                            if active_textures.len() > 1 {
+                                println!("warning: multiple active textures. ignoring all but one");
+                            }
                             active_textures.push(tex_info);
                         } else {
                             ctx.studio_textures.push(tex_info);
@@ -359,11 +370,13 @@ fn append_geometry(
                     geometry,
                     &ctx,
                     t.vertices,
+                    t.uvs,
                     current_winding,
                     current_inverted,
                     vertex_map,
                     color,
                     settings.weld_vertices,
+                    active_textures.get(0),
                 );
             }
             Command::Quad(q) => {
@@ -376,30 +389,36 @@ fn append_geometry(
                         geometry,
                         &ctx,
                         [q.vertices[0], q.vertices[1], q.vertices[2]],
+                        q.uvs.map(|[a, b, c, _d]| [a, b, c]),
                         current_winding,
                         current_inverted,
                         vertex_map,
                         color,
                         settings.weld_vertices,
+                        active_textures.get(0),
                     );
                     add_triangle_face(
                         geometry,
                         &ctx,
                         [q.vertices[0], q.vertices[2], q.vertices[3]],
+                        q.uvs.map(|[a, _b, c, d]| [a, c, d]),
                         current_winding,
                         current_inverted,
                         vertex_map,
                         color,
                         settings.weld_vertices,
+                        active_textures.get(0),
                     );
                 } else {
                     add_face(
                         geometry,
                         ctx.transform,
                         q.vertices,
+                        q.uvs,
                         invert_winding(current_winding, current_inverted),
                         vertex_map,
                         settings.weld_vertices,
+                        active_textures.get(0),
                     );
 
                     let face_color = replace_color(q.color, ctx.current_color);
@@ -500,19 +519,23 @@ fn add_triangle_face(
     geometry: &mut LDrawGeometry,
     ctx: &GeometryContext,
     vertices: [weldr::Vec3; 3],
+    uvs: Option<[weldr::Vec2; 3]>,
     current_winding: Winding,
     current_inverted: bool,
     vertex_map: &mut VertexMap,
     color: u32,
     weld_vertices: bool,
+    texture: Option<&PendingStudioTexture>,
 ) {
     add_face(
         geometry,
         ctx.transform,
         vertices,
+        uvs,
         invert_winding(current_winding, current_inverted),
         vertex_map,
         weld_vertices,
+        texture,
     );
 
     geometry.face_colors.push(color);
@@ -532,10 +555,44 @@ fn add_face<const N: usize>(
     geometry: &mut LDrawGeometry,
     transform: Mat4,
     vertices: [weldr::Vec3; N],
+    uvs: Option<[weldr::Vec2; N]>,
     winding: Winding,
     vertex_map: &mut VertexMap,
     weld_vertices: bool,
+    texture: Option<&PendingStudioTexture>,
 ) {
+    let texmap: Option<TextureMap> = if let Some(texture) = texture {
+        if let Some(uvs) = uvs {
+            Some(TextureMap {
+                texture_index: texture.index,
+                uvs: uvs.to_vec(),
+            })
+        } else if let Some(_transform) = texture.transform {
+            // TODO: do the actual math
+            // for now, just fudge the numbers a bit (a lot)
+            // by assuming the triangle goes to the edges of the image
+
+            let (mut min, mut max) = (weldr::Vec3::MAX, weldr::Vec3::MIN);
+            for v in vertices {
+                min = min.min(v);
+                max = max.max(v);
+            }
+            let range = max - min;
+            let uvs = vertices
+                .map(|v| (v - min) / range)
+                .map(|v| (v.x, v.y).into());
+            Some(TextureMap {
+                texture_index: texture.index,
+                uvs: uvs.to_vec(),
+            })
+        } else {
+            println!("WARNING: texture with neither projection matrix nor face UVs");
+            None
+        }
+    } else {
+        None
+    };
+
     let starting_index = geometry.vertex_indices.len() as u32;
     let mut indices =
         vertices.map(|v| insert_vertex(geometry, transform, v, vertex_map, weld_vertices));
@@ -548,6 +605,7 @@ fn add_face<const N: usize>(
     geometry.vertex_indices.extend_from_slice(&indices);
     geometry.face_start_indices.push(starting_index);
     geometry.face_sizes.push(N as u32);
+    geometry.texmaps.push(texmap);
 }
 
 fn insert_vertex(

@@ -2,6 +2,7 @@ import bpy
 import numpy as np
 import mathutils
 import math
+import struct
 
 # TODO: Create a pyi type stub file?
 from . import ldr_tools_py
@@ -270,6 +271,16 @@ def assign_materials(
     color_by_code: dict[int, LDrawColor],
     geometry: LDrawGeometry,
 ):
+    for png in geometry.textures:
+        print(type(png))
+        w, h = struct.unpack(b'>LL', png[16:24])
+        # TODO: pass names up from the Rust side
+        img = bpy.data.images.new('img', h, w)
+        img.use_fake_user = True
+        img.pack(data=png, data_len=len(png))
+        img.source = 'FILE' # ?
+
+
     if len(geometry.face_colors) == 1:
         # Geometry is cached with code 16, so also handle color replacement.
         face_color = geometry.face_colors[0]
@@ -301,6 +312,11 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
 
         mesh.loops.add(geometry.vertex_indices.size)
         mesh.loops.foreach_set("vertex_index", geometry.vertex_indices)
+
+        for loop, texmap in zip(mesh.loops, geometry.texmaps):
+            if texmap is not None:
+                # ???
+                pass
 
         mesh.polygons.add(geometry.face_sizes.size)
         mesh.polygons.foreach_set("loop_start", geometry.face_start_indices)
