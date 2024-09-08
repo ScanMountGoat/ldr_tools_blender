@@ -27,6 +27,7 @@ from bpy.types import (
     ShaderNodeMix,
     ShaderNodeOutputMaterial,
     ShaderNodeSeparateXYZ,
+    ShaderNodeGroup,
 )
 
 # Materials are based on the techniques described in the following blog posts.
@@ -85,9 +86,7 @@ def get_material(
     )
 
     output = graph.node(
-        ShaderNodeOutputMaterial,
-        location=(60, 462),
-        inputs={"Surface": bsdf},
+        ShaderNodeOutputMaterial, location=(60, 462), inputs={"Surface": bsdf}
     )
 
     # Set the color in the viewport.
@@ -99,14 +98,6 @@ def get_material(
         r, g, b = rgb_ldr_tools_by_code[code]
     elif code in rgb_peeron_by_code:
         r, g, b = rgb_peeron_by_code[code]
-
-    # Procedural roughness.
-    roughness_node = create_node_group(
-        material, "ldr_tools_roughness", create_roughness_node_group
-    )
-    roughness_node.location = (-430, 500)
-
-    bsdf["Roughness"] = roughness_node
 
     # Normal opaque materials.
     metal = 0.0
@@ -133,14 +124,16 @@ def get_material(
             # TODO: Are all speckled colors metals?
             metal = 1.0
 
-            speckle_node = create_node_group(
-                material, "ldr_tools_speckle", create_speckle_node_group
+            speckle_node = graph.node(
+                ShaderNodeGroup,
+                location=(-620, 700),
+                node_tree=speckle_node_group(),
+                inputs={
+                    # Adjust the thresholds to control speckle size and density.
+                    "Min": 0.5,
+                    "Max": 0.6,
+                },
             )
-            speckle_node.location = (-620, 700)
-
-            # Adjust the thresholds to control speckle size and density.
-            speckle_node.inputs["Min"].default_value = 0.5
-            speckle_node.inputs["Max"].default_value = 0.6
 
             speckle_r, speckle_g, speckle_b, _ = ldraw_color.speckle_rgba_linear
 
@@ -148,7 +141,7 @@ def get_material(
             mix_rgb = graph.node(
                 ShaderNodeMix,
                 data_type="RGBA",
-                location=(-430, 700),
+                location=(-430, 750),
                 inputs={
                     "Factor": speckle_node,
                     "A": (r, g, b, 1.0),
@@ -169,13 +162,24 @@ def get_material(
         else:
             rough = (0.01, 0.15)
 
-    roughness_node.inputs["Min"].default_value = rough[0]
-    roughness_node.inputs["Max"].default_value = rough[1]
+    # Procedural roughness.
+    roughness_node = graph.node(
+        ShaderNodeGroup,
+        location=(-430, 500),
+        node_tree=roughness_node_group(),
+        inputs={
+            "Min": rough[0],
+            "Max": rough[1],
+        },
+    )
+
+    bsdf["Roughness"] = roughness_node
     bsdf["Metallic"] = metal
 
     # Procedural normals.
-    normals = create_node_group(material, "ldr_tools_normal", create_normals_node_group)
-    normals.location = (-620, 202)
+    normals = graph.node(
+        ShaderNodeGroup, location=(-620, 202), node_tree=normals_node_group()
+    )
 
     if is_slope:
         # Apply grainy normals to faces that aren't vertical or horizontal.
@@ -204,10 +208,9 @@ def get_material(
             inputs=[absolute, 0.5, 0.45],
         )
 
-        slope_normals = create_node_group(
-            material, "ldr_tools_slope_normal", create_slope_normals_node_group
+        slope_normals = graph.node(
+            ShaderNodeGroup, location=(-630, 100), node_tree=slope_normals_node_group()
         )
-        slope_normals.location = (-630, 100)
 
         is_stud = graph.node(
             ShaderNodeAttribute, location=(-1000, 200), attribute_name="ldr_is_stud"
@@ -242,22 +245,20 @@ def get_material(
     return material
 
 
-def create_node_group(
-    material: Material,
-    name: str,
-    create_group: Callable[[str], NodeTree],
-):
-    node_tree = bpy.data.node_groups.get(name)
-    if node_tree is None:
-        node_tree = create_group(name)
-
-    node = material.node_tree.nodes.new(type="ShaderNodeGroup")
-    node.node_tree = node_tree
-    return node
+def _shader_node_group(name: str) -> tuple[ShaderNodeTree, bool]:
+    tree = bpy.data.node_groups.get(name)
+    existing = tree is not None
+    tree = tree or bpy.data.node_groups.new(name, "ShaderNodeTree")  # type: ignore[arg-type]
+    assert isinstance(tree, ShaderNodeTree)
+    return tree, existing
 
 
-def create_roughness_node_group(name: str) -> bpy.types.NodeTree:
-    graph = NodeGraph(_node_tree(ShaderNodeTree, name))
+def roughness_node_group() -> ShaderNodeTree:
+    tree, existing = _shader_node_group("Roughness (ldr_tools)")
+    if existing:
+        return tree
+
+    graph = NodeGraph(tree)
 
     graph.input(NodeSocketFloat, "Min")
     graph.input(NodeSocketFloat, "Max")
@@ -292,8 +293,12 @@ def create_roughness_node_group(name: str) -> bpy.types.NodeTree:
     return graph.tree
 
 
-def create_speckle_node_group(name: str) -> bpy.types.NodeTree:
-    graph = NodeGraph(_node_tree(ShaderNodeTree, name))
+def speckle_node_group() -> ShaderNodeTree:
+    tree, existing = _shader_node_group("Speckle (ldr_tools)")
+    if existing:
+        return tree
+
+    graph = NodeGraph(tree)
 
     graph.input(NodeSocketFloat, "Min")
     graph.input(NodeSocketFloat, "Max")
@@ -327,8 +332,12 @@ def create_speckle_node_group(name: str) -> bpy.types.NodeTree:
     return graph.tree
 
 
-def create_normals_node_group(name: str) -> bpy.types.NodeTree:
-    graph = NodeGraph(_node_tree(ShaderNodeTree, name))
+def normals_node_group() -> ShaderNodeTree:
+    tree, existing = _shader_node_group("Normals (ldr_tools)")
+    if existing:
+        return tree
+
+    graph = NodeGraph(tree)
 
     graph.output(NodeSocketVector, "Normal")
 
@@ -364,8 +373,12 @@ def create_normals_node_group(name: str) -> bpy.types.NodeTree:
     return graph.tree
 
 
-def create_slope_normals_node_group(name: str) -> ShaderNodeTree:
-    graph = NodeGraph(_node_tree(ShaderNodeTree, name))
+def slope_normals_node_group() -> ShaderNodeTree:
+    tree, existing = _shader_node_group("Slope Normals (ldr_tools)")
+    if existing:
+        return tree
+
+    graph = NodeGraph(tree)
 
     graph.output(NodeSocketVector, "Normal")
 
@@ -396,14 +409,4 @@ def create_slope_normals_node_group(name: str) -> ShaderNodeTree:
     )
 
     graph.node(NodeGroupOutput, location=(0, 0), inputs=[bump])
-
     return graph.tree
-
-
-T = TypeVar("T", bound=NodeTree)
-
-
-def _node_tree(tree_type: type[T], name: str) -> T:
-    tree = bpy.data.node_groups.new(name, tree_type.__name__)  # type: ignore[arg-type]
-    assert isinstance(tree, tree_type)
-    return tree
