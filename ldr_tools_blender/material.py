@@ -43,178 +43,179 @@ def get_material(
             name += " slope"
 
     material = bpy.data.materials.get(name)
+    if material is not None:
+        return material
 
     # TODO: Report warnings if a part contains an invalid color code.
-    if material is None:
-        material = bpy.data.materials.new(name)
-        material.use_nodes = True
+    material = bpy.data.materials.new(name)
+    material.use_nodes = True
 
-        # Create the nodes from scratch to ensure the required nodes are present.
-        # This avoids hard coding names like "Material Output" that depend on the UI language.
-        material.node_tree.nodes.clear()
+    # Create the nodes from scratch to ensure the required nodes are present.
+    # This avoids hard coding names like "Material Output" that depend on the UI language.
+    material.node_tree.nodes.clear()
 
-        nodes = material.node_tree.nodes
-        links = material.node_tree.links
+    nodes = material.node_tree.nodes
+    links = material.node_tree.links
 
-        bsdf = nodes.new("ShaderNodeBsdfPrincipled")
-        bsdf.location = (-240, 462)
-        output_node = nodes.new("ShaderNodeOutputMaterial")
-        output_node.location = (60, 462)
-        links.new(bsdf.outputs["BSDF"], output_node.inputs["Surface"])
+    bsdf = nodes.new("ShaderNodeBsdfPrincipled")
+    bsdf.location = (-240, 462)
+    output_node = nodes.new("ShaderNodeOutputMaterial")
+    output_node.location = (60, 462)
+    links.new(bsdf.outputs["BSDF"], output_node.inputs["Surface"])
 
+    if ldraw_color is None:
         # TODO: Error if color is missing?
-        if ldraw_color is not None:
-            # Alpha is specified using transmission instead.
-            r, g, b, a = ldraw_color.rgba_linear
+        return material
 
-            # Set the color in the viewport.
-            # This can use the default LDraw color for familiarity.
-            material.diffuse_color = [r, g, b, a]
+    # Alpha is specified using transmission instead.
+    r, g, b, a = ldraw_color.rgba_linear
 
-            # Partially complete alternatives to LDraw colors for better realism.
-            if code in rgb_ldr_tools_by_code:
-                r, g, b = rgb_ldr_tools_by_code[code]
-            elif code in rgb_peeron_by_code:
-                r, g, b = rgb_peeron_by_code[code]
+    # Set the color in the viewport.
+    # This can use the default LDraw color for familiarity.
+    material.diffuse_color = [r, g, b, a]
 
-            bsdf.inputs["Base Color"].default_value = [r, g, b, 1.0]
+    # Partially complete alternatives to LDraw colors for better realism.
+    if code in rgb_ldr_tools_by_code:
+        r, g, b = rgb_ldr_tools_by_code[code]
+    elif code in rgb_peeron_by_code:
+        r, g, b = rgb_peeron_by_code[code]
 
-            # Transparent colors specify an alpha of 128 / 255.
-            is_transmissive = a <= 0.6
+    bsdf.inputs["Base Color"].default_value = [r, g, b, 1.0]
 
-            # RANDOM_WALK is more accurate but has discoloration around thin corners.
-            # TODO: This is in Blender units and should depend on scene scale
-            bsdf.subsurface_method = "BURLEY"
-            # Use a less accurate SSS method instead.
-            bsdf.inputs["Subsurface Radius"].default_value = [r, g, b]
-            bsdf.inputs["Subsurface Weight"].default_value = 1.0
-            bsdf.inputs["Subsurface Scale"].default_value = 0.025
+    # Transparent colors specify an alpha of 128 / 255.
+    is_transmissive = a <= 0.6
 
-            # Procedural roughness.
-            roughness_node = create_node_group(
-                material, "ldr_tools_roughness", create_roughness_node_group
-            )
-            roughness_node.location = (-430, 500)
+    # RANDOM_WALK is more accurate but has discoloration around thin corners.
+    # TODO: This is in Blender units and should depend on scene scale
+    bsdf.subsurface_method = "BURLEY"
+    # Use a less accurate SSS method instead.
+    bsdf.inputs["Subsurface Radius"].default_value = [r, g, b]
+    bsdf.inputs["Subsurface Weight"].default_value = 1.0
+    bsdf.inputs["Subsurface Scale"].default_value = 0.025
 
-            links.new(roughness_node.outputs["Roughness"], bsdf.inputs["Roughness"])
+    # Procedural roughness.
+    roughness_node = create_node_group(
+        material, "ldr_tools_roughness", create_roughness_node_group
+    )
+    roughness_node.location = (-430, 500)
 
-            # Normal opaque materials.
-            roughness_node.inputs["Min"].default_value = 0.075
-            roughness_node.inputs["Max"].default_value = 0.2
+    links.new(roughness_node.outputs["Roughness"], bsdf.inputs["Roughness"])
 
-            # TODO: Have a case for each finish type?
-            if ldraw_color.finish_name == "MatteMetallic":
-                bsdf.inputs["Metallic"].default_value = 1.0
-            if ldraw_color.finish_name == "Chrome":
-                # Glossy metal coating.
-                bsdf.inputs["Metallic"].default_value = 1.0
-                roughness_node.inputs["Min"].default_value = 0.075
-                roughness_node.inputs["Max"].default_value = 0.1
-            if ldraw_color.finish_name == "Metal":
-                # Rougher metals.
-                bsdf.inputs["Metallic"].default_value = 1.0
-                roughness_node.inputs["Min"].default_value = 0.15
-                roughness_node.inputs["Max"].default_value = 0.3
-            elif ldraw_color.finish_name == "Pearlescent":
-                bsdf.inputs["Metallic"].default_value = 0.35
-                roughness_node.inputs["Min"].default_value = 0.3
-                roughness_node.inputs["Max"].default_value = 0.5
-            elif ldraw_color.finish_name == "Speckle":
-                # TODO: Are all speckled colors metals?
-                bsdf.inputs["Metallic"].default_value = 1.0
+    # Normal opaque materials.
+    roughness_node.inputs["Min"].default_value = 0.075
+    roughness_node.inputs["Max"].default_value = 0.2
 
-                speckle_node = create_node_group(
-                    material, "ldr_tools_speckle", create_speckle_node_group
-                )
-                speckle_node.location = (-620, 700)
+    # TODO: Have a case for each finish type?
+    if ldraw_color.finish_name == "MatteMetallic":
+        bsdf.inputs["Metallic"].default_value = 1.0
+    if ldraw_color.finish_name == "Chrome":
+        # Glossy metal coating.
+        bsdf.inputs["Metallic"].default_value = 1.0
+        roughness_node.inputs["Min"].default_value = 0.075
+        roughness_node.inputs["Max"].default_value = 0.1
+    if ldraw_color.finish_name == "Metal":
+        # Rougher metals.
+        bsdf.inputs["Metallic"].default_value = 1.0
+        roughness_node.inputs["Min"].default_value = 0.15
+        roughness_node.inputs["Max"].default_value = 0.3
+    elif ldraw_color.finish_name == "Pearlescent":
+        bsdf.inputs["Metallic"].default_value = 0.35
+        roughness_node.inputs["Min"].default_value = 0.3
+        roughness_node.inputs["Max"].default_value = 0.5
+    elif ldraw_color.finish_name == "Speckle":
+        # TODO: Are all speckled colors metals?
+        bsdf.inputs["Metallic"].default_value = 1.0
 
-                # Adjust the thresholds to control speckle size and density.
-                speckle_node.inputs["Min"].default_value = 0.5
-                speckle_node.inputs["Max"].default_value = 0.6
+        speckle_node = create_node_group(
+            material, "ldr_tools_speckle", create_speckle_node_group
+        )
+        speckle_node.location = (-620, 700)
 
-                # Blend between the two speckle colors.
-                mix_rgb = nodes.new("ShaderNodeMixRGB")
-                mix_rgb.location = (-430, 700)
+        # Adjust the thresholds to control speckle size and density.
+        speckle_node.inputs["Min"].default_value = 0.5
+        speckle_node.inputs["Max"].default_value = 0.6
 
-                links.new(speckle_node.outputs["Fac"], mix_rgb.inputs["Fac"])
-                mix_rgb.inputs[1].default_value = [r, g, b, 1.0]
-                speckle_r, speckle_g, speckle_b, _ = ldraw_color.speckle_rgba_linear
-                mix_rgb.inputs[2].default_value = [speckle_r, speckle_g, speckle_b, 1.0]
+        # Blend between the two speckle colors.
+        mix_rgb = nodes.new("ShaderNodeMixRGB")
+        mix_rgb.location = (-430, 700)
 
-                links.new(mix_rgb.outputs["Color"], bsdf.inputs["Base Color"])
+        links.new(speckle_node.outputs["Fac"], mix_rgb.inputs["Fac"])
+        mix_rgb.inputs[1].default_value = [r, g, b, 1.0]
+        speckle_r, speckle_g, speckle_b, _ = ldraw_color.speckle_rgba_linear
+        mix_rgb.inputs[2].default_value = [speckle_r, speckle_g, speckle_b, 1.0]
 
-            if is_transmissive:
-                bsdf.inputs["Transmission Weight"].default_value = 1.0
-                bsdf.inputs["IOR"].default_value = 1.55
+        links.new(mix_rgb.outputs["Color"], bsdf.inputs["Base Color"])
 
-                if ldraw_color.finish_name == "Rubber":
-                    # Make the transparent rubber appear cloudy.
-                    roughness_node.inputs["Min"].default_value = 0.1
-                    roughness_node.inputs["Max"].default_value = 0.35
-                else:
-                    roughness_node.inputs["Min"].default_value = 0.01
-                    roughness_node.inputs["Max"].default_value = 0.15
+    if is_transmissive:
+        bsdf.inputs["Transmission Weight"].default_value = 1.0
+        bsdf.inputs["IOR"].default_value = 1.55
 
-            # Procedural normals.
-            normals = create_node_group(
-                material, "ldr_tools_normal", create_normals_node_group
-            )
-            normals.location = (-620, 202)
+        if ldraw_color.finish_name == "Rubber":
+            # Make the transparent rubber appear cloudy.
+            roughness_node.inputs["Min"].default_value = 0.1
+            roughness_node.inputs["Max"].default_value = 0.35
+        else:
+            roughness_node.inputs["Min"].default_value = 0.01
+            roughness_node.inputs["Max"].default_value = 0.15
 
-            if is_slope:
-                # Apply grainy normals to faces that aren't vertical or horizontal.
-                # Use non transformed normals to not consider object rotation.
-                ldr_normals = nodes.new("ShaderNodeAttribute")
-                ldr_normals.attribute_name = "ldr_normals"
-                ldr_normals.location = (-1600, 400)
+    # Procedural normals.
+    normals = create_node_group(material, "ldr_tools_normal", create_normals_node_group)
+    normals.location = (-620, 202)
 
-                separate = nodes.new("ShaderNodeSeparateXYZ")
-                links.new(ldr_normals.outputs["Vector"], separate.inputs["Vector"])
-                separate.location = (-1400, 400)
+    if is_slope:
+        # Apply grainy normals to faces that aren't vertical or horizontal.
+        # Use non transformed normals to not consider object rotation.
+        ldr_normals = nodes.new("ShaderNodeAttribute")
+        ldr_normals.attribute_name = "ldr_normals"
+        ldr_normals.location = (-1600, 400)
 
-                # Use normal.y to check if the face is horizontal (-1.0 or 1.0) or vertical (0.0).
-                # Any values in between are considered "slopes" and use grainy normals.
-                absolute = nodes.new("ShaderNodeMath")
-                absolute.operation = "ABSOLUTE"
-                absolute.location = (-1200, 400)
-                links.new(separate.outputs["Y"], absolute.inputs["Value"])
+        separate = nodes.new("ShaderNodeSeparateXYZ")
+        links.new(ldr_normals.outputs["Vector"], separate.inputs["Vector"])
+        separate.location = (-1400, 400)
 
-                compare = nodes.new("ShaderNodeMath")
-                compare.operation = "COMPARE"
-                compare.inputs[1].default_value = 0.5
-                compare.inputs[2].default_value = 0.45
-                compare.location = (-1000, 400)
-                links.new(absolute.outputs["Value"], compare.inputs["Value"])
+        # Use normal.y to check if the face is horizontal (-1.0 or 1.0) or vertical (0.0).
+        # Any values in between are considered "slopes" and use grainy normals.
+        absolute = nodes.new("ShaderNodeMath")
+        absolute.operation = "ABSOLUTE"
+        absolute.location = (-1200, 400)
+        links.new(separate.outputs["Y"], absolute.inputs["Value"])
 
-                slope_normals = create_node_group(
-                    material, "ldr_tools_slope_normal", create_slope_normals_node_group
-                )
-                slope_normals.location = (-630, 100)
+        compare = nodes.new("ShaderNodeMath")
+        compare.operation = "COMPARE"
+        compare.inputs[1].default_value = 0.5
+        compare.inputs[2].default_value = 0.45
+        compare.location = (-1000, 400)
+        links.new(absolute.outputs["Value"], compare.inputs["Value"])
 
-                is_stud = nodes.new("ShaderNodeAttribute")
-                is_stud.attribute_name = "ldr_is_stud"
-                is_stud.location = (-1000, 200)
+        slope_normals = create_node_group(
+            material, "ldr_tools_slope_normal", create_slope_normals_node_group
+        )
+        slope_normals.location = (-630, 100)
 
-                # Don't apply the grainy slopes to any faces marked as studs.
-                # We use an attribute here to avoid per face material assignment.
-                subtract_studs = nodes.new("ShaderNodeMath")
-                subtract_studs.operation = "SUBTRACT"
-                subtract_studs.location = (-800, 400)
-                links.new(compare.outputs["Value"], subtract_studs.inputs[0])
-                links.new(is_stud.outputs[2], subtract_studs.inputs[1])
+        is_stud = nodes.new("ShaderNodeAttribute")
+        is_stud.attribute_name = "ldr_is_stud"
+        is_stud.location = (-1000, 200)
 
-                # Choose between grainy and smooth normals depending on the face.
-                mix_normals = nodes.new("ShaderNodeMix")
-                mix_normals.data_type = "VECTOR"
-                mix_normals.location = (-430, 330)
-                links.new(subtract_studs.outputs["Value"], mix_normals.inputs["Factor"])
-                links.new(normals.outputs["Normal"], mix_normals.inputs[4])
-                links.new(slope_normals.outputs["Normal"], mix_normals.inputs[5])
+        # Don't apply the grainy slopes to any faces marked as studs.
+        # We use an attribute here to avoid per face material assignment.
+        subtract_studs = nodes.new("ShaderNodeMath")
+        subtract_studs.operation = "SUBTRACT"
+        subtract_studs.location = (-800, 400)
+        links.new(compare.outputs["Value"], subtract_studs.inputs[0])
+        links.new(is_stud.outputs[2], subtract_studs.inputs[1])
 
-                # The second output is the vector output.
-                links.new(mix_normals.outputs[1], bsdf.inputs["Normal"])
-            else:
-                links.new(normals.outputs["Normal"], bsdf.inputs["Normal"])
+        # Choose between grainy and smooth normals depending on the face.
+        mix_normals = nodes.new("ShaderNodeMix")
+        mix_normals.data_type = "VECTOR"
+        mix_normals.location = (-430, 330)
+        links.new(subtract_studs.outputs["Value"], mix_normals.inputs["Factor"])
+        links.new(normals.outputs["Normal"], mix_normals.inputs[4])
+        links.new(slope_normals.outputs["Normal"], mix_normals.inputs[5])
+
+        # The second output is the vector output.
+        links.new(mix_normals.outputs[1], bsdf.inputs["Normal"])
+    else:
+        links.new(normals.outputs["Normal"], bsdf.inputs["Normal"])
 
     return material
 
