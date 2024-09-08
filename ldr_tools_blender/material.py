@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from .ldr_tools_py import LDrawColor
 from .colors import rgb_peeron_by_code, rgb_ldr_tools_by_code
-from .node_dsl import NodeGraph
+from .node_dsl import NodeGraph, GraphNode, NodeInput
 
 import bpy
 
@@ -21,7 +21,6 @@ from bpy.types import (
     ShaderNodeBump,
     ShaderNodeMapRange,
     ShaderNodeBsdfPrincipled,
-    ShaderNodeMixRGB,
     ShaderNodeAttribute,
     ShaderNodeMath,
     ShaderNodeMix,
@@ -69,26 +68,6 @@ def get_material(
     if ldraw_color is not None:
         r, g, b, a = ldraw_color.rgba_linear
 
-    bsdf = graph.node(
-        ShaderNodeBsdfPrincipled,
-        location=(-240, 462),
-        # RANDOM_WALK is more accurate but has discoloration around thin corners.
-        # TODO: This is in Blender units and should depend on scene scale
-        subsurface_method="BURLEY",
-        inputs={
-            # Alpha is specified using transmission instead.
-            "Base Color": (r, g, b, 1.0),
-            # Use a less accurate SSS method instead.
-            "Subsurface Radius": (r, g, b),
-            "Subsurface Weight": 1.0,
-            "Subsurface Scale": 0.025,
-        },
-    )
-
-    output = graph.node(
-        ShaderNodeOutputMaterial, location=(60, 462), inputs={"Surface": bsdf}
-    )
-
     # Set the color in the viewport.
     # This can use the default LDraw color for familiarity.
     material.diffuse_color = (r, g, b, a)
@@ -99,148 +78,125 @@ def get_material(
     elif code in rgb_peeron_by_code:
         r, g, b = rgb_peeron_by_code[code]
 
+    # For speckle materials, this will be reassigned to a node reference later.
+    base_color: tuple[float, float, float, float] | GraphNode[ShaderNodeMix]
+    # Alpha is specified using transmission instead.
+    base_color = (r, g, b, 1.0)
+
     # Normal opaque materials.
-    metal = 0.0
-    rough = (0.075, 0.2)
+    metallicity = 0.0
+    roughness = (0.075, 0.2)
+    transmission = 0.0
+    refraction = 1.5
 
     finish_name = "" if ldraw_color is None else ldraw_color.finish_name
-
-    # TODO: Have a case for each finish type?
     match finish_name:
         case "MatteMetallic":
-            metal = 1.0
+            metallicity = 1.0
         case "Chrome":
             # Glossy metal coating.
-            metal = 1.0
-            rough = (0.075, 0.1)
+            metallicity = 1.0
+            roughness = (0.075, 0.1)
         case "Metal":
             # Rougher metals.
-            metal = 1.0
-            rough = (0.15, 0.3)
+            metallicity = 1.0
+            roughness = (0.15, 0.3)
         case "Pearlescent":
-            metal = 0.35
-            rough = (0.3, 0.5)
+            metallicity = 0.35
+            roughness = (0.3, 0.5)
         case "Speckle":
             # TODO: Are all speckled colors metals?
-            metal = 1.0
+            metallicity = 1.0
 
             speckle_node = graph.node(
                 ShaderNodeGroup,
                 location=(-620, 700),
                 node_tree=speckle_node_group(),
-                inputs={
-                    # Adjust the thresholds to control speckle size and density.
-                    "Min": 0.5,
-                    "Max": 0.6,
-                },
+                # Adjust the thresholds to control speckle size and density.
+                inputs={"Min": 0.5, "Max": 0.6},
             )
 
             speckle_r, speckle_g, speckle_b, _ = ldraw_color.speckle_rgba_linear
 
             # Blend between the two speckle colors.
-            mix_rgb = graph.node(
+            base_color = graph.node(
                 ShaderNodeMix,
                 data_type="RGBA",
                 location=(-430, 750),
                 inputs={
                     "Factor": speckle_node,
-                    "A": (r, g, b, 1.0),
+                    "A": base_color,
                     "B": (speckle_r, speckle_g, speckle_b, 1.0),
                 },
             )
 
-            bsdf["Base Color"] = mix_rgb
-
     # Transparent colors specify an alpha of 128 / 255.
     if a <= 0.6:
-        bsdf["Transmission Weight"] = 1.0
-        bsdf["IOR"] = 1.55
-
-        if ldraw_color.finish_name == "Rubber":
-            # Make the transparent rubber appear cloudy.
-            rough = (0.1, 0.35)
+        transmission = 1.0
+        refraction = 1.55
+        if finish_name == "Rubber":
+            # Make transparent rubber appear cloudy.
+            roughness = (0.1, 0.35)
         else:
-            rough = (0.01, 0.15)
+            roughness = (0.01, 0.15)
 
     # Procedural roughness.
     roughness_node = graph.node(
         ShaderNodeGroup,
         location=(-430, 500),
         node_tree=roughness_node_group(),
-        inputs={
-            "Min": rough[0],
-            "Max": rough[1],
-        },
+        inputs={"Min": roughness[0], "Max": roughness[1]},
     )
-
-    bsdf["Roughness"] = roughness_node
-    bsdf["Metallic"] = metal
 
     # Procedural normals.
-    normals = graph.node(
-        ShaderNodeGroup, location=(-620, 202), node_tree=normals_node_group()
+    main_normals = graph.node(
+        ShaderNodeGroup, location=(-630, 200), node_tree=normals_node_group()
     )
 
+    normals: GraphNode[ShaderNodeGroup | ShaderNodeMix] = main_normals
+
     if is_slope:
-        # Apply grainy normals to faces that aren't vertical or horizontal.
-        # Use non transformed normals to not consider object rotation.
-        ldr_normals = graph.node(
-            ShaderNodeAttribute, location=(-1600, 400), attribute_name="ldr_normals"
-        )
-
-        separate = graph.node(
-            ShaderNodeSeparateXYZ, location=(-1400, 400), inputs=[ldr_normals["Vector"]]
-        )
-
-        # Use normal.y to check if the face is horizontal (-1.0 or 1.0) or vertical (0.0).
-        # Any values in between are considered "slopes" and use grainy normals.
-        absolute = graph.node(
-            ShaderNodeMath,
-            location=(-1200, 400),
-            operation="ABSOLUTE",
-            inputs=[separate["Y"]],
-        )
-
-        compare = graph.node(
-            ShaderNodeMath,
-            location=(-1000, 400),
-            operation="COMPARE",
-            inputs=[absolute, 0.5, 0.45],
+        is_slope_node = graph.node(
+            ShaderNodeGroup, location=(-630, 300), node_tree=is_slope_node_group()
         )
 
         slope_normals = graph.node(
             ShaderNodeGroup, location=(-630, 100), node_tree=slope_normals_node_group()
         )
 
-        is_stud = graph.node(
-            ShaderNodeAttribute, location=(-1000, 200), attribute_name="ldr_is_stud"
-        )
-
-        # Don't apply the grainy slopes to any faces marked as studs.
-        # We use an attribute here to avoid per face material assignment.
-        subtract_studs = graph.node(
-            ShaderNodeMath,
-            location=(-800, 400),
-            operation="SUBTRACT",
-            inputs=[compare, is_stud["Fac"]],
-        )
-
         # Choose between grainy and smooth normals depending on the face.
-        mix_normals = graph.node(
+        normals = graph.node(
             ShaderNodeMix,
             location=(-430, 330),
             data_type="VECTOR",
             inputs={
-                "Factor": subtract_studs,
-                "A": normals,
+                "Factor": is_slope_node,
+                "A": main_normals,
                 "B": slope_normals,
             },
         )
 
-        # The second output is the vector output.
-        bsdf["Normal"] = mix_normals
-    else:
-        bsdf["Normal"] = normals
+    bsdf = graph.node(
+        ShaderNodeBsdfPrincipled,
+        location=(-240, 460),
+        # RANDOM_WALK is more accurate but has discoloration around thin corners.
+        # TODO: This is in Blender units and should depend on scene scale
+        subsurface_method="BURLEY",
+        inputs={
+            "Base Color": base_color,
+            "Normal": normals,
+            # Use a less accurate SSS method instead.
+            "Subsurface Radius": (r, g, b),
+            "Subsurface Weight": 1.0,
+            "Subsurface Scale": 0.025,
+            "Roughness": roughness_node,
+            "Metallic": metallicity,
+            "Transmission Weight": transmission,
+            "IOR": refraction,
+        },
+    )
+
+    graph.node(ShaderNodeOutputMaterial, location=(60, 460), inputs={"Surface": bsdf})
 
     return material
 
@@ -409,4 +365,59 @@ def slope_normals_node_group() -> ShaderNodeTree:
     )
 
     graph.node(NodeGroupOutput, location=(0, 0), inputs=[bump])
+    return graph.tree
+
+
+def is_slope_node_group() -> ShaderNodeTree:
+    tree, existing = _shader_node_group("Is Slope (ldr_tools)")
+    if existing:
+        return tree
+
+    graph = NodeGraph(tree)
+
+    graph.output(NodeSocketFloat, "Factor")
+
+    # Apply grainy normals to faces that aren't vertical or horizontal.
+    # Use non transformed normals to not consider object rotation.
+    ldr_normals = graph.node(
+        ShaderNodeAttribute, location=(-1600, 400), attribute_name="ldr_normals"
+    )
+
+    separate = graph.node(
+        ShaderNodeSeparateXYZ, location=(-1400, 400), inputs=[ldr_normals["Vector"]]
+    )
+
+    # Use normal.y to check if the face is horizontal (-1.0 or 1.0) or vertical (0.0).
+    # Any values in between are considered "slopes" and use grainy normals.
+    absolute = graph.node(
+        ShaderNodeMath,
+        location=(-1200, 400),
+        operation="ABSOLUTE",
+        inputs=[separate["Y"]],
+    )
+    compare = graph.node(
+        ShaderNodeMath,
+        location=(-1000, 400),
+        operation="COMPARE",
+        inputs=[absolute, 0.5, 0.45],
+    )
+
+    slope_normals = graph.node(
+        ShaderNodeGroup, location=(-630, 100), node_tree=slope_normals_node_group()
+    )
+
+    is_stud = graph.node(
+        ShaderNodeAttribute, location=(-1000, 200), attribute_name="ldr_is_stud"
+    )
+
+    # Don't apply the grainy slopes to any faces marked as studs.
+    # We use an attribute here to avoid per face material assignment.
+    subtract_studs = graph.node(
+        ShaderNodeMath,
+        location=(-800, 400),
+        operation="SUBTRACT",
+        inputs=[compare, is_stud["Fac"]],
+    )
+
+    graph.node(NodeGroupOutput, location=(-600, 400), inputs=[subtract_studs])
     return graph.tree
