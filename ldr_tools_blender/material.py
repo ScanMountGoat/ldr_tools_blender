@@ -1,9 +1,23 @@
-from typing import Callable
+from typing import Callable, TypeVar
+from dataclasses import dataclass
 
 from .ldr_tools_py import LDrawColor
 from .colors import rgb_peeron_by_code, rgb_ldr_tools_by_code
+from .node_dsl import NodeGraph
 
 import bpy
+
+from bpy.types import (
+    Material,
+    NodeTree,
+    ShaderNodeTree,
+    NodeSocketVector,
+    ShaderNodeBevel,
+    ShaderNodeTexCoord,
+    ShaderNodeTexNoise,
+    ShaderNodeBump,
+    NodeGroupOutput,
+)
 
 # Materials are based on the techniques described in the following blog posts.
 # This covers how to create lego shaders with realistic surface detailing.
@@ -300,84 +314,85 @@ def create_speckle_node_group(name: str) -> bpy.types.NodeTree:
 
 
 def create_normals_node_group(name: str) -> bpy.types.NodeTree:
-    node_group_node_tree = bpy.data.node_groups.new(name, "ShaderNodeTree")
+    tree = _node_tree(ShaderNodeTree, name)
+    graph = NodeGraph(tree)
 
-    node_group_node_tree.interface.new_socket(
-        in_out="OUTPUT", socket_type="NodeSocketVector", name="Normal"
-    )
+    graph.output(NodeSocketVector, "Normal")
 
-    nodes = node_group_node_tree.nodes
-    links = node_group_node_tree.links
-
-    output_node = nodes.new("NodeGroupOutput")
-    output_node.location = (0, 0)
-
-    bevel = nodes.new("ShaderNodeBevel")
-    bevel.location = (-480, -300)
-    bevel.inputs["Radius"].default_value = 0.01
+    bevel = graph.node(ShaderNodeBevel, location=(-480, -300), inputs={"Radius": 0.01})
+    tex_coord = graph.node(ShaderNodeTexCoord, location=(-720, 0))
 
     # Faces of bricks are never perfectly flat.
     # Create a very low frequency noise to break up highlights
-    noise = nodes.new("ShaderNodeTexNoise")
-    noise.location = (-480, 0)
-    noise.inputs["Scale"].default_value = 0.01  # TODO: scene scale?
-    noise.inputs["Detail"].default_value = 1.0
-    noise.inputs["Roughness"].default_value = 1.0
-    noise.inputs["Distortion"].default_value = 0.0
-
-    bump = nodes.new("ShaderNodeBump")
-    bump.location = (-240, 0)
-    bump.inputs["Strength"].default_value = 1.0
-    bump.inputs["Distance"].default_value = 0.01
-
-    tex_coord = nodes.new("ShaderNodeTexCoord")
-    tex_coord.location = (-720, 0)
-
-    links.new(bevel.outputs["Normal"], bump.inputs["Normal"])
-
-    links.new(tex_coord.outputs["Object"], noise.inputs["Vector"])
-    links.new(noise.outputs["Fac"], bump.inputs["Height"])
-    links.new(bump.outputs["Normal"], output_node.inputs["Normal"])
-
-    return node_group_node_tree
-
-
-def create_slope_normals_node_group(name: str) -> bpy.types.NodeTree:
-    node_group_node_tree = bpy.data.node_groups.new(name, "ShaderNodeTree")
-
-    node_group_node_tree.interface.new_socket(
-        in_out="OUTPUT", socket_type="NodeSocketVector", name="Normal"
+    noise = graph.node(
+        ShaderNodeTexNoise,
+        location=(-480, 0),
+        inputs={
+            "Scale": 0.01,  # TODO: scene scale?
+            "Detail": 1.0,
+            "Roughness": 1.0,
+            # "Distortion": 0.0, # already the default
+            "Vector": tex_coord["Object"],
+        },
     )
 
-    nodes = node_group_node_tree.nodes
-    links = node_group_node_tree.links
+    bump = graph.node(
+        ShaderNodeBump,
+        location=(-240, 0),
+        inputs={
+            "Strength": 1.0,
+            "Distance": 0.01,
+            "Height": noise["Fac"],
+            "Normal": bevel,
+        },
+    )
 
-    output_node = nodes.new("NodeGroupOutput")
-    output_node.location = (0, 0)
+    graph.node(NodeGroupOutput, location=(0, 0), inputs=[bump])
 
-    bevel = nodes.new("ShaderNodeBevel")
-    bevel.location = (-480, -300)
-    bevel.inputs["Radius"].default_value = 0.01
+    return graph.tree
 
-    noise = nodes.new("ShaderNodeTexNoise")
-    noise.location = (-480, 0)
-    noise.inputs["Scale"].default_value = 2.5
-    noise.inputs["Detail"].default_value = 3.0
-    noise.inputs["Roughness"].default_value = 0.5
-    noise.inputs["Lacunarity"].default_value = 2.0
 
-    bump = nodes.new("ShaderNodeBump")
-    bump.location = (-240, 0)
-    bump.inputs["Strength"].default_value = 0.5
-    bump.inputs["Distance"].default_value = 0.005
+def create_slope_normals_node_group(name: str) -> ShaderNodeTree:
+    tree = _node_tree(ShaderNodeTree, name)
+    graph = NodeGraph(tree)
 
-    tex_coord = nodes.new("ShaderNodeTexCoord")
-    tex_coord.location = (-720, 0)
+    graph.output(NodeSocketVector, "Normal")
 
-    links.new(bevel.outputs["Normal"], bump.inputs["Normal"])
+    bevel = graph.node(ShaderNodeBevel, location=(-480, -300), inputs={"Radius": 0.01})
+    tex_coord = graph.node(ShaderNodeTexCoord, location=(-720, 0))
 
-    links.new(tex_coord.outputs["Object"], noise.inputs["Vector"])
-    links.new(noise.outputs["Fac"], bump.inputs["Height"])
-    links.new(bump.outputs["Normal"], output_node.inputs["Normal"])
+    noise = graph.node(
+        ShaderNodeTexNoise,
+        location=(-480, 0),
+        inputs={
+            "Scale": 2.5,
+            "Detail": 3.0,
+            "Roughness": 0.5,
+            # "Lacunarity": 2.0, # already the default
+            "Vector": tex_coord["Object"],
+        },
+    )
 
-    return node_group_node_tree
+    bump = graph.node(
+        ShaderNodeBump,
+        location=(-240, 0),
+        inputs={
+            "Strength": 0.5,
+            "Distance": 0.005,
+            "Height": noise["Fac"],
+            "Normal": bevel,
+        },
+    )
+
+    graph.node(NodeGroupOutput, location=(0, 0), inputs=[bump])
+
+    return graph.tree
+
+
+T = TypeVar("T", bound=NodeTree)
+
+
+def _node_tree(tree_type: type[T], name: str) -> T:
+    tree = bpy.data.node_groups.new(name, tree_type.__name__)  # type: ignore[arg-type]
+    assert isinstance(tree, tree_type)
+    return tree
