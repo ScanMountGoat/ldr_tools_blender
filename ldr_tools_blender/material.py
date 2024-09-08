@@ -11,12 +11,15 @@ from bpy.types import (
     Material,
     NodeTree,
     ShaderNodeTree,
+    NodeSocketFloat,
     NodeSocketVector,
+    NodeGroupInput,
+    NodeGroupOutput,
     ShaderNodeBevel,
     ShaderNodeTexCoord,
     ShaderNodeTexNoise,
     ShaderNodeBump,
-    NodeGroupOutput,
+    ShaderNodeMapRange,
 )
 
 # Materials are based on the techniques described in the following blog posts.
@@ -231,91 +234,78 @@ def create_node_group(
 
 
 def create_roughness_node_group(name: str) -> bpy.types.NodeTree:
-    node_group_node_tree = bpy.data.node_groups.new(name, "ShaderNodeTree")
+    graph = NodeGraph(_node_tree(ShaderNodeTree, name))
 
-    node_group_node_tree.interface.new_socket(
-        in_out="OUTPUT", socket_type="NodeSocketFloat", name="Roughness"
-    )
+    graph.input(NodeSocketFloat, "Min")
+    graph.input(NodeSocketFloat, "Max")
+    graph.output(NodeSocketFloat, "Roughness")
 
-    inner_nodes = node_group_node_tree.nodes
-    inner_links = node_group_node_tree.links
-
-    input_node = inner_nodes.new("NodeGroupInput")
-    input_node.location = (-480, -300)
-    node_group_node_tree.interface.new_socket(
-        in_out="INPUT", socket_type="NodeSocketFloat", name="Min"
-    )
-    node_group_node_tree.interface.new_socket(
-        in_out="INPUT", socket_type="NodeSocketFloat", name="Max"
-    )
+    input = graph.node(NodeGroupInput, location=(-480, -300))
 
     # TODO: Create frame called "smudges" or at least name the nodes.
-    noise = inner_nodes.new("ShaderNodeTexNoise")
-    noise.location = (-480, 0)
-    noise.inputs["Scale"].default_value = 4.0
-    noise.inputs["Detail"].default_value = 2.0
-    noise.inputs["Roughness"].default_value = 0.5
-    noise.inputs["Distortion"].default_value = 0.0
+    noise = graph.node(
+        ShaderNodeTexNoise,
+        location=(-480, 0),
+        inputs={
+            "Scale": 4.0,
+            "Detail": 2.0,
+            "Roughness": 0.5,
+            "Distortion": 0.0,
+        },
+    )
 
     # Easier to configure than a color ramp since the input is 1D.
-    map_range = inner_nodes.new("ShaderNodeMapRange")
-    map_range.location = (-240, 0)
-    inner_links.new(noise.outputs["Fac"], map_range.inputs["Value"])
-    inner_links.new(input_node.outputs["Min"], map_range.inputs["To Min"])
-    inner_links.new(input_node.outputs["Max"], map_range.inputs["To Max"])
+    map_range = graph.node(
+        ShaderNodeMapRange,
+        location=(-240, 0),
+        inputs={
+            "Value": noise["Fac"],
+            "To Min": input["Min"],
+            "To Max": input["Max"],
+        },
+    )
 
-    output_node = inner_nodes.new("NodeGroupOutput")
-    output_node.location = (0, 0)
-
-    inner_links.new(map_range.outputs["Result"], output_node.inputs["Roughness"])
-
-    return node_group_node_tree
+    graph.node(NodeGroupOutput, location=(0, 0), inputs=[map_range])
+    return graph.tree
 
 
 def create_speckle_node_group(name: str) -> bpy.types.NodeTree:
-    node_group_node_tree = bpy.data.node_groups.new(name, "ShaderNodeTree")
+    graph = NodeGraph(_node_tree(ShaderNodeTree, name))
 
-    node_group_node_tree.interface.new_socket(
-        in_out="OUTPUT", socket_type="NodeSocketFloat", name="Fac"
+    graph.input(NodeSocketFloat, "Min")
+    graph.input(NodeSocketFloat, "Max")
+    graph.output(NodeSocketFloat, "Fac")
+
+    input = graph.node(NodeGroupInput, location=(-480, -300))
+
+    noise = graph.node(
+        ShaderNodeTexNoise,
+        location=(-480, 0),
+        inputs={
+            "Scale": 15.0,
+            "Detail": 6.0,
+            "Roughness": 1.0,
+            "Distortion": 0.0,
+        },
     )
-
-    inner_nodes = node_group_node_tree.nodes
-    inner_links = node_group_node_tree.links
-
-    input_node = inner_nodes.new("NodeGroupInput")
-    input_node.location = (-480, -300)
-    node_group_node_tree.interface.new_socket(
-        in_out="INPUT", socket_type="NodeSocketFloat", name="Min"
-    )
-    node_group_node_tree.interface.new_socket(
-        in_out="INPUT", socket_type="NodeSocketFloat", name="Max"
-    )
-
-    noise = inner_nodes.new("ShaderNodeTexNoise")
-    noise.location = (-480, 0)
-    noise.inputs["Scale"].default_value = 15.0
-    noise.inputs["Detail"].default_value = 6.0
-    noise.inputs["Roughness"].default_value = 1.0
-    noise.inputs["Distortion"].default_value = 0.0
 
     # Easier to configure than a color ramp since the input is 1D.
-    map_range = inner_nodes.new("ShaderNodeMapRange")
-    map_range.location = (-240, 0)
-    inner_links.new(noise.outputs["Fac"], map_range.inputs["Value"])
-    inner_links.new(input_node.outputs["Min"], map_range.inputs["From Min"])
-    inner_links.new(input_node.outputs["Max"], map_range.inputs["From Max"])
+    map_range = graph.node(
+        ShaderNodeMapRange,
+        location=(-240, 0),
+        inputs={
+            "Value": noise["Fac"],
+            "From Min": input["Min"],
+            "From Max": input["Max"],
+        },
+    )
 
-    output_node = inner_nodes.new("NodeGroupOutput")
-    output_node.location = (0, 0)
-
-    inner_links.new(map_range.outputs["Result"], output_node.inputs["Fac"])
-
-    return node_group_node_tree
+    graph.node(NodeGroupOutput, location=(0, 0), inputs=[map_range])
+    return graph.tree
 
 
 def create_normals_node_group(name: str) -> bpy.types.NodeTree:
-    tree = _node_tree(ShaderNodeTree, name)
-    graph = NodeGraph(tree)
+    graph = NodeGraph(_node_tree(ShaderNodeTree, name))
 
     graph.output(NodeSocketVector, "Normal")
 
@@ -348,13 +338,11 @@ def create_normals_node_group(name: str) -> bpy.types.NodeTree:
     )
 
     graph.node(NodeGroupOutput, location=(0, 0), inputs=[bump])
-
     return graph.tree
 
 
 def create_slope_normals_node_group(name: str) -> ShaderNodeTree:
-    tree = _node_tree(ShaderNodeTree, name)
-    graph = NodeGraph(tree)
+    graph = NodeGraph(_node_tree(ShaderNodeTree, name))
 
     graph.output(NodeSocketVector, "Normal")
 
