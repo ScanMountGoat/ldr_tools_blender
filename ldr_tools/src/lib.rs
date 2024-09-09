@@ -1,5 +1,4 @@
 use std::{
-    cell::RefCell,
     collections::HashMap,
     fs::File,
     io::{BufReader, Read},
@@ -99,18 +98,14 @@ impl FileRefResolver for DiskResolver {
 
 struct IoFileResolver {
     io_path: String,
-    archive: RefCell<ZipArchive<BufReader<File>>>,
+    model_ldr: Vec<u8>,
     resolver: DiskResolver,
 }
 
 impl FileRefResolver for IoFileResolver {
     fn resolve<P: AsRef<Path>>(&self, filename: P) -> Result<Vec<u8>, ResolveError> {
-        // TODO: try reading custom parts from the file?
         if filename.as_ref() == Path::new(&self.io_path) {
-            self.read_from_zip("model.ldr").map_err(|e| ResolveError {
-                filename: self.io_path.clone(),
-                resolve_error: Some(e),
-            })
+            Ok(self.model_ldr.clone())
         } else {
             self.resolver.resolve(filename)
         }
@@ -119,28 +114,27 @@ impl FileRefResolver for IoFileResolver {
 
 impl IoFileResolver {
     fn new(io_path: String, resolver: DiskResolver) -> Result<Self, Box<dyn std::error::Error>> {
-        let file = File::open(&io_path)?;
-        let archive = ZipArchive::new(BufReader::new(file)).map(RefCell::new)?;
-        Ok(Self {
-            io_path,
-            archive,
-            resolver,
-        })
-    }
+        let zip_file = File::open(&io_path)?;
+        let mut archive = ZipArchive::new(BufReader::new(zip_file))?;
+        let mut ldr_file = archive.by_name("model.ldr")?;
 
-    fn read_from_zip(&self, name: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        let mut archive = self.archive.borrow_mut();
-        let mut file = archive.by_name(name)?;
-        let mut buffer = Vec::with_capacity(file.size() as usize);
+        let mut buffer = Vec::with_capacity(ldr_file.size() as usize);
 
         // skip a BOM, if present
-        file.by_ref().take(3).read_to_end(&mut buffer)?;
+        ldr_file.by_ref().take(3).read_to_end(&mut buffer)?;
         if buffer == "\u{FEFF}".as_bytes() {
             buffer.clear();
         }
 
-        file.read_to_end(&mut buffer)?;
-        Ok(buffer)
+        ldr_file.read_to_end(&mut buffer)?;
+
+        // TODO: read custom parts from the file?
+
+        Ok(Self {
+            io_path,
+            model_ldr: buffer,
+            resolver,
+        })
     }
 }
 
