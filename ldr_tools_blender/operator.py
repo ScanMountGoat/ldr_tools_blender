@@ -126,7 +126,7 @@ class LIST_OT_DeleteItem(bpy.types.Operator):
 
 class ImportOperator(bpy.types.Operator, ImportHelper):
     bl_idname = "import_scene.importldr"
-    bl_description = "Import LDR (.mpd/.ldr/.dat)"
+    bl_description = "Import LDR (.mpd/.ldr/.dat/.io)"
     bl_label = "Import LDR"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
@@ -137,7 +137,7 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
     # TODO: Consistent usage of "" vs ''
     # File type filter in file browser
     filename_ext = ".ldr"
-    filter_glob: StringProperty(default="*.mpd;*.ldr;*.dat", options={"HIDDEN"})
+    filter_glob: StringProperty(default="*.mpd;*.ldr;*.dat;*.io", options={"HIDDEN"})
 
     ldraw_path: StringProperty(name="LDraw Library", default=preferences.ldraw_path)
 

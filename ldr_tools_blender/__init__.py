@@ -3,7 +3,7 @@ from . import operator
 
 bl_info = {
     "name": "ldr_tools_blender",
-    "description": "Import LDraw models in .mpd .ldr, and .dat formats",
+    "description": "Import LDraw models in .mpd .ldr, .dat, and .io formats",
     "author": "ScanMountGoat (SMG)",
     "version": (0, 4, 2),
     "blender": (4, 1, 0),
@@ -17,7 +17,7 @@ bl_info = {
 
 def menuImport(self, context):
     self.layout.operator(
-        operator.ImportOperator.bl_idname, text="LDraw (.mpd/.ldr/.dat)"
+        operator.ImportOperator.bl_idname, text="LDraw (.mpd/.ldr/.dat/.io)"
     )
 
 
