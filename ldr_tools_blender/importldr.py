@@ -2,6 +2,7 @@ import bpy
 import numpy as np
 import mathutils
 import math
+import typing
 
 from bpy.types import (
     NodesModifier,
@@ -15,10 +16,12 @@ from bpy.types import (
     FunctionNodeAxisAngleToRotation,
 )
 
-# TODO: Create a pyi type stub file?
-from . import ldr_tools_py
-
-from .ldr_tools_py import LDrawNode, LDrawGeometry, LDrawColor, GeometrySettings
+if typing.TYPE_CHECKING:
+    import ldr_tools_py
+    from ldr_tools_py import LDrawNode, LDrawGeometry, LDrawColor, GeometrySettings
+else:
+    from . import ldr_tools_py
+    from .ldr_tools_py import LDrawNode, LDrawGeometry, LDrawColor, GeometrySettings
 
 from .material import get_material
 
