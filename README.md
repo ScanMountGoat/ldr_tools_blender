@@ -7,18 +7,21 @@
 An addon for importing LDraw files into Blender 4.1 or later. Check out [discussions](https://github.com/ScanMountGoat/ldr_tools_blender/discussions) for reading announcements, asking questions, or suggesting new features. Report bugs or request new features in [issues](https://github.com/ScanMountGoat/ldr_tools_blender/issues). Download the latest version from [releases](https://github.com/ScanMountGoat/ldr_tools_blender/releases).
 
 ## Features
-The goal of this project is to provided a reliable and performant way to import digital LEGO models into modern versions of Blender for rendering. This includes importing and rendering [Bricklink Studio](https://www.bricklink.com/v3/studio/download.page) models or models built with [LDraw editing programs](https://www.ldraw.org/downloads-2/third-party-software.html). Studio models should be exported as LDraw under File > Export As in Studio before importing into Blender.
+The goal of this project is to provided a reliable and performant way to import digital LEGO models into modern versions of Blender for rendering. This includes importing and rendering [Bricklink Studio](https://www.bricklink.com/v3/studio/download.page) models or models built with [LDraw editing programs](https://www.ldraw.org/downloads-2/third-party-software.html). 
 
 * Compatible with LDR and MPD files. If you have a file that doesn't open correctly or an LDraw extension you'd like supported, please report it in [issues](https://github.com/ScanMountGoat/ldr_tools_blender/issues).
 *  Easily load LEGO models with hundreds of thousands of parts. For extremely large scenes, see [performance](#performance).
 * Create photorealistc renders taking full advantage of Blender Cycles with automatically created PBR materials with accurate colors and procedurally generated surface detail. 
+
+## Bricklink Studio Compatibility
+Bricklink Studio models from newer versions of the program can be imported directly from .io files. Older Studio models that fail to import as .io files should be exported from Studio as LDraw under File > Export As before importing into Blender. This avoids an issue with password protection on older .io files.
 
 ## Getting Started
 1. Install the [LDraw parts library](https://www.ldraw.org/help/getting-started.html) if you haven't already. Bricklink Studio bundles its own LDraw library and should be detected automatically by the addon.
 2. Download the appropriate version of the addon for your system from [releases](https://github.com/ScanMountGoat/ldr_tools_blender/releases). For older Blender versions, download one of the previous releases.
 3. In Blender, navigate to Edit > Preferences > Addon and click Install. Select the zip downloaded in step 2. Do not extract the zip file!
 4. The addons menu should now allow you to check the ldr_tools_blender addon to enable it.
-5. Import an LDraw model into Blender by clicking File > Import > LDraw and selecting a .mpd or .ldr file.
+5. Import an LDraw model into Blender by clicking File > Import > LDraw and selecting a .mpd, .ldr, or .io file.
 
 ## Uninstalling/Upgrading
 Upgrading the addon requires uninstalling the addon, downloading the latest version from releases, and then reinstalling the addon. On some operating systems, it may be necessary to disable the addon, restart Blender, and then uninstall the addon. This workaround is only be necessary on Windows.
