@@ -8,6 +8,7 @@ from typing import (
     overload,
 )
 
+import bpy.types
 from bpy.types import (
     NodeTree,
     Node,
@@ -107,5 +108,5 @@ def _iter_items(
 Vec2: TypeAlias = tuple[float, float]
 Vec3: TypeAlias = tuple[float, float, float]
 Vec4: TypeAlias = tuple[float, float, float, float]
-Value: TypeAlias = int | float | bool | str | Vec2 | Vec3 | Vec4
+Value: TypeAlias = int | float | bool | str | Vec2 | Vec3 | Vec4 | bpy.types.Object
 NodeInput: TypeAlias = GraphNode | Node | NodeSocket | Value
