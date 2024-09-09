@@ -1,5 +1,8 @@
 use std::{
+    cell::RefCell,
     collections::HashMap,
+    fs::File,
+    io::{BufReader, Read},
     path::{Path, PathBuf},
 };
 
@@ -12,6 +15,7 @@ pub use color::{load_color_table, LDrawColor};
 pub use geometry::LDrawGeometry;
 pub use glam;
 pub use weldr::Color;
+use zip::ZipArchive;
 
 pub type ColorCode = u32;
 
@@ -90,6 +94,53 @@ impl FileRefResolver for DiskResolver {
                 Ok(Vec::new())
             }
         }
+    }
+}
+
+struct IoFileResolver {
+    io_path: String,
+    archive: RefCell<ZipArchive<BufReader<File>>>,
+    resolver: DiskResolver,
+}
+
+impl FileRefResolver for IoFileResolver {
+    fn resolve<P: AsRef<Path>>(&self, filename: P) -> Result<Vec<u8>, ResolveError> {
+        // TODO: try reading custom parts from the file?
+        if filename.as_ref() == Path::new(&self.io_path) {
+            self.read_from_zip("model.ldr").map_err(|e| ResolveError {
+                filename: self.io_path.clone(),
+                resolve_error: Some(e),
+            })
+        } else {
+            self.resolver.resolve(filename)
+        }
+    }
+}
+
+impl IoFileResolver {
+    fn new(io_path: String, resolver: DiskResolver) -> Result<Self, Box<dyn std::error::Error>> {
+        let file = File::open(&io_path)?;
+        let archive = ZipArchive::new(BufReader::new(file)).map(RefCell::new)?;
+        Ok(Self {
+            io_path,
+            archive,
+            resolver,
+        })
+    }
+
+    fn read_from_zip(&self, name: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let mut archive = self.archive.borrow_mut();
+        let mut file = archive.by_name(name)?;
+        let mut buffer = Vec::with_capacity(file.size() as usize);
+
+        // skip a BOM, if present
+        file.by_ref().take(3).read_to_end(&mut buffer)?;
+        if buffer == "\u{FEFF}".as_bytes() {
+            buffer.clear();
+        }
+
+        file.read_to_end(&mut buffer)?;
+        Ok(buffer)
     }
 }
 
@@ -248,7 +299,15 @@ fn parse_file(
     let mut source_map = weldr::SourceMap::new();
     ensure_studs(settings, &resolver, &mut source_map);
 
-    let main_model_name = weldr::parse(path, &resolver, &mut source_map).unwrap();
+    let is_io = Path::new(path).extension() == Some("io".as_ref());
+
+    let main_model_name = if is_io {
+        let io_resolver = IoFileResolver::new(path.to_owned(), resolver).unwrap();
+        weldr::parse(path, &io_resolver, &mut source_map).unwrap()
+    } else {
+        weldr::parse(path, &resolver, &mut source_map).unwrap()
+    };
+
     (source_map, main_model_name)
 }
 
