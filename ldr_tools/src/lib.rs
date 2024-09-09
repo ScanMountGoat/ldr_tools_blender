@@ -1,5 +1,7 @@
 use std::{
     collections::HashMap,
+    fs::File,
+    io::{BufReader, Read},
     path::{Path, PathBuf},
 };
 
@@ -12,6 +14,7 @@ pub use color::{load_color_table, LDrawColor};
 pub use geometry::{LDrawGeometry, TextureMap};
 pub use glam;
 pub use weldr::Color;
+use zip::ZipArchive;
 
 pub type ColorCode = u32;
 
@@ -90,6 +93,48 @@ impl FileRefResolver for DiskResolver {
                 Ok(Vec::new())
             }
         }
+    }
+}
+
+struct IoFileResolver {
+    io_path: String,
+    model_ldr: Vec<u8>,
+    resolver: DiskResolver,
+}
+
+impl FileRefResolver for IoFileResolver {
+    fn resolve<P: AsRef<Path>>(&self, filename: P) -> Result<Vec<u8>, ResolveError> {
+        if filename.as_ref() == Path::new(&self.io_path) {
+            Ok(self.model_ldr.clone())
+        } else {
+            self.resolver.resolve(filename)
+        }
+    }
+}
+
+impl IoFileResolver {
+    fn new(io_path: String, resolver: DiskResolver) -> Result<Self, Box<dyn std::error::Error>> {
+        let zip_file = File::open(&io_path)?;
+        let mut archive = ZipArchive::new(BufReader::new(zip_file))?;
+        let mut ldr_file = archive.by_name("model.ldr")?;
+
+        let mut buffer = Vec::with_capacity(ldr_file.size() as usize);
+
+        // skip a BOM, if present
+        ldr_file.by_ref().take(3).read_to_end(&mut buffer)?;
+        if buffer == "\u{FEFF}".as_bytes() {
+            buffer.clear();
+        }
+
+        ldr_file.read_to_end(&mut buffer)?;
+
+        // TODO: read custom parts from the file?
+
+        Ok(Self {
+            io_path,
+            model_ldr: buffer,
+            resolver,
+        })
     }
 }
 
@@ -248,7 +293,15 @@ fn parse_file(
     let mut source_map = weldr::SourceMap::new();
     ensure_studs(settings, &resolver, &mut source_map);
 
-    let main_model_name = weldr::parse(path, &resolver, &mut source_map).unwrap();
+    let is_io = Path::new(path).extension() == Some("io".as_ref());
+
+    let main_model_name = if is_io {
+        let io_resolver = IoFileResolver::new(path.to_owned(), resolver).unwrap();
+        weldr::parse(path, &io_resolver, &mut source_map).unwrap()
+    } else {
+        weldr::parse(path, &resolver, &mut source_map).unwrap()
+    };
+
     (source_map, main_model_name)
 }
 

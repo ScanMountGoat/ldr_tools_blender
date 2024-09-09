@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## unreleased
+### Added
+* Added support for importing .io files saved by recent versions of Bricklink Studio.
+
 ## 0.4.2 - 2024-08-20
 ### Fixed
 * Fixed an issue where paths relative to the current file would not resolve properly.
