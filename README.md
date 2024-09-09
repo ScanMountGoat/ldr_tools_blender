@@ -14,7 +14,7 @@ The goal of this project is to provided a reliable and performant way to import 
 * Create photorealistc renders taking full advantage of Blender Cycles with automatically created PBR materials with accurate colors and procedurally generated surface detail. 
 
 ## Bricklink Studio Compatibility
-Bricklink Studio models from newer versions of the program can be imported directly from .io files. Older Studio models that fail to import as .io files should be exported from Studio as LDraw under File > Export As before importing into Blender. This avoids an issue where older files were password protected.
+Bricklink Studio models from newer versions of the program can be imported directly from .io files. Older Studio models that fail to import as .io files should be exported from Studio as LDraw under File > Export As before importing into Blender. This avoids an issue with password protection on older .io files.
 
 ## Getting Started
 1. Install the [LDraw parts library](https://www.ldraw.org/help/getting-started.html) if you haven't already. Bricklink Studio bundles its own LDraw library and should be detected automatically by the addon.
