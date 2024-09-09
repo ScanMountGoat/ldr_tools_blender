@@ -1,8 +1,9 @@
 from .stub_helpers import (
     UIntArray,
     FloatArray,
-    Vec2iArray,
+    UVec2Array,
     Vec3Array,
+    Mat4Array,
     Vec4,
     Mat4,
 )
@@ -61,7 +62,7 @@ class LDrawScene:
 
 class LDrawSceneInstanced:
     main_model_name: str
-    geometry_world_transforms: dict[tuple[str, int], object]
+    geometry_world_transforms: dict[tuple[str, int], Mat4Array]
     geometry_cache: dict[str, LDrawGeometry]
 
 class LDrawSceneInstancedPoints:

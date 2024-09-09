@@ -12,6 +12,7 @@ Mat4: TypeAlias = tuple[Vec4, Vec4, Vec4, Vec4]
 # FloatArray: TypeAlias = Array1[np.float32]
 # UVec2Array: TypeAlias = np.ndarray[tuple[int, Literal[2]], np.dtype[np.uint32]]
 # Vec3Array: TypeAlias = np.ndarray[tuple[int, Literal[3]], np.dtype[np.float32]]
+# Mat4Array: TypeAlias = np.ndarray[tuple[int, Literal[4], Literal[4]], np.dtype[np.float32]]
 
 # the true types are exactly as described above,
 # but bpy stubs claim that foreach_set does not accept ndarray
@@ -29,3 +30,7 @@ class Vec3Array(ABC):
 class UVec2Array(ABC):
     shape: Final[tuple[int, Literal[2]]]
     def reshape(self, _: Literal[-1]) -> UIntArray: ...
+
+class Mat4Array(ABC):
+    shape: Final[tuple[int, Literal[4], Literal[4]]]
+    def reshape(self, _: Literal[-1]) -> FloatArray: ...
