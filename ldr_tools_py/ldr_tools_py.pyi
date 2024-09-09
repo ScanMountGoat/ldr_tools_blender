@@ -1,5 +1,5 @@
 from .stub_helpers import (
-    IntArray,
+    UIntArray,
     FloatArray,
     Vec2iArray,
     Vec3Array,
@@ -16,12 +16,12 @@ class LDrawNode:
 
 class LDrawGeometry:
     vertices: Vec3Array
-    vertex_indices: IntArray
-    face_start_indices: IntArray
-    face_sizes: IntArray
-    face_colors: IntArray
+    vertex_indices: UIntArray
+    face_start_indices: UIntArray
+    face_sizes: UIntArray
+    face_colors: UIntArray
     is_face_stud: list[bool]
-    edge_line_indices: Vec2iArray
+    edge_line_indices: UVec2Array
     has_grainy_slopes: bool
 
 class LDrawColor:
