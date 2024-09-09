@@ -57,7 +57,6 @@ impl DiskResolver {
             catalog_path.join("UnOfficial").join("p"),
             catalog_path.join("UnOfficial").join("parts"),
             catalog_path.join("UnOfficial").join("parts").join("s"),
-            // TODO: How to handle the case where subfiles can be in the same directory as the current file?
         ];
         // Insert at the front since earlier elements take priority.
         match resolution {
@@ -204,7 +203,6 @@ impl Default for PrimitiveResolution {
 pub struct GeometrySettings {
     pub triangulate: bool,
     pub add_gap_between_parts: bool,
-    // TODO: Create an enum for different stud types.
     pub stud_type: StudType,
     pub weld_vertices: bool, // TODO: default to true?
     pub primitive_resolution: PrimitiveResolution,
@@ -240,9 +238,6 @@ struct GeometryInitDescriptor<'a> {
 }
 
 // TODO: Add tests for this using files from models?
-// TODO: Add global scale parameters.
-// TODO: Adjust the draw ctx for iter to set a "global scale"?
-// TODO: Also add a per part gap scale matrix.
 #[tracing::instrument]
 pub fn load_file(
     path: &str,

@@ -1,9 +1,33 @@
-from typing import Callable
+from typing import Callable, TypeVar
+from dataclasses import dataclass
 
 from .ldr_tools_py import LDrawColor
 from .colors import rgb_peeron_by_code, rgb_ldr_tools_by_code
+from .node_dsl import NodeGraph, GraphNode, NodeInput
 
 import bpy
+
+from bpy.types import (
+    Material,
+    NodeTree,
+    ShaderNodeTree,
+    NodeSocketFloat,
+    NodeSocketVector,
+    NodeGroupInput,
+    NodeGroupOutput,
+    ShaderNodeBevel,
+    ShaderNodeTexCoord,
+    ShaderNodeTexNoise,
+    ShaderNodeBump,
+    ShaderNodeMapRange,
+    ShaderNodeBsdfPrincipled,
+    ShaderNodeAttribute,
+    ShaderNodeMath,
+    ShaderNodeMix,
+    ShaderNodeOutputMaterial,
+    ShaderNodeSeparateXYZ,
+    ShaderNodeGroup,
+)
 
 # Materials are based on the techniques described in the following blog posts.
 # This covers how to create lego shaders with realistic surface detailing.
@@ -14,7 +38,7 @@ import bpy
 
 def get_material(
     color_by_code: dict[int, LDrawColor], code: int, is_slope: bool
-) -> bpy.types.Material:
+) -> Material:
     # Cache materials by name.
     # This loads materials lazily to avoid creating unused colors.
     ldraw_color = color_by_code.get(code)
@@ -26,358 +50,374 @@ def get_material(
             name += " slope"
 
     material = bpy.data.materials.get(name)
+    if material is not None:
+        return material
 
     # TODO: Report warnings if a part contains an invalid color code.
-    if material is None:
-        material = bpy.data.materials.new(name)
-        material.use_nodes = True
+    material = bpy.data.materials.new(name)
+    material.use_nodes = True
 
-        # Create the nodes from scratch to ensure the required nodes are present.
-        # This avoids hard coding names like "Material Output" that depend on the UI language.
-        material.node_tree.nodes.clear()
+    # Create the nodes from scratch to ensure the required nodes are present.
+    # This avoids hard coding names like "Material Output" that depend on the UI language.
+    material.node_tree.nodes.clear()
 
-        nodes = material.node_tree.nodes
-        links = material.node_tree.links
+    graph = NodeGraph(material.node_tree)
 
-        bsdf = nodes.new("ShaderNodeBsdfPrincipled")
-        bsdf.location = (-240, 462)
-        output_node = nodes.new("ShaderNodeOutputMaterial")
-        output_node.location = (60, 462)
-        links.new(bsdf.outputs["BSDF"], output_node.inputs["Surface"])
+    # TODO: Error if color is missing?
+    r, g, b, a = 1.0, 1.0, 1.0, 1.0
+    if ldraw_color is not None:
+        r, g, b, a = ldraw_color.rgba_linear
 
-        # TODO: Error if color is missing?
-        if ldraw_color is not None:
-            # Alpha is specified using transmission instead.
-            r, g, b, a = ldraw_color.rgba_linear
+    # Set the color in the viewport.
+    # This can use the default LDraw color for familiarity.
+    material.diffuse_color = (r, g, b, a)
 
-            # Set the color in the viewport.
-            # This can use the default LDraw color for familiarity.
-            material.diffuse_color = [r, g, b, a]
+    # Partially complete alternatives to LDraw colors for better realism.
+    if code in rgb_ldr_tools_by_code:
+        r, g, b = rgb_ldr_tools_by_code[code]
+    elif code in rgb_peeron_by_code:
+        r, g, b = rgb_peeron_by_code[code]
 
-            # Partially complete alternatives to LDraw colors for better realism.
-            if code in rgb_ldr_tools_by_code:
-                r, g, b = rgb_ldr_tools_by_code[code]
-            elif code in rgb_peeron_by_code:
-                r, g, b = rgb_peeron_by_code[code]
+    # For speckle materials, this will be reassigned to a node reference later.
+    base_color: tuple[float, float, float, float] | GraphNode[ShaderNodeMix]
+    # Alpha is specified using transmission instead.
+    base_color = (r, g, b, 1.0)
 
-            bsdf.inputs["Base Color"].default_value = [r, g, b, 1.0]
+    # Normal opaque materials.
+    metallicity = 0.0
+    roughness = (0.075, 0.2)
+    transmission = 0.0
+    refraction = 1.5
 
-            # Transparent colors specify an alpha of 128 / 255.
-            is_transmissive = a <= 0.6
+    finish_name = "" if ldraw_color is None else ldraw_color.finish_name
+    match finish_name:
+        case "MatteMetallic":
+            metallicity = 1.0
+        case "Chrome":
+            # Glossy metal coating.
+            metallicity = 1.0
+            roughness = (0.075, 0.1)
+        case "Metal":
+            # Rougher metals.
+            metallicity = 1.0
+            roughness = (0.15, 0.3)
+        case "Pearlescent":
+            metallicity = 0.35
+            roughness = (0.3, 0.5)
+        case "Speckle":
+            # TODO: Are all speckled colors metals?
+            metallicity = 1.0
 
-            # RANDOM_WALK is more accurate but has discoloration around thin corners.
-            # TODO: This is in Blender units and should depend on scene scale
-            bsdf.subsurface_method = "BURLEY"
-            # Use a less accurate SSS method instead.
-            bsdf.inputs["Subsurface Radius"].default_value = [r, g, b]
-            bsdf.inputs["Subsurface Weight"].default_value = 1.0
-            bsdf.inputs["Subsurface Scale"].default_value = 0.025
-
-            # Procedural roughness.
-            roughness_node = create_node_group(
-                material, "ldr_tools_roughness", create_roughness_node_group
-            )
-            roughness_node.location = (-430, 500)
-
-            links.new(roughness_node.outputs["Roughness"], bsdf.inputs["Roughness"])
-
-            # Normal opaque materials.
-            roughness_node.inputs["Min"].default_value = 0.075
-            roughness_node.inputs["Max"].default_value = 0.2
-
-            # TODO: Have a case for each finish type?
-            if ldraw_color.finish_name == "MatteMetallic":
-                bsdf.inputs["Metallic"].default_value = 1.0
-            if ldraw_color.finish_name == "Chrome":
-                # Glossy metal coating.
-                bsdf.inputs["Metallic"].default_value = 1.0
-                roughness_node.inputs["Min"].default_value = 0.075
-                roughness_node.inputs["Max"].default_value = 0.1
-            if ldraw_color.finish_name == "Metal":
-                # Rougher metals.
-                bsdf.inputs["Metallic"].default_value = 1.0
-                roughness_node.inputs["Min"].default_value = 0.15
-                roughness_node.inputs["Max"].default_value = 0.3
-            elif ldraw_color.finish_name == "Pearlescent":
-                bsdf.inputs["Metallic"].default_value = 0.35
-                roughness_node.inputs["Min"].default_value = 0.3
-                roughness_node.inputs["Max"].default_value = 0.5
-            elif ldraw_color.finish_name == "Speckle":
-                # TODO: Are all speckled colors metals?
-                bsdf.inputs["Metallic"].default_value = 1.0
-
-                speckle_node = create_node_group(
-                    material, "ldr_tools_speckle", create_speckle_node_group
-                )
-                speckle_node.location = (-620, 700)
-
+            speckle_node = graph.node(
+                ShaderNodeGroup,
+                location=(-620, 700),
+                node_tree=speckle_node_group(),
                 # Adjust the thresholds to control speckle size and density.
-                speckle_node.inputs["Min"].default_value = 0.5
-                speckle_node.inputs["Max"].default_value = 0.6
-
-                # Blend between the two speckle colors.
-                mix_rgb = nodes.new("ShaderNodeMixRGB")
-                mix_rgb.location = (-430, 700)
-
-                links.new(speckle_node.outputs["Fac"], mix_rgb.inputs["Fac"])
-                mix_rgb.inputs[1].default_value = [r, g, b, 1.0]
-                speckle_r, speckle_g, speckle_b, _ = ldraw_color.speckle_rgba_linear
-                mix_rgb.inputs[2].default_value = [speckle_r, speckle_g, speckle_b, 1.0]
-
-                links.new(mix_rgb.outputs["Color"], bsdf.inputs["Base Color"])
-
-            if is_transmissive:
-                bsdf.inputs["Transmission Weight"].default_value = 1.0
-                bsdf.inputs["IOR"].default_value = 1.55
-
-                if ldraw_color.finish_name == "Rubber":
-                    # Make the transparent rubber appear cloudy.
-                    roughness_node.inputs["Min"].default_value = 0.1
-                    roughness_node.inputs["Max"].default_value = 0.35
-                else:
-                    roughness_node.inputs["Min"].default_value = 0.01
-                    roughness_node.inputs["Max"].default_value = 0.15
-
-            # Procedural normals.
-            normals = create_node_group(
-                material, "ldr_tools_normal", create_normals_node_group
+                inputs={"Min": 0.5, "Max": 0.6},
             )
-            normals.location = (-620, 202)
 
-            if is_slope:
-                # Apply grainy normals to faces that aren't vertical or horizontal.
-                # Use non transformed normals to not consider object rotation.
-                ldr_normals = nodes.new("ShaderNodeAttribute")
-                ldr_normals.attribute_name = "ldr_normals"
-                ldr_normals.location = (-1600, 400)
+            speckle_r, speckle_g, speckle_b, _ = ldraw_color.speckle_rgba_linear
 
-                separate = nodes.new("ShaderNodeSeparateXYZ")
-                links.new(ldr_normals.outputs["Vector"], separate.inputs["Vector"])
-                separate.location = (-1400, 400)
+            # Blend between the two speckle colors.
+            base_color = graph.node(
+                ShaderNodeMix,
+                data_type="RGBA",
+                location=(-430, 750),
+                inputs={
+                    "Factor": speckle_node,
+                    "A": base_color,
+                    "B": (speckle_r, speckle_g, speckle_b, 1.0),
+                },
+            )
 
-                # Use normal.y to check if the face is horizontal (-1.0 or 1.0) or vertical (0.0).
-                # Any values in between are considered "slopes" and use grainy normals.
-                absolute = nodes.new("ShaderNodeMath")
-                absolute.operation = "ABSOLUTE"
-                absolute.location = (-1200, 400)
-                links.new(separate.outputs["Y"], absolute.inputs["Value"])
+    # Transparent colors specify an alpha of 128 / 255.
+    if a <= 0.6:
+        transmission = 1.0
+        refraction = 1.55
+        if finish_name == "Rubber":
+            # Make transparent rubber appear cloudy.
+            roughness = (0.1, 0.35)
+        else:
+            roughness = (0.01, 0.15)
 
-                compare = nodes.new("ShaderNodeMath")
-                compare.operation = "COMPARE"
-                compare.inputs[1].default_value = 0.5
-                compare.inputs[2].default_value = 0.45
-                compare.location = (-1000, 400)
-                links.new(absolute.outputs["Value"], compare.inputs["Value"])
+    # Procedural roughness.
+    roughness_node = graph.node(
+        ShaderNodeGroup,
+        location=(-430, 500),
+        node_tree=roughness_node_group(),
+        inputs={"Min": roughness[0], "Max": roughness[1]},
+    )
 
-                slope_normals = create_node_group(
-                    material, "ldr_tools_slope_normal", create_slope_normals_node_group
-                )
-                slope_normals.location = (-630, 100)
+    # Procedural normals.
+    main_normals = graph.node(
+        ShaderNodeGroup, location=(-630, 200), node_tree=normals_node_group()
+    )
 
-                is_stud = nodes.new("ShaderNodeAttribute")
-                is_stud.attribute_name = "ldr_is_stud"
-                is_stud.location = (-1000, 200)
+    normals: GraphNode[ShaderNodeGroup | ShaderNodeMix] = main_normals
 
-                # Don't apply the grainy slopes to any faces marked as studs.
-                # We use an attribute here to avoid per face material assignment.
-                subtract_studs = nodes.new("ShaderNodeMath")
-                subtract_studs.operation = "SUBTRACT"
-                subtract_studs.location = (-800, 400)
-                links.new(compare.outputs["Value"], subtract_studs.inputs[0])
-                links.new(is_stud.outputs[2], subtract_studs.inputs[1])
+    if is_slope:
+        is_slope_node = graph.node(
+            ShaderNodeGroup, location=(-630, 300), node_tree=is_slope_node_group()
+        )
 
-                # Choose between grainy and smooth normals depending on the face.
-                mix_normals = nodes.new("ShaderNodeMix")
-                mix_normals.data_type = "VECTOR"
-                mix_normals.location = (-430, 330)
-                links.new(subtract_studs.outputs["Value"], mix_normals.inputs["Factor"])
-                links.new(normals.outputs["Normal"], mix_normals.inputs[4])
-                links.new(slope_normals.outputs["Normal"], mix_normals.inputs[5])
+        slope_normals = graph.node(
+            ShaderNodeGroup, location=(-630, 100), node_tree=slope_normals_node_group()
+        )
 
-                # The second output is the vector output.
-                links.new(mix_normals.outputs[1], bsdf.inputs["Normal"])
-            else:
-                links.new(normals.outputs["Normal"], bsdf.inputs["Normal"])
+        # Choose between grainy and smooth normals depending on the face.
+        normals = graph.node(
+            ShaderNodeMix,
+            location=(-430, 330),
+            data_type="VECTOR",
+            inputs={
+                "Factor": is_slope_node,
+                "A": main_normals,
+                "B": slope_normals,
+            },
+        )
+
+    bsdf = graph.node(
+        ShaderNodeBsdfPrincipled,
+        location=(-240, 460),
+        # RANDOM_WALK is more accurate but has discoloration around thin corners.
+        # TODO: This is in Blender units and should depend on scene scale
+        subsurface_method="BURLEY",
+        inputs={
+            "Base Color": base_color,
+            "Normal": normals,
+            # Use a less accurate SSS method instead.
+            "Subsurface Radius": (r, g, b),
+            "Subsurface Weight": 1.0,
+            "Subsurface Scale": 0.025,
+            "Roughness": roughness_node,
+            "Metallic": metallicity,
+            "Transmission Weight": transmission,
+            "IOR": refraction,
+        },
+    )
+
+    graph.node(ShaderNodeOutputMaterial, location=(60, 460), inputs={"Surface": bsdf})
 
     return material
 
 
-def create_node_group(
-    material: bpy.types.Material,
-    name: str,
-    create_group: Callable[[str], bpy.types.NodeTree],
-):
-    node_tree = bpy.data.node_groups.get(name)
-    if node_tree is None:
-        node_tree = create_group(name)
-
-    node = material.node_tree.nodes.new(type="ShaderNodeGroup")
-    node.node_tree = node_tree
-    return node
+def _shader_node_group(name: str) -> tuple[ShaderNodeTree, bool]:
+    tree = bpy.data.node_groups.get(name)
+    existing = tree is not None
+    tree = tree or bpy.data.node_groups.new(name, "ShaderNodeTree")  # type: ignore[arg-type]
+    assert isinstance(tree, ShaderNodeTree)
+    return tree, existing
 
 
-def create_roughness_node_group(name: str) -> bpy.types.NodeTree:
-    node_group_node_tree = bpy.data.node_groups.new(name, "ShaderNodeTree")
+def roughness_node_group() -> ShaderNodeTree:
+    tree, existing = _shader_node_group("Roughness (ldr_tools)")
+    if existing:
+        return tree
 
-    node_group_node_tree.interface.new_socket(
-        in_out="OUTPUT", socket_type="NodeSocketFloat", name="Roughness"
-    )
+    graph = NodeGraph(tree)
 
-    inner_nodes = node_group_node_tree.nodes
-    inner_links = node_group_node_tree.links
+    graph.input(NodeSocketFloat, "Min")
+    graph.input(NodeSocketFloat, "Max")
+    graph.output(NodeSocketFloat, "Roughness")
 
-    input_node = inner_nodes.new("NodeGroupInput")
-    input_node.location = (-480, -300)
-    node_group_node_tree.interface.new_socket(
-        in_out="INPUT", socket_type="NodeSocketFloat", name="Min"
-    )
-    node_group_node_tree.interface.new_socket(
-        in_out="INPUT", socket_type="NodeSocketFloat", name="Max"
-    )
+    input = graph.node(NodeGroupInput, location=(-480, -300))
 
     # TODO: Create frame called "smudges" or at least name the nodes.
-    noise = inner_nodes.new("ShaderNodeTexNoise")
-    noise.location = (-480, 0)
-    noise.inputs["Scale"].default_value = 4.0
-    noise.inputs["Detail"].default_value = 2.0
-    noise.inputs["Roughness"].default_value = 0.5
-    noise.inputs["Distortion"].default_value = 0.0
+    noise = graph.node(
+        ShaderNodeTexNoise,
+        location=(-480, 0),
+        inputs={
+            "Scale": 4.0,
+            "Detail": 2.0,
+            "Roughness": 0.5,
+            "Distortion": 0.0,
+        },
+    )
 
     # Easier to configure than a color ramp since the input is 1D.
-    map_range = inner_nodes.new("ShaderNodeMapRange")
-    map_range.location = (-240, 0)
-    inner_links.new(noise.outputs["Fac"], map_range.inputs["Value"])
-    inner_links.new(input_node.outputs["Min"], map_range.inputs["To Min"])
-    inner_links.new(input_node.outputs["Max"], map_range.inputs["To Max"])
-
-    output_node = inner_nodes.new("NodeGroupOutput")
-    output_node.location = (0, 0)
-
-    inner_links.new(map_range.outputs["Result"], output_node.inputs["Roughness"])
-
-    return node_group_node_tree
-
-
-def create_speckle_node_group(name: str) -> bpy.types.NodeTree:
-    node_group_node_tree = bpy.data.node_groups.new(name, "ShaderNodeTree")
-
-    node_group_node_tree.interface.new_socket(
-        in_out="OUTPUT", socket_type="NodeSocketFloat", name="Fac"
+    map_range = graph.node(
+        ShaderNodeMapRange,
+        location=(-240, 0),
+        inputs={
+            "Value": noise["Fac"],
+            "To Min": input["Min"],
+            "To Max": input["Max"],
+        },
     )
 
-    inner_nodes = node_group_node_tree.nodes
-    inner_links = node_group_node_tree.links
+    graph.node(NodeGroupOutput, location=(0, 0), inputs=[map_range])
+    return graph.tree
 
-    input_node = inner_nodes.new("NodeGroupInput")
-    input_node.location = (-480, -300)
-    node_group_node_tree.interface.new_socket(
-        in_out="INPUT", socket_type="NodeSocketFloat", name="Min"
-    )
-    node_group_node_tree.interface.new_socket(
-        in_out="INPUT", socket_type="NodeSocketFloat", name="Max"
-    )
 
-    noise = inner_nodes.new("ShaderNodeTexNoise")
-    noise.location = (-480, 0)
-    noise.inputs["Scale"].default_value = 15.0
-    noise.inputs["Detail"].default_value = 6.0
-    noise.inputs["Roughness"].default_value = 1.0
-    noise.inputs["Distortion"].default_value = 0.0
+def speckle_node_group() -> ShaderNodeTree:
+    tree, existing = _shader_node_group("Speckle (ldr_tools)")
+    if existing:
+        return tree
+
+    graph = NodeGraph(tree)
+
+    graph.input(NodeSocketFloat, "Min")
+    graph.input(NodeSocketFloat, "Max")
+    graph.output(NodeSocketFloat, "Fac")
+
+    input = graph.node(NodeGroupInput, location=(-480, -300))
+
+    noise = graph.node(
+        ShaderNodeTexNoise,
+        location=(-480, 0),
+        inputs={
+            "Scale": 15.0,
+            "Detail": 6.0,
+            "Roughness": 1.0,
+            "Distortion": 0.0,
+        },
+    )
 
     # Easier to configure than a color ramp since the input is 1D.
-    map_range = inner_nodes.new("ShaderNodeMapRange")
-    map_range.location = (-240, 0)
-    inner_links.new(noise.outputs["Fac"], map_range.inputs["Value"])
-    inner_links.new(input_node.outputs["Min"], map_range.inputs["From Min"])
-    inner_links.new(input_node.outputs["Max"], map_range.inputs["From Max"])
-
-    output_node = inner_nodes.new("NodeGroupOutput")
-    output_node.location = (0, 0)
-
-    inner_links.new(map_range.outputs["Result"], output_node.inputs["Fac"])
-
-    return node_group_node_tree
-
-
-def create_normals_node_group(name: str) -> bpy.types.NodeTree:
-    node_group_node_tree = bpy.data.node_groups.new(name, "ShaderNodeTree")
-
-    node_group_node_tree.interface.new_socket(
-        in_out="OUTPUT", socket_type="NodeSocketVector", name="Normal"
+    map_range = graph.node(
+        ShaderNodeMapRange,
+        location=(-240, 0),
+        inputs={
+            "Value": noise["Fac"],
+            "From Min": input["Min"],
+            "From Max": input["Max"],
+        },
     )
 
-    nodes = node_group_node_tree.nodes
-    links = node_group_node_tree.links
+    graph.node(NodeGroupOutput, location=(0, 0), inputs=[map_range])
+    return graph.tree
 
-    output_node = nodes.new("NodeGroupOutput")
-    output_node.location = (0, 0)
 
-    bevel = nodes.new("ShaderNodeBevel")
-    bevel.location = (-480, -300)
-    bevel.inputs["Radius"].default_value = 0.01
+def normals_node_group() -> ShaderNodeTree:
+    tree, existing = _shader_node_group("Normals (ldr_tools)")
+    if existing:
+        return tree
+
+    graph = NodeGraph(tree)
+
+    graph.output(NodeSocketVector, "Normal")
+
+    bevel = graph.node(ShaderNodeBevel, location=(-480, -300), inputs={"Radius": 0.01})
+    tex_coord = graph.node(ShaderNodeTexCoord, location=(-720, 0))
 
     # Faces of bricks are never perfectly flat.
     # Create a very low frequency noise to break up highlights
-    noise = nodes.new("ShaderNodeTexNoise")
-    noise.location = (-480, 0)
-    noise.inputs["Scale"].default_value = 0.01  # TODO: scene scale?
-    noise.inputs["Detail"].default_value = 1.0
-    noise.inputs["Roughness"].default_value = 1.0
-    noise.inputs["Distortion"].default_value = 0.0
-
-    bump = nodes.new("ShaderNodeBump")
-    bump.location = (-240, 0)
-    bump.inputs["Strength"].default_value = 1.0
-    bump.inputs["Distance"].default_value = 0.01
-
-    tex_coord = nodes.new("ShaderNodeTexCoord")
-    tex_coord.location = (-720, 0)
-
-    links.new(bevel.outputs["Normal"], bump.inputs["Normal"])
-
-    links.new(tex_coord.outputs["Object"], noise.inputs["Vector"])
-    links.new(noise.outputs["Fac"], bump.inputs["Height"])
-    links.new(bump.outputs["Normal"], output_node.inputs["Normal"])
-
-    return node_group_node_tree
-
-
-def create_slope_normals_node_group(name: str) -> bpy.types.NodeTree:
-    node_group_node_tree = bpy.data.node_groups.new(name, "ShaderNodeTree")
-
-    node_group_node_tree.interface.new_socket(
-        in_out="OUTPUT", socket_type="NodeSocketVector", name="Normal"
+    noise = graph.node(
+        ShaderNodeTexNoise,
+        location=(-480, 0),
+        inputs={
+            "Scale": 0.01,  # TODO: scene scale?
+            "Detail": 1.0,
+            "Roughness": 1.0,
+            # "Distortion": 0.0, # already the default
+            "Vector": tex_coord["Object"],
+        },
     )
 
-    nodes = node_group_node_tree.nodes
-    links = node_group_node_tree.links
+    bump = graph.node(
+        ShaderNodeBump,
+        location=(-240, 0),
+        inputs={
+            "Strength": 1.0,
+            "Distance": 0.01,
+            "Height": noise["Fac"],
+            "Normal": bevel,
+        },
+    )
 
-    output_node = nodes.new("NodeGroupOutput")
-    output_node.location = (0, 0)
+    graph.node(NodeGroupOutput, location=(0, 0), inputs=[bump])
+    return graph.tree
 
-    bevel = nodes.new("ShaderNodeBevel")
-    bevel.location = (-480, -300)
-    bevel.inputs["Radius"].default_value = 0.01
 
-    noise = nodes.new("ShaderNodeTexNoise")
-    noise.location = (-480, 0)
-    noise.inputs["Scale"].default_value = 2.5
-    noise.inputs["Detail"].default_value = 3.0
-    noise.inputs["Roughness"].default_value = 0.5
-    noise.inputs["Lacunarity"].default_value = 2.0
+def slope_normals_node_group() -> ShaderNodeTree:
+    tree, existing = _shader_node_group("Slope Normals (ldr_tools)")
+    if existing:
+        return tree
 
-    bump = nodes.new("ShaderNodeBump")
-    bump.location = (-240, 0)
-    bump.inputs["Strength"].default_value = 0.5
-    bump.inputs["Distance"].default_value = 0.005
+    graph = NodeGraph(tree)
 
-    tex_coord = nodes.new("ShaderNodeTexCoord")
-    tex_coord.location = (-720, 0)
+    graph.output(NodeSocketVector, "Normal")
 
-    links.new(bevel.outputs["Normal"], bump.inputs["Normal"])
+    bevel = graph.node(ShaderNodeBevel, location=(-480, -300), inputs={"Radius": 0.01})
+    tex_coord = graph.node(ShaderNodeTexCoord, location=(-720, 0))
 
-    links.new(tex_coord.outputs["Object"], noise.inputs["Vector"])
-    links.new(noise.outputs["Fac"], bump.inputs["Height"])
-    links.new(bump.outputs["Normal"], output_node.inputs["Normal"])
+    noise = graph.node(
+        ShaderNodeTexNoise,
+        location=(-480, 0),
+        inputs={
+            "Scale": 2.5,
+            "Detail": 3.0,
+            "Roughness": 0.5,
+            # "Lacunarity": 2.0, # already the default
+            "Vector": tex_coord["Object"],
+        },
+    )
 
-    return node_group_node_tree
+    bump = graph.node(
+        ShaderNodeBump,
+        location=(-240, 0),
+        inputs={
+            "Strength": 0.5,
+            "Distance": 0.005,
+            "Height": noise["Fac"],
+            "Normal": bevel,
+        },
+    )
+
+    graph.node(NodeGroupOutput, location=(0, 0), inputs=[bump])
+    return graph.tree
+
+
+def is_slope_node_group() -> ShaderNodeTree:
+    tree, existing = _shader_node_group("Is Slope (ldr_tools)")
+    if existing:
+        return tree
+
+    graph = NodeGraph(tree)
+
+    graph.output(NodeSocketFloat, "Factor")
+
+    # Apply grainy normals to faces that aren't vertical or horizontal.
+    # Use non transformed normals to not consider object rotation.
+    ldr_normals = graph.node(
+        ShaderNodeAttribute, location=(-1600, 400), attribute_name="ldr_normals"
+    )
+
+    separate = graph.node(
+        ShaderNodeSeparateXYZ, location=(-1400, 400), inputs=[ldr_normals["Vector"]]
+    )
+
+    # Use normal.y to check if the face is horizontal (-1.0 or 1.0) or vertical (0.0).
+    # Any values in between are considered "slopes" and use grainy normals.
+    absolute = graph.node(
+        ShaderNodeMath,
+        location=(-1200, 400),
+        operation="ABSOLUTE",
+        inputs=[separate["Y"]],
+    )
+    compare = graph.node(
+        ShaderNodeMath,
+        location=(-1000, 400),
+        operation="COMPARE",
+        inputs=[absolute, 0.5, 0.45],
+    )
+
+    slope_normals = graph.node(
+        ShaderNodeGroup, location=(-630, 100), node_tree=slope_normals_node_group()
+    )
+
+    is_stud = graph.node(
+        ShaderNodeAttribute, location=(-1000, 200), attribute_name="ldr_is_stud"
+    )
+
+    # Don't apply the grainy slopes to any faces marked as studs.
+    # We use an attribute here to avoid per face material assignment.
+    subtract_studs = graph.node(
+        ShaderNodeMath,
+        location=(-800, 400),
+        operation="SUBTRACT",
+        inputs=[compare, is_stud["Fac"]],
+    )
+
+    graph.node(NodeGroupOutput, location=(-600, 400), inputs=[subtract_studs])
+    return graph.tree

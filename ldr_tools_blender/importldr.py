@@ -4,12 +4,26 @@ import mathutils
 import math
 import struct
 
+from bpy.types import (
+    NodesModifier,
+    GeometryNodeTree,
+    NodeSocketGeometry,
+    NodeGroupInput,
+    NodeGroupOutput,
+    GeometryNodeObjectInfo,
+    GeometryNodeInputNamedAttribute,
+    GeometryNodeInstanceOnPoints,
+    FunctionNodeAxisAngleToRotation,
+)
+
 # TODO: Create a pyi type stub file?
 from . import ldr_tools_py
 
 from .ldr_tools_py import LDrawNode, LDrawGeometry, LDrawColor, GeometrySettings
 
 from .material import get_material
+
+from .node_dsl import NodeGraph
 
 # TODO: Add type hints for all functions.
 
@@ -152,53 +166,72 @@ def import_instanced(
 
 
 def create_geometry_node_instancing(
-    instancer_object: bpy.types.Object, instance_object: bpy.types.Object
-):
+    instancer_object: bpy.types.Object,
+    instance_object: bpy.types.Object,
+) -> None:
     modifier = instancer_object.modifiers.new(name="GeometryNodes", type="NODES")
-    node_tree = bpy.data.node_groups.new("GeometryNodes", "GeometryNodeTree")
-    modifier.node_group = node_tree
-    nodes = node_tree.nodes
-    links = node_tree.links
+    assert isinstance(modifier, NodesModifier)
 
-    group_input = nodes.new("NodeGroupInput")
-    node_tree.interface.new_socket(
-        in_out="INPUT", socket_type="NodeSocketGeometry", name="Geometry"
+    tree = bpy.data.node_groups.new("GeometryNodes", "GeometryNodeTree")  # type: ignore[arg-type]
+    assert isinstance(tree, GeometryNodeTree)
+
+    modifier.node_group = tree
+    graph = NodeGraph(tree)
+
+    graph.input(NodeSocketGeometry, "Geometry")
+    graph.output(NodeSocketGeometry, "Geometry")
+
+    group_input = graph.node(NodeGroupInput, location=(-380, 0))
+
+    # Scale instances from the custom attribute.
+    scale_attribute = graph.node(
+        GeometryNodeInputNamedAttribute,
+        location=(-380, -434),
+        data_type="FLOAT_VECTOR",
+        inputs={"Name": "instance_scale"},
     )
 
-    group_output = nodes.new("NodeGroupOutput")
-    node_tree.interface.new_socket(
-        in_out="OUTPUT", socket_type="NodeSocketGeometry", name="Geometry"
+    # Rotate instances from the custom attributes.
+    rot_axis = graph.node(
+        GeometryNodeInputNamedAttribute,
+        location=(-570, -275),
+        data_type="FLOAT_VECTOR",
+        inputs={"Name": "instance_rotation_axis"},
+    )
+    rot_angle = graph.node(
+        GeometryNodeInputNamedAttribute,
+        location=(-570, -418),
+        data_type="FLOAT",
+        inputs={"Name": "instance_rotation_angle"},
+    )
+    rotation = graph.node(
+        FunctionNodeAxisAngleToRotation,
+        location=(-380, -318),
+        inputs=[rot_axis, rot_angle],
+    )
+
+    # Set the instance mesh.
+    instance_info = graph.node(
+        GeometryNodeObjectInfo,
+        location=(-380, -91),
+        inputs={"Object": instance_object},
     )
 
     # The instancer mesh's points define the instance translation.
-    instance_points = nodes.new(type="GeometryNodeInstanceOnPoints")
-    links.new(group_input.outputs["Geometry"], instance_points.inputs["Points"])
-    links.new(instance_points.outputs["Instances"], group_output.inputs["Geometry"])
+    instance_points = graph.node(
+        GeometryNodeInstanceOnPoints,
+        location=(-190, 0),
+        inputs={
+            "Points": group_input,
+            "Instance": instance_info["Geometry"],
+            "Rotation": rotation,
+            "Scale": scale_attribute,
+        },
+    )
 
-    # Set the instance mesh.
-    instance_info = nodes.new(type="GeometryNodeObjectInfo")
-    instance_info.inputs[0].default_value = instance_object
-    links.new(instance_info.outputs["Geometry"], instance_points.inputs["Instance"])
-
-    # Scale instances from the custom attribute.
-    scale_attribute = nodes.new(type="GeometryNodeInputNamedAttribute")
-    scale_attribute.data_type = "FLOAT_VECTOR"
-    scale_attribute.inputs["Name"].default_value = "instance_scale"
-    links.new(scale_attribute.outputs["Attribute"], instance_points.inputs["Scale"])
-
-    # Rotate instances from the custom attributes.
-    rot_axis = nodes.new(type="GeometryNodeInputNamedAttribute")
-    rot_axis.data_type = "FLOAT_VECTOR"
-    rot_axis.inputs["Name"].default_value = "instance_rotation_axis"
-
-    rot_angle = nodes.new(type="GeometryNodeInputNamedAttribute")
-    rot_angle.data_type = "FLOAT"
-    rot_angle.inputs["Name"].default_value = "instance_rotation_angle"
-
-    rotation = nodes.new(type="FunctionNodeAxisAngleToRotation")
-    links.new(rot_axis.outputs["Attribute"], rotation.inputs["Axis"])
-    links.new(rot_angle.outputs["Attribute"], rotation.inputs["Angle"])
-    links.new(rotation.outputs["Rotation"], instance_points.inputs["Rotation"])
+    group_output = graph.node(
+        NodeGroupOutput, location=(0, 0), inputs=[instance_points]
+    )
 
 
 def create_instancer_mesh(name: str, instances: ldr_tools_py.PointInstances):
