@@ -6,6 +6,7 @@ from .stub_helpers import (
     UVec2Array,
     Vec3Array,
     Mat4Array,
+    Vec2,
     Vec4,
     Mat4,
 )
@@ -26,6 +27,13 @@ class LDrawGeometry:
     is_face_stud: list[bool]
     edge_line_indices: UVec2Array
     has_grainy_slopes: bool
+    textures: list[bytes]
+    texmaps: list[TextureMap | None]
+
+# TODO: restructure this to make better use of numpy
+class TextureMap:
+    texture_index: int
+    uvs: list[Vec2]
 
 class LDrawColor:
     name: str
