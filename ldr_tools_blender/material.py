@@ -167,9 +167,7 @@ def get_material(
         )
 
         slope_normals = graph.node(
-            ShaderNodeGroup,
-            location=(-630, 100),
-            node_tree=slope_normals_node_group(),
+            ShaderNodeGroup, location=(-630, 100), node_tree=slope_normals_node_group()
         )
 
         # Choose between grainy and smooth normals depending on the face.
