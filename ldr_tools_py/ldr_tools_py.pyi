@@ -1,3 +1,5 @@
+from typing import Final, ClassVar
+
 from .stub_helpers import (
     UIntArray,
     FloatArray,
@@ -40,15 +42,15 @@ class GeometrySettings:
     scene_scale: float
 
 class StudType:
-    Disabled: StudType
-    Normal: StudType
-    Logo4: StudType
-    HighContrast: StudType
+    Disabled: Final[StudType]
+    Normal: Final[StudType]
+    Logo4: Final[StudType]
+    HighContrast: Final[StudType]
 
 class PrimitiveResolution:
-    Low: PrimitiveResolution
-    Normal: PrimitiveResolution
-    High: PrimitiveResolution
+    Low: Final[PrimitiveResolution]
+    Normal: Final[PrimitiveResolution]
+    High: Final[PrimitiveResolution]
 
 class PointInstances:
     translations: Vec3Array
