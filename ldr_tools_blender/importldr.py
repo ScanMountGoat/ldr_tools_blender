@@ -3,6 +3,7 @@ import numpy as np
 import mathutils
 import math
 import struct
+import typing
 
 from bpy.types import (
     NodesModifier,
@@ -16,10 +17,12 @@ from bpy.types import (
     FunctionNodeAxisAngleToRotation,
 )
 
-# TODO: Create a pyi type stub file?
-from . import ldr_tools_py
-
-from .ldr_tools_py import LDrawNode, LDrawGeometry, LDrawColor, GeometrySettings
+if typing.TYPE_CHECKING:
+    import ldr_tools_py
+    from ldr_tools_py import LDrawNode, LDrawGeometry, LDrawColor, GeometrySettings
+else:
+    from . import ldr_tools_py
+    from .ldr_tools_py import LDrawNode, LDrawGeometry, LDrawColor, GeometrySettings
 
 from .material import get_material
 
@@ -306,13 +309,12 @@ def assign_materials(
 ):
     for png in geometry.textures:
         print(type(png))
-        w, h = struct.unpack(b'>LL', png[16:24])
+        w, h = struct.unpack(b">LL", png[16:24])
         # TODO: pass names up from the Rust side
-        img = bpy.data.images.new('img', h, w)
+        img = bpy.data.images.new("img", h, w)
         img.use_fake_user = True
         img.pack(data=png, data_len=len(png))
-        img.source = 'FILE' # ?
-
+        img.source = "FILE"  # ?
 
     if len(geometry.face_colors) == 1:
         # Geometry is cached with code 16, so also handle color replacement.

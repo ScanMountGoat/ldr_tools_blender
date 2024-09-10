@@ -3,11 +3,16 @@ import json
 import bpy
 from bpy.props import StringProperty, EnumProperty, BoolProperty
 from bpy_extras.io_utils import ImportHelper
+import typing
 from typing import Any
 import platform
 
 from .importldr import import_ldraw
-from . import ldr_tools_py
+
+if typing.TYPE_CHECKING:
+    import ldr_tools_py
+else:
+    from . import ldr_tools_py
 
 
 def find_ldraw_library() -> str:
