@@ -338,36 +338,36 @@ def assign_materials(
 
 def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
     mesh = bpy.data.meshes.new(name)
-    if geometry.vertices.shape[0] > 0:
-        # Using foreach_set is faster than bmesh or from_pydata.
-        # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
-        # We can assume the data is already a numpy array.
-        mesh.vertices.add(geometry.vertices.shape[0])
-        mesh.vertices.foreach_set("co", geometry.vertices.reshape(-1))
+    if geometry.vertices.shape[0] == 0:
+        return mesh
 
-        mesh.loops.add(geometry.vertex_indices.size)
-        mesh.loops.foreach_set("vertex_index", geometry.vertex_indices)
+    # Using foreach_set is faster than bmesh or from_pydata.
+    # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
+    # We can assume the data is already a numpy array.
+    mesh.vertices.add(geometry.vertices.shape[0])
+    mesh.vertices.foreach_set("co", geometry.vertices.reshape(-1))
 
-        for loop, texmap in zip(mesh.loops, geometry.texmaps):
-            if texmap is not None:
-                # ???
-                pass
+    mesh.loops.add(geometry.vertex_indices.size)
+    mesh.loops.foreach_set("vertex_index", geometry.vertex_indices)
 
-        mesh.polygons.add(geometry.face_sizes.size)
-        mesh.polygons.foreach_set("loop_start", geometry.face_start_indices)
-        mesh.polygons.foreach_set("loop_total", geometry.face_sizes)
+    for loop, texmap in zip(mesh.loops, geometry.texmaps):
+        if texmap is not None:
+            # ???
+            pass
 
-        # TODO: Enable autosmooth to handle some cases where edges aren't split.
-        # TODO: Just do this in ldr_tools and set custom normals?
-        # mesh.use_auto_smooth = True
-        # mesh.auto_smooth_angle = math.radians(89.0)
-        mesh.polygons.foreach_set("use_smooth", [True] * len(mesh.polygons))
+    mesh.polygons.add(geometry.face_sizes.size)
+    mesh.polygons.foreach_set("loop_start", geometry.face_start_indices)
+    mesh.polygons.foreach_set("loop_total", geometry.face_sizes)
 
-        # Add attributes needed to render grainy slopes properly.
-        if geometry.has_grainy_slopes:
-            is_stud = mesh.attributes.new(
-                name="ldr_is_stud", type="FLOAT", domain="FACE"
-            )
-            is_stud.data.foreach_set("value", geometry.is_face_stud)
+    # TODO: Enable autosmooth to handle some cases where edges aren't split.
+    # TODO: Just do this in ldr_tools and set custom normals?
+    # mesh.use_auto_smooth = True
+    # mesh.auto_smooth_angle = math.radians(89.0)
+    mesh.polygons.foreach_set("use_smooth", [True] * len(mesh.polygons))
+
+    # Add attributes needed to render grainy slopes properly.
+    if geometry.has_grainy_slopes:
+        is_stud = mesh.attributes.new(name="ldr_is_stud", type="FLOAT", domain="FACE")
+        is_stud.data.foreach_set("value", geometry.is_face_stud)
 
     return mesh
