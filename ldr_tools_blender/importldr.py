@@ -11,12 +11,8 @@ from bpy.types import (
     NodeGroupInput,
     NodeGroupOutput,
     GeometryNodeObjectInfo,
-    GeometryNodeSelfObject,
     GeometryNodeInputNamedAttribute,
     GeometryNodeInstanceOnPoints,
-    GeometryNodeStoreNamedAttribute,
-    GeometryNodeRealizeInstances,
-    ShaderNodeVectorMath,
     FunctionNodeAxisAngleToRotation,
 )
 
@@ -100,8 +96,6 @@ def add_nodes(
         else:
             # Use an existing mesh data block like with linked duplicates (alt+d).
             obj = bpy.data.objects.new(node.name, blender_mesh)
-
-        create_geometry_node_standard(obj)
     else:
         # Create an empty by setting the data to None.
         obj = bpy.data.objects.new(node.name, None)
@@ -237,27 +231,9 @@ def create_geometry_node_instancing(
         },
     )
 
-    realize = graph.node(
-        GeometryNodeRealizeInstances, location=(-20, 0), inputs=[instance_points]
+    group_output = graph.node(
+        NodeGroupOutput, location=(0, 0), inputs=[instance_points]
     )
-
-    instance_scale = graph.node(
-        ShaderNodeVectorMath,
-        location=(-20, -180),
-        operation="MULTIPLY",
-        inputs=[instance_info["Scale"], scale_attribute],
-    )
-
-    # Copy the part scale from instancing to geometry for use in shaders
-    store_scale = graph.node(
-        GeometryNodeStoreNamedAttribute,
-        location=(170, 0),
-        data_type="FLOAT_VECTOR",
-        domain="FACE",
-        inputs={"Geometry": realize, "Value": instance_scale, "Name": "scale"},
-    )
-
-    group_output = graph.node(NodeGroupOutput, location=(360, 0), inputs=[store_scale])
 
 
 def create_instancer_mesh(name: str, instances: ldr_tools_py.PointInstances):
@@ -380,46 +356,3 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
             is_stud.data.foreach_set("value", geometry.is_face_stud)
 
     return mesh
-
-
-def create_geometry_node_standard(obj: bpy.types.Object) -> None:
-    modifier = obj.modifiers.new("Store Scale Attribute", "NODES")
-    assert isinstance(modifier, NodesModifier)
-
-    if existing := bpy.data.node_groups.get("Store Scale Attribute"):
-        assert isinstance(existing, GeometryNodeTree)
-        modifier.node_group = existing
-        return
-
-    tree = bpy.data.node_groups.new("Store Scale Attribute", "GeometryNodeTree")  # type: ignore[arg-type]
-    assert isinstance(tree, GeometryNodeTree)
-    modifier.node_group = tree
-
-    graph = NodeGraph(tree)
-
-    graph.input(NodeSocketGeometry, "Geometry")
-    graph.output(NodeSocketGeometry, "Geometry")
-
-    group_input = graph.node(NodeGroupInput, location=(-360, 30))
-
-    self_object = graph.node(GeometryNodeSelfObject, location=(-570, -110))
-
-    object_info = graph.node(
-        GeometryNodeObjectInfo,
-        location=(-360, -110),
-        inputs=[self_object],
-    )
-
-    store_attribute = graph.node(
-        GeometryNodeStoreNamedAttribute,
-        location=(-150, 30),
-        data_type="FLOAT_VECTOR",
-        domain="FACE",
-        inputs={
-            "Geometry": group_input,
-            "Value": object_info["Scale"],
-            "Name": "scale",
-        },
-    )
-
-    graph.node(NodeGroupOutput, location=(60, 30), inputs=[store_attribute])
