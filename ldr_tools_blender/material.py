@@ -165,7 +165,9 @@ def get_material(
         )
 
         slope_normals = graph.node(
-            ShaderNodeGroup, location=(-630, 100), node_tree=slope_normals_node_group()
+            ShaderNodeGroup,
+            location=(-630, 100),
+            node_tree=slope_normals_node_group(),
         )
 
         # Choose between grainy and smooth normals depending on the face.
@@ -180,11 +182,23 @@ def get_material(
             },
         )
 
+    scale = graph.node(
+        ShaderNodeAttribute,
+        location=(-630, 0),
+        attribute_name="scale",
+    )
+
+    subsurface_scale = graph.node(
+        ShaderNodeMath,
+        location=(-430, 105),
+        operation="MULTIPLY",
+        inputs=[scale["Fac"], 2.5],
+    )
+
     bsdf = graph.node(
         ShaderNodeBsdfPrincipled,
         location=(-240, 460),
         # RANDOM_WALK is more accurate but has discoloration around thin corners.
-        # TODO: This is in Blender units and should depend on scene scale
         subsurface_method="BURLEY",
         inputs={
             "Base Color": base_color,
@@ -192,7 +206,7 @@ def get_material(
             # Use a less accurate SSS method instead.
             "Subsurface Radius": (r, g, b),
             "Subsurface Weight": 1.0,
-            "Subsurface Scale": 0.025,
+            "Subsurface Scale": subsurface_scale,
             "Roughness": roughness_node,
             "Metallic": metallicity,
             "Transmission Weight": transmission,
@@ -301,8 +315,17 @@ def normals_node_group() -> ShaderNodeTree:
 
     graph.output(NodeSocketVector, "Normal")
 
-    bevel = graph.node(ShaderNodeBevel, location=(-480, -300), inputs={"Radius": 0.01})
+    scale = graph.node(
+        ShaderNodeAttribute,
+        location=(-720, 260),
+        attribute_name="scale",
+    )
+
     tex_coord = graph.node(ShaderNodeTexCoord, location=(-720, 0))
+
+    bevel = graph.node(
+        ShaderNodeBevel, location=(-480, -300), inputs={"Radius": scale["Fac"]}
+    )
 
     # Faces of bricks are never perfectly flat.
     # Create a very low frequency noise to break up highlights
@@ -310,7 +333,7 @@ def normals_node_group() -> ShaderNodeTree:
         ShaderNodeTexNoise,
         location=(-480, 0),
         inputs={
-            "Scale": 0.01,  # TODO: scene scale?
+            "Scale": 0.01,
             "Detail": 1.0,
             "Roughness": 1.0,
             # "Distortion": 0.0, # already the default
@@ -323,7 +346,7 @@ def normals_node_group() -> ShaderNodeTree:
         location=(-240, 0),
         inputs={
             "Strength": 1.0,
-            "Distance": 0.01,
+            "Distance": scale["Fac"],
             "Height": noise["Fac"],
             "Normal": bevel,
         },
@@ -342,8 +365,16 @@ def slope_normals_node_group() -> ShaderNodeTree:
 
     graph.output(NodeSocketVector, "Normal")
 
-    bevel = graph.node(ShaderNodeBevel, location=(-480, -300), inputs={"Radius": 0.01})
+    scale = graph.node(
+        ShaderNodeAttribute,
+        location=(-720, 260),
+        attribute_name="scale",
+    )
     tex_coord = graph.node(ShaderNodeTexCoord, location=(-720, 0))
+
+    bevel = graph.node(
+        ShaderNodeBevel, location=(-480, -300), inputs={"Radius": scale["Fac"]}
+    )
 
     noise = graph.node(
         ShaderNodeTexNoise,
@@ -357,12 +388,19 @@ def slope_normals_node_group() -> ShaderNodeTree:
         },
     )
 
+    bump_distance = graph.node(
+        ShaderNodeMath,
+        location=(-480, 165),
+        operation="MULTIPLY",
+        inputs=[scale["Fac"], 0.5],
+    )
+
     bump = graph.node(
         ShaderNodeBump,
         location=(-240, 0),
         inputs={
             "Strength": 0.5,
-            "Distance": 0.005,
+            "Distance": bump_distance,
             "Height": noise["Fac"],
             "Normal": bevel,
         },
