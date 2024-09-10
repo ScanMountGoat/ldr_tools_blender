@@ -1,7 +1,11 @@
+import typing
 from typing import Callable, TypeVar
-from dataclasses import dataclass
 
-from .ldr_tools_py import LDrawColor
+if typing.TYPE_CHECKING:
+    from ldr_tools_py import LDrawColor
+else:
+    from .ldr_tools_py import LDrawColor
+
 from .colors import rgb_peeron_by_code, rgb_ldr_tools_by_code
 from .node_dsl import NodeGraph, GraphNode, NodeInput
 
