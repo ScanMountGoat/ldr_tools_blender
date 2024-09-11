@@ -339,12 +339,16 @@ fn append_geometry(
                         current_tex_path = path;
                     }
                 } else if c.text.starts_with("PE_TEX_INFO ") {
-                    if let Some(tex_info) = PendingStudioTexture::parse(
+                    if let Some(mut tex_info) = PendingStudioTexture::parse(
                         &c.text,
                         &current_tex_path,
                         &mut geometry.textures,
                     ) {
-                        if matches!(*tex_info.path, [] | [-1]) {
+                        if tex_info.path == [-1] {
+                            tex_info.path.clear()
+                        }
+
+                        if tex_info.path.is_empty() {
                             if active_textures.len() > 1 {
                                 println!("warning: multiple active textures. ignoring all but one");
                             }
@@ -450,7 +454,7 @@ fn append_geometry(
                             replace_color(subfile_cmd.color, ctx.current_color)
                         };
 
-                        let mut child_textures = vec![];
+                        let mut child_textures = active_textures.clone();
                         for texture in &ctx.studio_textures {
                             if texture.path.get(0) == Some(&tex_path_index) {
                                 let mut texture = texture.clone();

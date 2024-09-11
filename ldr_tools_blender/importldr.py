@@ -4,6 +4,7 @@ import mathutils
 import math
 import struct
 import typing
+import itertools
 
 from bpy.types import (
     NodesModifier,
@@ -301,43 +302,57 @@ def create_colored_mesh_from_geometry(
     return mesh
 
 
+def load_png(data: bytes, name: str = "img") -> bpy.types.Image:
+    # TODO: pass image names up from the Rust side
+    w, h = struct.unpack(b">LL", data[16:24])
+    img = bpy.data.images.new(name, w, h)
+    img.use_fake_user = True
+    img.pack(data=data, data_len=len(data))  # type: ignore[arg-type]
+    img.source = "FILE"  # ?
+    return img
+
+
 def assign_materials(
     mesh: bpy.types.Mesh,
     current_color: int,
     color_by_code: dict[int, LDrawColor],
     geometry: LDrawGeometry,
 ):
-    images: list[bpy.types.Image] = []
-
-    for png in geometry.textures:
-        w, h = struct.unpack(b">LL", png[16:24])
-        # TODO: pass names up from the Rust side
-        img = bpy.data.images.new("img", h, w)
-        img.use_fake_user = True
-        img.pack(data=png, data_len=len(png))
-        img.source = "FILE"  # ?
-        images.append(img)
-
-    if len(geometry.face_colors) == 1:
+    if len(geometry.face_colors) == 1 and not geometry.textures:
         # Geometry is cached with code 16, so also handle color replacement.
         face_color = geometry.face_colors[0]
         color = current_color if face_color == 16 else face_color
 
-        image = images[0] if images else None
-
         # Cache materials by name.
-        material = get_material(color_by_code, color, geometry.has_grainy_slopes, image)
+        material = get_material(color_by_code, color, geometry.has_grainy_slopes)
         mesh.materials.append(material)
-    else:
-        # Handle the case where not all faces have the same color.
-        # This includes patterned (printed) parts and stickers.
-        for face, face_color in zip(mesh.polygons, geometry.face_colors):
-            color = current_color if face_color == 16 else face_color
+        return
 
-            material = get_material(color_by_code, color, geometry.has_grainy_slopes)
-            if mesh.materials.get(material.name) is None:
-                mesh.materials.append(material)
-            face.material_index = mesh.materials.find(material.name)
+    images = [load_png(t) for t in geometry.textures]
+
+    if len(geometry.face_colors) > 1:
+        assert len(geometry.face_colors) == len(mesh.polygons)
+
+    if geometry.texmaps:
+        assert len(geometry.texmaps) == len(mesh.polygons)
+
+    for i, face in enumerate(mesh.polygons):
+        # determine color
+        color_index = i if len(geometry.face_colors) > 1 else 0
+        face_color = geometry.face_colors[color_index]
+        color = current_color if face_color == 16 else face_color
+
+        # determine texture
+        image = None
+        if geometry.texmaps:
+            if texmap := geometry.texmaps[i]:
+                image = images[texmap.texture_index]
+
+        material = get_material(color_by_code, color, geometry.has_grainy_slopes, image)
+        if mesh.materials.get(material.name) is None:
+            mesh.materials.append(material)
+
+        face.material_index = mesh.materials.find(material.name)
 
 
 def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
