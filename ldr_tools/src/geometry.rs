@@ -41,11 +41,16 @@ struct GeometryContext {
 
 #[derive(Clone)]
 struct PendingStudioTexture {
-    #[allow(dead_code)]
     index: usize,
-    #[allow(dead_code)]
-    transform: Option<Mat4>,
+    location: Option<TextureLocation>,
     path: Vec<i32>,
+}
+
+#[derive(Copy, Clone)]
+struct TextureLocation {
+    transform: Mat4,
+    point_min: Vec2,
+    point_max: Vec2,
 }
 
 #[derive(Debug, PartialEq)]
@@ -65,7 +70,7 @@ impl PendingStudioTexture {
         }
 
         let image: &str;
-        let mut transform = None::<Mat4>;
+        let mut location = None::<TextureLocation>;
         if let Some((cells, [img])) = words[1..].split_at_checked(16) {
             let mut iter = cells.iter().filter_map(|c| c.parse::<f32>().ok());
             let (x, y, z) = (iter.next()?, iter.next()?, -iter.next()?);
@@ -73,14 +78,22 @@ impl PendingStudioTexture {
             let (d, e, f) = (iter.next()?, iter.next()?, -iter.next()?);
             let (g, h, i) = (-iter.next()?, -iter.next()?, iter.next()?);
 
-            transform = Some(Mat4::from_cols_array_2d(&[
+            let transform = Mat4::from_cols_array_2d(&[
                 [a, d, g, 0.0],
                 [b, e, h, 0.0],
                 [c, f, i, 0.0],
                 [x, y, z, 1.0],
-            ]));
+            ]);
 
-            // TODO: flip the Z axis
+            // TODO: flip Z?
+
+            let point_min = Vec2::new(iter.next()?, iter.next()?);
+            let point_max = Vec2::new(iter.next()?, iter.next()?);
+            location = Some(TextureLocation {
+                transform,
+                point_min,
+                point_max,
+            });
 
             image = img;
         } else if words.len() == 2 {
@@ -95,7 +108,7 @@ impl PendingStudioTexture {
         let path = path.to_owned();
         Some(Self {
             index,
-            transform,
+            location,
             path,
         })
     }
@@ -555,6 +568,45 @@ fn invert_winding(winding: Winding, invert: bool) -> Winding {
     }
 }
 
+fn init_texture_transform(texture_matrix: Mat4, part_matrix: Mat4) -> (Mat4, Vec3) {
+    let (scale, rot, tr) = (part_matrix * texture_matrix).to_scale_rotation_translation();
+    let mirroring = scale.signum();
+    let box_extents = scale.abs() / 2.0;
+    let rhs = Mat4::from_scale_rotation_translation(mirroring, rot, tr);
+    let matrix = part_matrix.inverse() * rhs;
+    (matrix, box_extents)
+}
+
+fn project_texture<const N: usize>(
+    tex_location: TextureLocation,
+    transform: Mat4,
+    vertices: [weldr::Vec3; N],
+    winding: Winding,
+    texture_index: usize,
+) -> TextureMap {
+    let (matrix, _box_extents) = init_texture_transform(tex_location.transform, transform);
+
+    let vertices = vertices.map(|v| matrix.inverse().transform_point3(v));
+
+    let min = tex_location.point_min;
+    let diff = tex_location.point_max - tex_location.point_min;
+
+    let mut uvs = vertices.map(|vert| {
+        let u = (vert.x - min.x) / diff.x;
+        let v = (vert.z - min.y) / diff.y;
+        Vec2::new(u, v)
+    });
+
+    if winding == Winding::Ccw {
+        uvs.reverse();
+    }
+
+    TextureMap {
+        texture_index,
+        uvs: uvs.to_vec(),
+    }
+}
+
 fn add_face<const N: usize>(
     geometry: &mut LDrawGeometry,
     transform: Mat4,
@@ -571,31 +623,17 @@ fn add_face<const N: usize>(
                 texture_index: texture.index,
                 uvs: uvs.to_vec(),
             })
-        } else if let Some(_transform) = texture.transform {
-            // TODO: do the actual math
-            // for now, just fudge the numbers a bit (a lot)
-            // by assuming the triangle goes to the edges of the image
-
-            let (mut min, mut max) = (weldr::Vec3::MAX, weldr::Vec3::MIN);
-            for v in vertices {
-                min = min.min(v);
-                max = max.max(v);
-            }
-            let range = max - min;
-            let mut uvs = vertices
-                .map(|v| (v - min) / range)
-                .map(|v| (-v.x, v.z).into());
-
-            if winding == Winding::Ccw {
-                uvs.reverse();
-            }
-
-            Some(TextureMap {
-                texture_index: texture.index,
-                uvs: uvs.to_vec(),
-            })
+        } else if let Some(tex_location) = texture.location {
+            Some(project_texture(
+                tex_location,
+                transform,
+                vertices,
+                winding,
+                texture.index,
+            ))
         } else {
-            println!("WARNING: texture with neither projection matrix nor face UVs");
+            // println!("WARNING: texture with neither projection matrix nor face UVs");
+            // this case is actually common for uv-mapped textures
             None
         }
     } else {
