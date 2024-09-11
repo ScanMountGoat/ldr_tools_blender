@@ -582,9 +582,14 @@ fn add_face<const N: usize>(
                 max = max.max(v);
             }
             let range = max - min;
-            let uvs = vertices
+            let mut uvs = vertices
                 .map(|v| (v - min) / range)
                 .map(|v| (-v.x, v.z).into());
+
+            if winding == Winding::Ccw {
+                uvs.reverse();
+            }
+
             Some(TextureMap {
                 texture_index: texture.index,
                 uvs: uvs.to_vec(),
