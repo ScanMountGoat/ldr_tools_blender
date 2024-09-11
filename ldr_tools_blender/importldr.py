@@ -307,22 +307,26 @@ def assign_materials(
     color_by_code: dict[int, LDrawColor],
     geometry: LDrawGeometry,
 ):
+    images: list[bpy.types.Image] = []
+
     for png in geometry.textures:
-        print(type(png))
         w, h = struct.unpack(b">LL", png[16:24])
         # TODO: pass names up from the Rust side
         img = bpy.data.images.new("img", h, w)
         img.use_fake_user = True
         img.pack(data=png, data_len=len(png))
         img.source = "FILE"  # ?
+        images.append(img)
 
     if len(geometry.face_colors) == 1:
         # Geometry is cached with code 16, so also handle color replacement.
         face_color = geometry.face_colors[0]
         color = current_color if face_color == 16 else face_color
 
+        image = images[0] if images else None
+
         # Cache materials by name.
-        material = get_material(color_by_code, color, geometry.has_grainy_slopes)
+        material = get_material(color_by_code, color, geometry.has_grainy_slopes, image)
         mesh.materials.append(material)
     else:
         # Handle the case where not all faces have the same color.
@@ -350,11 +354,6 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
     mesh.loops.add(geometry.vertex_indices.size)
     mesh.loops.foreach_set("vertex_index", geometry.vertex_indices)
 
-    for loop, texmap in zip(mesh.loops, geometry.texmaps):
-        if texmap is not None:
-            # ???
-            pass
-
     mesh.polygons.add(geometry.face_sizes.size)
     mesh.polygons.foreach_set("loop_start", geometry.face_start_indices)
     mesh.polygons.foreach_set("loop_total", geometry.face_sizes)
@@ -369,5 +368,23 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
     if geometry.has_grainy_slopes:
         is_stud = mesh.attributes.new(name="ldr_is_stud", type="FLOAT", domain="FACE")
         is_stud.data.foreach_set("value", geometry.is_face_stud)
+
+    uvs = []
+
+    assert len(geometry.texmaps) == len(
+        mesh.polygons
+    ), f"{len(geometry.texmaps)} {len(mesh.polygons)}"
+
+    for polygon, texmap in zip(mesh.polygons, geometry.texmaps):
+        if texmap is None:
+            for _ in range(polygon.loop_total):
+                uvs.extend((0.0, 0.0))
+        else:
+            assert len(texmap.uvs) == polygon.loop_total
+            for uv in texmap.uvs:
+                uvs.extend(uv)
+
+    uv_layer = mesh.uv_layers.new()
+    uv_layer.data.foreach_set("uv", uvs)
 
     return mesh

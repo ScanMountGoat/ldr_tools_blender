@@ -580,7 +580,7 @@ fn add_face<const N: usize>(
             let range = max - min;
             let uvs = vertices
                 .map(|v| (v - min) / range)
-                .map(|v| (v.x, v.y).into());
+                .map(|v| (-v.x, v.z).into());
             Some(TextureMap {
                 texture_index: texture.index,
                 uvs: uvs.to_vec(),

@@ -31,6 +31,7 @@ from bpy.types import (
     ShaderNodeOutputMaterial,
     ShaderNodeSeparateXYZ,
     ShaderNodeGroup,
+    ShaderNodeTexImage,
 )
 
 # Materials are based on the techniques described in the following blog posts.
@@ -41,7 +42,10 @@ from bpy.types import (
 
 
 def get_material(
-    color_by_code: dict[int, LDrawColor], code: int, is_slope: bool
+    color_by_code: dict[int, LDrawColor],
+    code: int,
+    is_slope: bool,
+    image: bpy.types.Image | None = None,
 ) -> Material:
     # Cache materials by name.
     # This loads materials lazily to avoid creating unused colors.
@@ -52,6 +56,9 @@ def get_material(
         name = f"{code} {ldraw_color.name}"
         if is_slope:
             name += " slope"
+
+    if image is not None:
+        name += f" {image.name}"
 
     material = bpy.data.materials.get(name)
     if material is not None:
@@ -143,6 +150,20 @@ def get_material(
             roughness = (0.1, 0.35)
         else:
             roughness = (0.01, 0.15)
+
+    if image is not None:
+        texture = graph.node(ShaderNodeTexImage, location=(-730, 800), image=image)
+
+        base_color = graph.node(
+            ShaderNodeMix,
+            location=(-430, 750),
+            data_type="RGBA",
+            inputs={
+                "Factor": texture["Alpha"],
+                "A": base_color,
+                "B": texture["Color"],
+            },
+        )
 
     # Procedural roughness.
     roughness_node = graph.node(
