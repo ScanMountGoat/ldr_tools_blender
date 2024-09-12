@@ -61,16 +61,19 @@ def import_objects(
     # Create an object for each part in the scene.
     # This still uses instances the mesh data blocks for reduced memory usage.
     blender_mesh_cache = {}
+
+    # Don't scale any coordinates on the Rust side, just change the scale of the parent object
+    scale = settings.scene_scale
+    settings.scene_scale = 1.0
+
     scene = ldr_tools_py.load_file(filepath, ldraw_path, additional_paths, settings)
 
     root_obj = add_nodes(
         scene.root_node, scene.geometry_cache, blender_mesh_cache, color_by_code
     )
     # Account for Blender having a different coordinate system.
-    # Apply a scene scale to match the previous version.
-    # TODO: make scene scale configurable.
     root_obj.rotation_euler = mathutils.Euler((math.radians(-90.0), 0.0, 0.0), "XYZ")
-    root_obj.scale = (0.01, 0.01, 0.01)
+    root_obj.scale = (scale, scale, scale)
 
 
 def add_nodes(
@@ -120,6 +123,9 @@ def import_instanced(
     color_by_code: dict[int, LDrawColor],
     settings: GeometrySettings,
 ):
+    scale = settings.scene_scale
+    settings.scene_scale = 1.0
+
     # Instance each part on the points of a mesh.
     # This avoids overhead from object creation for large scenes.
     scene = ldr_tools_py.load_file_instanced_points(
@@ -137,9 +143,8 @@ def import_instanced(
 
     root_obj = bpy.data.objects.new(scene.main_model_name, None)
     # Account for Blender having a different coordinate system.
-    # TODO: make scene scale configurable.
     root_obj.rotation_euler = mathutils.Euler((math.radians(-90.0), 0.0, 0.0), "XYZ")
-    root_obj.scale = (0.01, 0.01, 0.01)
+    root_obj.scale = (scale, scale, scale)
     bpy.context.collection.objects.link(root_obj)
 
     # Instant each unique colored part on the faces of a mesh.

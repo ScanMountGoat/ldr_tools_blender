@@ -1,7 +1,7 @@
 import os
 import json
 import bpy
-from bpy.props import StringProperty, EnumProperty, BoolProperty
+from bpy.props import StringProperty, EnumProperty, BoolProperty, FloatProperty
 from bpy_extras.io_utils import ImportHelper
 import typing
 from typing import Any
@@ -68,6 +68,8 @@ class Preferences:
         self.primitive_resolution = "Normal"
         self.additional_paths = []
         self.add_gap_between_parts = True
+        # default matches hardcoded behavior of previous versions
+        self.scene_scale = 0.01
 
     def from_dict(self, dict: dict[str, Any]):
         # Fill in defaults for any missing values.
@@ -82,6 +84,7 @@ class Preferences:
         self.add_gap_between_parts = dict.get(
             "add_gap_between_parts", defaults.add_gap_between_parts
         )
+        self.scene_scale = dict.get("scene_scale", defaults.scene_scale)
 
     def save(self):
         with open(Preferences.preferences_path, "w+") as file:
@@ -196,6 +199,12 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         default=preferences.add_gap_between_parts,
     )
 
+    scene_scale: FloatProperty(
+        name="Scale",
+        description="Scale factor for the imported model",
+        default=preferences.scene_scale,
+    )
+
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
@@ -204,6 +213,7 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         layout.prop(self, "stud_type")
         layout.prop(self, "primitive_resolution")
         layout.prop(self, "add_gap_between_parts")
+        layout.prop(self, "scene_scale")
 
         # TODO: File selector?
         # TODO: Come up with better UI for this?
@@ -224,6 +234,7 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         ImportOperator.preferences.stud_type = self.stud_type
         ImportOperator.preferences.primitive_resolution = self.primitive_resolution
         ImportOperator.preferences.add_gap_between_parts = self.add_gap_between_parts
+        ImportOperator.preferences.scene_scale = self.scene_scale
 
         settings = self.get_settings()
 
@@ -266,7 +277,7 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         elif self.primitive_resolution == "High":
             settings.primitive_resolution = ldr_tools_py.PrimitiveResolution.High
 
-        settings.scene_scale = 1.0
+        settings.scene_scale = self.scene_scale
         # Required for calculated normals.
         settings.weld_vertices = True
 
