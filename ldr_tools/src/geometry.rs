@@ -448,62 +448,64 @@ fn append_geometry(
                 hard_edges.push(edge);
             }
             Command::SubFileRef(subfile_cmd) => {
-                if recursive {
-                    let subfilename = replace_studs(subfile_cmd, settings.stud_type);
+                if !recursive {
+                    continue;
+                }
+                let subfilename = replace_studs(subfile_cmd, settings.stud_type);
+                let Some(subfile) = source_map.get(subfilename) else {
+                    continue;
+                };
 
-                    if let Some(subfile) = source_map.get(subfilename) {
-                        // Subfiles of slopes or studs are still slopes or studs.
-                        let is_stud = ctx.is_stud || is_stud(subfilename);
-                        let is_slope = ctx.is_slope || is_slope_piece(subfilename);
+                // Subfiles of slopes or studs are still slopes or studs.
+                let is_stud = ctx.is_stud || is_stud(subfilename);
+                let is_slope = ctx.is_slope || is_slope_piece(subfilename);
 
-                        // Set the walls of high contrast studs to black.
-                        // TODO: Create custom stud files for better accuracy.
-                        let current_color = if is_stud
-                            && settings.stud_type == StudType::HighContrast
-                            && subfilename.contains("cyli.dat")
-                        {
-                            0
-                        } else {
-                            replace_color(subfile_cmd.color, ctx.current_color)
-                        };
+                // Set the walls of high contrast studs to black.
+                // TODO: Create custom stud files for better accuracy.
+                let current_color = if is_stud
+                    && settings.stud_type == StudType::HighContrast
+                    && subfilename.contains("cyli.dat")
+                {
+                    0
+                } else {
+                    replace_color(subfile_cmd.color, ctx.current_color)
+                };
 
-                        let mut child_textures = active_textures.clone();
-                        for texture in &ctx.studio_textures {
-                            if texture.path.get(0) == Some(&tex_path_index) {
-                                let mut texture = texture.clone();
-                                texture.path.remove(0);
-                                child_textures.push(texture);
-                            }
-                        }
-
-                        // The determinant is checked in each file.
-                        // It should not be included in the child's context.
-                        let child_ctx = GeometryContext {
-                            current_color,
-                            transform: ctx.transform * subfile_cmd.matrix(),
-                            inverted: if invert_next {
-                                !ctx.inverted
-                            } else {
-                                ctx.inverted
-                            },
-                            is_stud,
-                            is_slope,
-                            studio_textures: child_textures,
-                        };
-
-                        // Don't invert additional subfile reference commands.
-                        invert_next = false;
-
-                        // TODO: Cache the processed geometry for studs?
-                        // TODO: Will studs ever need to be welded to other geometry?
-                        append_geometry(
-                            geometry, hard_edges, vertex_map, subfile, source_map, child_ctx,
-                            recursive, settings,
-                        );
-
-                        tex_path_index += 1;
+                let mut child_textures = active_textures.clone();
+                for texture in &ctx.studio_textures {
+                    if texture.path.get(0) == Some(&tex_path_index) {
+                        let mut texture = texture.clone();
+                        texture.path.remove(0);
+                        child_textures.push(texture);
                     }
                 }
+
+                // The determinant is checked in each file.
+                // It should not be included in the child's context.
+                let child_ctx = GeometryContext {
+                    current_color,
+                    transform: ctx.transform * subfile_cmd.matrix(),
+                    inverted: if invert_next {
+                        !ctx.inverted
+                    } else {
+                        ctx.inverted
+                    },
+                    is_stud,
+                    is_slope,
+                    studio_textures: child_textures,
+                };
+
+                // Don't invert additional subfile reference commands.
+                invert_next = false;
+
+                // TODO: Cache the processed geometry for studs?
+                // TODO: Will studs ever need to be welded to other geometry?
+                append_geometry(
+                    geometry, hard_edges, vertex_map, subfile, source_map, child_ctx, recursive,
+                    settings,
+                );
+
+                tex_path_index += 1;
             }
             _ => {}
         }
@@ -598,6 +600,7 @@ fn project_texture<const N: usize>(
     });
 
     if winding == Winding::Ccw {
+        println!("CCW {vertices:?} {uvs:?}");
         uvs.reverse();
     }
 
@@ -646,6 +649,7 @@ fn add_face<const N: usize>(
 
     // TODO: Is it ok to just reverse indices even though this isn't the convention?
     if winding == Winding::Cw {
+        println!("CW {vertices:?} {indices:?} {uvs:?}");
         indices.reverse();
     }
 
