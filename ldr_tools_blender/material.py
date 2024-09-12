@@ -31,6 +31,8 @@ from bpy.types import (
     ShaderNodeOutputMaterial,
     ShaderNodeSeparateXYZ,
     ShaderNodeGroup,
+    ShaderNodeVectorTransform,
+    ShaderNodeVectorMath,
 )
 
 # Materials are based on the techniques described in the following blog posts.
@@ -180,11 +182,18 @@ def get_material(
             },
         )
 
+    scale = graph.node(
+        ShaderNodeGroup, location=(-630, 0), node_tree=object_scale_node_group()
+    )
+
+    subsurface_scale = graph.node(
+        ShaderNodeMath, location=(-430, 105), operation="MULTIPLY", inputs=[scale, 2.5]
+    )
+
     bsdf = graph.node(
         ShaderNodeBsdfPrincipled,
         location=(-240, 460),
         # RANDOM_WALK is more accurate but has discoloration around thin corners.
-        # TODO: This is in Blender units and should depend on scene scale
         subsurface_method="BURLEY",
         inputs={
             "Base Color": base_color,
@@ -192,7 +201,7 @@ def get_material(
             # Use a less accurate SSS method instead.
             "Subsurface Radius": (r, g, b),
             "Subsurface Weight": 1.0,
-            "Subsurface Scale": 0.025,
+            "Subsurface Scale": subsurface_scale,
             "Roughness": roughness_node,
             "Metallic": metallicity,
             "Transmission Weight": transmission,
@@ -301,8 +310,13 @@ def normals_node_group() -> ShaderNodeTree:
 
     graph.output(NodeSocketVector, "Normal")
 
-    bevel = graph.node(ShaderNodeBevel, location=(-480, -300), inputs={"Radius": 0.01})
+    scale = graph.node(
+        ShaderNodeGroup, location=(-720, 100), node_tree=object_scale_node_group()
+    )
+
     tex_coord = graph.node(ShaderNodeTexCoord, location=(-720, 0))
+
+    bevel = graph.node(ShaderNodeBevel, location=(-480, -300), inputs={"Radius": scale})
 
     # Faces of bricks are never perfectly flat.
     # Create a very low frequency noise to break up highlights
@@ -310,7 +324,7 @@ def normals_node_group() -> ShaderNodeTree:
         ShaderNodeTexNoise,
         location=(-480, 0),
         inputs={
-            "Scale": 0.01,  # TODO: scene scale?
+            "Scale": 0.01,
             "Detail": 1.0,
             "Roughness": 1.0,
             # "Distortion": 0.0, # already the default
@@ -323,7 +337,7 @@ def normals_node_group() -> ShaderNodeTree:
         location=(-240, 0),
         inputs={
             "Strength": 1.0,
-            "Distance": 0.01,
+            "Distance": scale,
             "Height": noise["Fac"],
             "Normal": bevel,
         },
@@ -342,8 +356,12 @@ def slope_normals_node_group() -> ShaderNodeTree:
 
     graph.output(NodeSocketVector, "Normal")
 
-    bevel = graph.node(ShaderNodeBevel, location=(-480, -300), inputs={"Radius": 0.01})
+    scale = graph.node(
+        ShaderNodeGroup, location=(-720, 100), node_tree=object_scale_node_group()
+    )
     tex_coord = graph.node(ShaderNodeTexCoord, location=(-720, 0))
+
+    bevel = graph.node(ShaderNodeBevel, location=(-480, -300), inputs={"Radius": scale})
 
     noise = graph.node(
         ShaderNodeTexNoise,
@@ -357,12 +375,16 @@ def slope_normals_node_group() -> ShaderNodeTree:
         },
     )
 
+    bump_distance = graph.node(
+        ShaderNodeMath, location=(-480, 165), operation="MULTIPLY", inputs=[scale, 0.5]
+    )
+
     bump = graph.node(
         ShaderNodeBump,
         location=(-240, 0),
         inputs={
             "Strength": 0.5,
-            "Distance": 0.005,
+            "Distance": bump_distance,
             "Height": noise["Fac"],
             "Normal": bevel,
         },
@@ -424,4 +446,29 @@ def is_slope_node_group() -> ShaderNodeTree:
     )
 
     graph.node(NodeGroupOutput, location=(-600, 400), inputs=[subtract_studs])
+    return graph.tree
+
+
+def object_scale_node_group() -> NodeTree:
+    tree, existing = _shader_node_group("Object Scale (ldr_tools)")
+    if existing:
+        return tree
+
+    graph = NodeGraph(tree)
+
+    graph.output(NodeSocketFloat, "Value")
+
+    transform = graph.node(
+        ShaderNodeVectorTransform,
+        vector_type="VECTOR",
+        convert_from="OBJECT",
+        convert_to="WORLD",
+        inputs=[(1.0, 0.0, 0.0)],
+    )
+
+    length = graph.node(
+        ShaderNodeVectorMath, operation="LENGTH", location=(200, 0), inputs=[transform]
+    )
+
+    graph.node(NodeGroupOutput, location=(400, 0), inputs=[length])
     return graph.tree
