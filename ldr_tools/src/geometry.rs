@@ -600,7 +600,6 @@ fn project_texture<const N: usize>(
     });
 
     if winding == Winding::Ccw {
-        println!("CCW {vertices:?} {uvs:?}");
         uvs.reverse();
     }
 
@@ -649,7 +648,6 @@ fn add_face<const N: usize>(
 
     // TODO: Is it ok to just reverse indices even though this isn't the convention?
     if winding == Winding::Cw {
-        println!("CW {vertices:?} {indices:?} {uvs:?}");
         indices.reverse();
     }
 
