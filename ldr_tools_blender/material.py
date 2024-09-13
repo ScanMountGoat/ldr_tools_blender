@@ -456,6 +456,7 @@ def object_scale_node_group() -> NodeTree:
 
     graph = NodeGraph(tree)
 
+    # Extract the magnitude of the object space scale.
     graph.output(NodeSocketFloat, "Value")
 
     transform = graph.node(
