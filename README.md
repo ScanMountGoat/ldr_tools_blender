@@ -4,14 +4,15 @@
 
 > Cycles render of [10179-1 Millennium Falcon UCS (LDraw OMR)](https://omr.ldraw.org/files/347)
 
-An addon for importing LDraw files into Blender 4.1 or later. Check out [discussions](https://github.com/ScanMountGoat/ldr_tools_blender/discussions) for reading announcements, asking questions, or suggesting new features. Report bugs or request new features in [issues](https://github.com/ScanMountGoat/ldr_tools_blender/issues). Download the latest version from [releases](https://github.com/ScanMountGoat/ldr_tools_blender/releases).
+An addon for importing LDraw and Studio files into Blender 4.1 or later. Check out [discussions](https://github.com/ScanMountGoat/ldr_tools_blender/discussions) for reading announcements, asking questions, or discussing new features. Report bugs or request new features in [issues](https://github.com/ScanMountGoat/ldr_tools_blender/issues). Download the latest version from [releases](https://github.com/ScanMountGoat/ldr_tools_blender/releases).
 
 ## Features
 The goal of this project is to provided a reliable and performant way to import digital LEGO models into modern versions of Blender for rendering. This includes importing and rendering [Bricklink Studio](https://www.bricklink.com/v3/studio/download.page) models or models built with [LDraw editing programs](https://www.ldraw.org/downloads-2/third-party-software.html). 
 
 * Compatible with LDR and MPD files. If you have a file that doesn't open correctly or an LDraw extension you'd like supported, please report it in [issues](https://github.com/ScanMountGoat/ldr_tools_blender/issues).
-*  Easily load LEGO models with hundreds of thousands of parts. For extremely large scenes, see [performance](#performance).
-* Create photorealistc renders taking full advantage of Blender Cycles with automatically created PBR materials with accurate colors and procedurally generated surface detail. 
+* Compatible with newer versions of Bricklink Studio .io files.
+* Easily load LEGO models with hundreds of thousands of parts. For extremely large scenes, see [performance](#performance).
+* Create photorealistic renders taking full advantage of Blender Cycles with generated materials with accurate colors and procedurally generated surface detail. 
 
 ## Bricklink Studio Compatibility
 Bricklink Studio models from newer versions of the program can be imported directly from .io files. Older Studio models that fail to import as .io files should be resaved with a newer version of Studio. This avoids an issue with password protection on older .io files. Studio can also export files as LDraw under File > Export As before importing into Blender. 
