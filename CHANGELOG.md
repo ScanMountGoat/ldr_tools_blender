@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## unreleased
 ### Added
 * Added support for importing .io files saved by recent versions of Bricklink Studio.
+* Added an option for adjusting the scale when importing.
+
+### Fixed
+* Fixed an issue where some slope pieces did not use slope materials.
 
 ## 0.4.2 - 2024-08-20
 ### Fixed
