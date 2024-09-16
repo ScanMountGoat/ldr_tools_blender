@@ -25,8 +25,14 @@ pub struct LDrawGeometry {
     /// Some applications may want to apply a separate texture to faces
     /// based on an angle threshold.
     pub has_grainy_slopes: bool,
+    /// PNG-encoded images from PE_TEX_INFO commands.
     pub textures: Vec<Vec<u8>>,
-    pub texmaps: Vec<Option<TextureMap>>,
+    /// Per-face indices into `textures`. 0xFF indicates no texture for the face.
+    /// Eight-bit indices save memory, especially for the untextured majority of parts.
+    // TODO: Don't even bother allocating and marshaling these buffers until encountering at least one texture.
+    pub texture_indices: Vec<u8>,
+    /// Per-vertex UV coordinates for the entire mesh, even non-textured faces.
+    pub uvs: Vec<Vec2>,
 }
 
 /// Settings that inherit or accumulate when recursing into subfiles.
@@ -41,7 +47,7 @@ struct GeometryContext {
 
 #[derive(Clone)]
 struct PendingStudioTexture {
-    index: usize,
+    index: u8,
     location: Option<TextureLocation>,
     path: Vec<i32>,
 }
@@ -54,11 +60,9 @@ struct TextureLocation {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct TextureMap {
-    pub texture_index: usize,
-    // TODO: smallvec or dense array,
-    // this is a relatively inefficient design to get something working
-    pub uvs: Vec<Vec2>,
+pub struct TextureMap<const N: usize> {
+    pub texture_index: u8,
+    pub uvs: [Vec2; N],
 }
 
 impl PendingStudioTexture {
@@ -94,8 +98,15 @@ impl PendingStudioTexture {
             return None;
         }
 
+        if textures.len() >= u8::MAX as usize {
+            // Why would a single part ever have 256 or more different textures?
+            eprintln!("Texture limit exceeded!");
+            return None;
+        }
+
         let image = BASE64_STANDARD.decode(image).ok()?;
-        let index = textures.len();
+
+        let index = textures.len() as u8;
         textures.push(image);
         let path = path.to_owned();
         Some(Self {
@@ -169,7 +180,8 @@ pub fn create_geometry(
         edge_line_indices: Vec::new(),
         has_grainy_slopes: is_slope_piece(name),
         textures: vec![],
-        texmaps: vec![],
+        texture_indices: vec![],
+        uvs: vec![],
     };
 
     // Start with inverted set to false since parts should never be inverted.
@@ -577,14 +589,11 @@ fn project_texture<const N: usize>(
     transform: Mat4,
     vertices: [weldr::Vec3; N],
     uvs: Option<[weldr::Vec2; N]>,
-) -> Option<TextureMap> {
+) -> Option<TextureMap<N>> {
     let texture_index = texture.index;
 
     if let Some(uvs) = uvs {
-        return Some(TextureMap {
-            texture_index,
-            uvs: uvs.to_vec(),
-        });
+        return Some(TextureMap { texture_index, uvs });
     }
 
     // if there are neither vertex UVs on the face
@@ -603,8 +612,7 @@ fn project_texture<const N: usize>(
     let min = tex_location.point_min;
     let diff = tex_location.point_max - tex_location.point_min;
 
-    let uvs = vertices.map(|v| (v.xz() - min) / diff).to_vec();
-
+    let uvs = vertices.map(|v| (v.xz() - min) / diff);
     Some(TextureMap { texture_index, uvs })
 }
 
@@ -631,7 +639,14 @@ fn add_face<const N: usize>(
     geometry.vertex_indices.extend_from_slice(&indices);
     geometry.face_start_indices.push(starting_index);
     geometry.face_sizes.push(N as u32);
-    geometry.texmaps.push(texmap);
+
+    if let Some(texmap) = texmap {
+        geometry.texture_indices.push(texmap.texture_index);
+        geometry.uvs.extend(texmap.uvs);
+    } else {
+        geometry.texture_indices.push(u8::MAX); // Sentinel value indicating no texture for this face.
+        geometry.uvs.extend([Vec2::ZERO; N]); // "Padding" so that all vertices get a UV.
+    }
 }
 
 fn intersect_poly_box(polygon: &[Vec3], r: Vec3) -> bool {

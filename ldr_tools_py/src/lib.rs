@@ -89,12 +89,14 @@ pub struct LDrawGeometry {
     edge_line_indices: PyObject,
     has_grainy_slopes: bool,
     textures: Vec<Cow<'static, [u8]>>, // marshaled as list[bytes]
-    texmaps: Vec<Option<TextureMap>>,
+    texture_indices: PyObject,
+    uvs: PyObject,
 }
 
 impl LDrawGeometry {
     fn from_geometry(py: Python, geometry: ldr_tools::LDrawGeometry) -> Self {
         let sharp_edge_count = geometry.edge_line_indices.len();
+        let uv_count = geometry.uvs.len();
 
         // This flatten will be optimized in Release mode.
         // This avoids needing unsafe code.
@@ -116,27 +118,16 @@ impl LDrawGeometry {
                 .into(),
             has_grainy_slopes: geometry.has_grainy_slopes,
             textures: geometry.textures.into_iter().map(Cow::Owned).collect(),
-            texmaps: geometry
-                .texmaps
+            texture_indices: geometry.texture_indices.into_pyarray(py).into(),
+            uvs: geometry
+                .uvs
                 .into_iter()
-                .map(|maybe_texmap| maybe_texmap.map(TextureMap::from))
-                .collect(),
-        }
-    }
-}
-
-#[pyclass(get_all)]
-#[derive(Debug, Clone)]
-pub struct TextureMap {
-    texture_index: usize,
-    uvs: Vec<[f32; 2]>,
-}
-
-impl From<ldr_tools::TextureMap> for TextureMap {
-    fn from(tm: ldr_tools::TextureMap) -> Self {
-        Self {
-            texture_index: tm.texture_index,
-            uvs: tm.uvs.into_iter().map(|v| [v.x, v.y]).collect(),
+                .flat_map(|uv| uv.to_array())
+                .collect::<Vec<f32>>()
+                .into_pyarray(py)
+                .reshape((uv_count, 2))
+                .unwrap()
+                .into(),
         }
     }
 }

@@ -338,9 +338,6 @@ def assign_materials(
     if len(geometry.face_colors) > 1:
         assert len(geometry.face_colors) == len(mesh.polygons)
 
-    if geometry.texmaps:
-        assert len(geometry.texmaps) == len(mesh.polygons)
-
     for i, face in enumerate(mesh.polygons):
         # determine color
         color_index = i if len(geometry.face_colors) > 1 else 0
@@ -349,9 +346,9 @@ def assign_materials(
 
         # determine texture
         image = None
-        if geometry.texmaps:
-            if texmap := geometry.texmaps[i]:
-                image = images[texmap.texture_index]
+        image_index = geometry.texture_indices[i]
+        if image_index != 0xFF:
+            image = images[image_index]
 
         material = get_material(color_by_code, color, geometry.has_grainy_slopes, image)
         if mesh.materials.get(material.name) is None:
@@ -389,22 +386,8 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
         is_stud = mesh.attributes.new(name="ldr_is_stud", type="FLOAT", domain="FACE")
         is_stud.data.foreach_set("value", geometry.is_face_stud)
 
-    uvs = []
-
-    assert len(geometry.texmaps) == len(
-        mesh.polygons
-    ), f"{len(geometry.texmaps)} {len(mesh.polygons)}"
-
-    for polygon, texmap in zip(mesh.polygons, geometry.texmaps):
-        if texmap is None:
-            for _ in range(polygon.loop_total):
-                uvs.extend((0.0, 0.0))
-        else:
-            assert len(texmap.uvs) == polygon.loop_total
-            for uv in texmap.uvs:
-                uvs.extend(uv)
-
-    uv_layer = mesh.uv_layers.new()
-    uv_layer.data.foreach_set("uv", uvs)
+    if geometry.textures:
+        uv_layer = mesh.uv_layers.new()
+        uv_layer.data.foreach_set("uv", geometry.uvs.reshape(-1))
 
     return mesh

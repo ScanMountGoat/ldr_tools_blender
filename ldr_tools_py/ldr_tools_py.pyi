@@ -1,9 +1,11 @@
 from typing import Final, ClassVar
 
 from .stub_helpers import (
+    UByteArray,
     UIntArray,
     FloatArray,
     UVec2Array,
+    Vec2Array,
     Vec3Array,
     Mat4Array,
     Vec2,
@@ -28,12 +30,8 @@ class LDrawGeometry:
     edge_line_indices: UVec2Array
     has_grainy_slopes: bool
     textures: list[bytes]
-    texmaps: list[TextureMap | None]
-
-# TODO: restructure this to make better use of numpy
-class TextureMap:
-    texture_index: int
-    uvs: list[Vec2]
+    texture_indices: UByteArray
+    uvs: Vec2Array
 
 class LDrawColor:
     name: str
