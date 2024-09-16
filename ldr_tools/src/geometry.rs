@@ -573,78 +573,123 @@ fn init_texture_transform(texture_matrix: Mat4, part_matrix: Mat4) -> (Mat4, Vec
 }
 
 fn project_texture<const N: usize>(
-    tex_location: TextureLocation,
+    texture: &PendingStudioTexture,
     transform: Mat4,
     vertices: [weldr::Vec3; N],
-    winding: Winding,
-    texture_index: usize,
-) -> TextureMap {
-    let (matrix, _box_extents) = init_texture_transform(tex_location.transform, transform);
-    let inverse = matrix.inverse();
+    uvs: Option<[weldr::Vec2; N]>,
+) -> Option<TextureMap> {
+    let texture_index = texture.index;
 
+    if let Some(uvs) = uvs {
+        return Some(TextureMap {
+            texture_index,
+            uvs: uvs.to_vec(),
+        });
+    }
+
+    // if there are neither vertex UVs on the face
+    // nor a projection matrix on the texture,
+    // then the texture is not drawn on this face
+    let tex_location = texture.location?;
+
+    let (matrix, box_extents) = init_texture_transform(tex_location.transform, transform);
+    let inverse = matrix.inverse();
     let vertices = vertices.map(|v| inverse.transform_point3(v));
+
+    if !intersect_poly_box(&vertices, box_extents) {
+        return None;
+    }
 
     let min = tex_location.point_min;
     let diff = tex_location.point_max - tex_location.point_min;
 
-    let mut uvs = vertices.map(|v| (v.xz() - min) / diff);
+    let uvs = vertices.map(|v| (v.xz() - min) / diff).to_vec();
 
-    if winding == Winding::Cw {
-        uvs.reverse();
-    }
-
-    TextureMap {
-        texture_index,
-        uvs: uvs.to_vec(),
-    }
+    Some(TextureMap { texture_index, uvs })
 }
 
 fn add_face<const N: usize>(
     geometry: &mut LDrawGeometry,
     transform: Mat4,
-    vertices: [weldr::Vec3; N],
+    mut vertices: [weldr::Vec3; N],
     uvs: Option<[weldr::Vec2; N]>,
     winding: Winding,
     vertex_map: &mut VertexMap,
     weld_vertices: bool,
     texture: Option<&PendingStudioTexture>,
 ) {
-    let texmap: Option<TextureMap> = if let Some(texture) = texture {
-        if let Some(uvs) = uvs {
-            Some(TextureMap {
-                texture_index: texture.index,
-                uvs: uvs.to_vec(),
-            })
-        } else if let Some(tex_location) = texture.location {
-            Some(project_texture(
-                tex_location,
-                transform,
-                vertices,
-                winding,
-                texture.index,
-            ))
-        } else {
-            // println!("WARNING: texture with neither projection matrix nor face UVs");
-            // this case is actually common for uv-mapped textures
-            None
-        }
-    } else {
-        None
-    };
+    if winding == Winding::Cw {
+        vertices.reverse();
+    }
+
+    let texmap = texture.and_then(|t| project_texture(t, transform, vertices, uvs));
 
     let starting_index = geometry.vertex_indices.len() as u32;
-    let mut indices =
+    let indices =
         vertices.map(|v| insert_vertex(geometry, transform, v, vertex_map, weld_vertices));
-
-    // TODO: Is it ok to just reverse indices even though this isn't the convention?
-    if winding == Winding::Cw {
-        indices.reverse();
-    }
 
     geometry.vertex_indices.extend_from_slice(&indices);
     geometry.face_start_indices.push(starting_index);
     geometry.face_sizes.push(N as u32);
     geometry.texmaps.push(texmap);
+}
+
+fn intersect_poly_box(polygon: &[Vec3], r: Vec3) -> bool {
+    match *polygon {
+        [a, b, c] => intersect_tri_box([a, b, c], r),
+        [a, b, c, d] => intersect_tri_box([a, b, c], r) || intersect_tri_box([c, d, a], r),
+        _ => unimplemented!(),
+    }
+}
+
+fn intersect_tri_box(triangle: [Vec3; 3], box_extents: Vec3) -> bool {
+    let edges = {
+        let [a, b, c] = triangle;
+        [b - a, c - b, a - c]
+    };
+
+    let normal = Vec3::cross(edges[0], edges[1]);
+
+    // TODO: There must be a clearer way to express this.
+    // I don't even know what formula this implements.
+    for i in 0..3 {
+        for j in 0..3 {
+            let e = edges[j];
+            let be = box_extents;
+            let (rhs, num): (Vec3, f32) = match i {
+                0 => ((0.0, -e.z, e.y).into(), be.y * e.z.abs() + be.z * e.y.abs()),
+                1 => ((e.z, 0.0, -e.x).into(), be.x * e.z.abs() + be.z * e.x.abs()),
+                2 => ((-e.y, e.x, 0.0).into(), be.x * e.y.abs() + be.y * e.x.abs()),
+                _ => unimplemented!(),
+            };
+
+            let dot_products = triangle.map(|v| v.dot(rhs));
+            let (min, max) = min_max(&dot_products);
+            let miximum = f32::max(-max, min);
+            if miximum > num {
+                return false;
+            }
+        }
+    }
+
+    for dim in 0..3 {
+        let coords = triangle.map(|v| v[dim]);
+        let (min, max) = min_max(&coords);
+        if max < -box_extents[dim] || min > box_extents[dim] {
+            return false;
+        }
+    }
+
+    normal.dot(triangle[0]) <= normal.abs().dot(box_extents)
+}
+
+fn min_max(values: &[f32]) -> (f32, f32) {
+    let (mut min, mut max) = (f32::MAX, f32::MIN);
+    for &n in values {
+        min = min.min(n);
+        max = max.max(n);
+    }
+    (min, max)
 }
 
 fn insert_vertex(
