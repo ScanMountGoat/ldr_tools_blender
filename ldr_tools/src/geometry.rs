@@ -1,6 +1,6 @@
 use base64::prelude::*;
 
-use glam::{Mat4, Vec2, Vec3};
+use glam::{Mat4, Vec2, Vec3, Vec3Swizzles};
 use rstar::{primitives::GeomWithData, RTree};
 use weldr::Command;
 
@@ -73,11 +73,7 @@ impl PendingStudioTexture {
         let mut location = None::<TextureLocation>;
         if let Some((cells, [img])) = words[1..].split_at_checked(16) {
             let mut iter = cells.iter().filter_map(|c| c.parse::<f32>().ok());
-            let (x, y, z) = (iter.next()?, iter.next()?, -iter.next()?);
-            let (a, b, c) = (iter.next()?, iter.next()?, -iter.next()?);
-            let (d, e, f) = (iter.next()?, iter.next()?, -iter.next()?);
-            let (g, h, i) = (-iter.next()?, -iter.next()?, iter.next()?);
-
+            let [x, y, z, a, b, c, d, e, f, g, h, i] = next_array(&mut iter)?;
             let transform = Mat4::from_cols_array_2d(&[
                 [a, d, g, 0.0],
                 [b, e, h, 0.0],
@@ -85,14 +81,10 @@ impl PendingStudioTexture {
                 [x, y, z, 1.0],
             ]);
 
-            // TODO: flip Z?
-
-            let point_min = Vec2::new(iter.next()?, iter.next()?);
-            let point_max = Vec2::new(iter.next()?, iter.next()?);
             location = Some(TextureLocation {
                 transform,
-                point_min,
-                point_max,
+                point_min: Vec2::from(next_array(&mut iter)?),
+                point_max: Vec2::from(next_array(&mut iter)?),
             });
 
             image = img;
@@ -587,19 +579,16 @@ fn project_texture<const N: usize>(
     texture_index: usize,
 ) -> TextureMap {
     let (matrix, _box_extents) = init_texture_transform(tex_location.transform, transform);
+    let inverse = matrix.inverse();
 
-    let vertices = vertices.map(|v| matrix.inverse().transform_point3(v));
+    let vertices = vertices.map(|v| inverse.transform_point3(v));
 
     let min = tex_location.point_min;
     let diff = tex_location.point_max - tex_location.point_min;
 
-    let mut uvs = vertices.map(|vert| {
-        let u = (vert.x - min.x) / diff.x;
-        let v = (vert.z - min.y) / diff.y;
-        Vec2::new(u, v)
-    });
+    let mut uvs = vertices.map(|v| (v.xz() - min) / diff);
 
-    if winding == Winding::Ccw {
+    if winding == Winding::Cw {
         uvs.reverse();
     }
 
@@ -676,6 +665,14 @@ fn insert_vertex(
         geometry.vertices.push(new_vertex);
         new_index
     }
+}
+
+fn next_array<T: Default, const N: usize>(mut iter: impl Iterator<Item = T>) -> Option<[T; N]> {
+    let mut arr = std::array::from_fn(|_| T::default());
+    for elem in &mut arr {
+        *elem = iter.next()?;
+    }
+    Some(arr)
 }
 
 #[cfg(test)]
