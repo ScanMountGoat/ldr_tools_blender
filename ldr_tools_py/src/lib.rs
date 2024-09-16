@@ -88,15 +88,12 @@ pub struct LDrawGeometry {
     is_face_stud: Vec<bool>,
     edge_line_indices: PyObject,
     has_grainy_slopes: bool,
-    textures: Vec<Cow<'static, [u8]>>, // marshaled as list[bytes]
-    texture_indices: PyObject,
-    uvs: PyObject,
+    texture_info: Option<LDrawTextureInfo>,
 }
 
 impl LDrawGeometry {
     fn from_geometry(py: Python, geometry: ldr_tools::LDrawGeometry) -> Self {
         let sharp_edge_count = geometry.edge_line_indices.len();
-        let uv_count = geometry.uvs.len();
 
         // This flatten will be optimized in Release mode.
         // This avoids needing unsafe code.
@@ -117,9 +114,29 @@ impl LDrawGeometry {
                 .unwrap()
                 .into(),
             has_grainy_slopes: geometry.has_grainy_slopes,
-            textures: geometry.textures.into_iter().map(Cow::Owned).collect(),
-            texture_indices: geometry.texture_indices.into_pyarray(py).into(),
-            uvs: geometry
+            texture_info: geometry
+                .texture_info
+                .map(|ti| LDrawTextureInfo::from_texture_info(py, ti)),
+        }
+    }
+}
+
+#[pyclass(get_all)]
+#[derive(Debug, Clone)]
+pub struct LDrawTextureInfo {
+    textures: Vec<Cow<'static, [u8]>>, // marshaled as list[bytes]
+    indices: PyObject,
+    uvs: PyObject,
+}
+
+impl LDrawTextureInfo {
+    fn from_texture_info(py: Python, tex_info: ldr_tools::LDrawTextureInfo) -> Self {
+        let uv_count = tex_info.uvs.len();
+
+        Self {
+            textures: tex_info.textures.into_iter().map(Cow::Owned).collect(),
+            indices: tex_info.indices.into_pyarray(py).into(),
+            uvs: tex_info
                 .uvs
                 .into_iter()
                 .flat_map(|uv| uv.to_array())

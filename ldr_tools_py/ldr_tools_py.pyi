@@ -29,8 +29,11 @@ class LDrawGeometry:
     is_face_stud: list[bool]
     edge_line_indices: UVec2Array
     has_grainy_slopes: bool
+    texture_info: LDrawTextureInfo | None
+
+class LDrawTextureInfo:
     textures: list[bytes]
-    texture_indices: UByteArray
+    indices: UByteArray
     uvs: Vec2Array
 
 class LDrawColor:

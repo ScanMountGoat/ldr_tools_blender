@@ -25,14 +25,38 @@ pub struct LDrawGeometry {
     /// Some applications may want to apply a separate texture to faces
     /// based on an angle threshold.
     pub has_grainy_slopes: bool,
+    pub texture_info: Option<LDrawTextureInfo>,
+}
+
+impl LDrawGeometry {
+    fn texture_info(&mut self) -> &mut LDrawTextureInfo {
+        self.texture_info.get_or_insert_with(|| {
+            LDrawTextureInfo::new(self.face_start_indices.len(), self.vertex_indices.len())
+        })
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct LDrawTextureInfo {
     /// PNG-encoded images from PE_TEX_INFO commands.
     pub textures: Vec<Vec<u8>>,
     /// Per-face indices into `textures`. 0xFF indicates no texture for the face.
     /// Eight-bit indices save memory, especially for the untextured majority of parts.
-    // TODO: Don't even bother allocating and marshaling these buffers until encountering at least one texture.
-    pub texture_indices: Vec<u8>,
+    pub indices: Vec<u8>,
     /// Per-vertex UV coordinates for the entire mesh, even non-textured faces.
     pub uvs: Vec<Vec2>,
+}
+
+impl LDrawTextureInfo {
+    fn new(num_faces: usize, num_vertices: usize) -> Self {
+        // "Catch up" with the mesh that we had optimistically assumed would have no textures
+        // by filling in the arrays "up to this point" with sentinel/placeholder data.
+        Self {
+            textures: vec![],
+            indices: vec![u8::MAX; num_faces],
+            uvs: vec![Vec2::ZERO; num_vertices],
+        }
+    }
 }
 
 /// Settings that inherit or accumulate when recursing into subfiles.
@@ -67,7 +91,7 @@ pub struct TextureMap<const N: usize> {
 
 impl PendingStudioTexture {
     // TODO: the images probably need names based on their file of origin
-    fn parse(line: &str, path: &[i32], textures: &mut Vec<Vec<u8>>) -> Option<Self> {
+    fn parse(line: &str, path: &[i32], geometry: &mut LDrawGeometry) -> Option<Self> {
         let words = line.split_whitespace().collect::<Vec<_>>();
         if words.get(0) != Some(&"PE_TEX_INFO") {
             return None;
@@ -98,16 +122,19 @@ impl PendingStudioTexture {
             return None;
         }
 
-        if textures.len() >= u8::MAX as usize {
+        let image = BASE64_STANDARD.decode(image).ok()?;
+
+        // Avoid lazily initializing the texture info until everything else has succeeded.
+        let tex_info = geometry.texture_info();
+
+        if tex_info.textures.len() >= u8::MAX as usize {
             // Why would a single part ever have 256 or more different textures?
             eprintln!("Texture limit exceeded!");
             return None;
         }
 
-        let image = BASE64_STANDARD.decode(image).ok()?;
-
-        let index = textures.len() as u8;
-        textures.push(image);
+        let index = tex_info.textures.len() as u8;
+        tex_info.textures.push(image);
         let path = path.to_owned();
         Some(Self {
             index,
@@ -179,9 +206,7 @@ pub fn create_geometry(
         is_face_stud: Vec::new(),
         edge_line_indices: Vec::new(),
         has_grainy_slopes: is_slope_piece(name),
-        textures: vec![],
-        texture_indices: vec![],
-        uvs: vec![],
+        texture_info: None,
     };
 
     // Start with inverted set to false since parts should never be inverted.
@@ -356,11 +381,9 @@ fn append_geometry(
                         current_tex_path = path;
                     }
                 } else if c.text.starts_with("PE_TEX_INFO ") {
-                    if let Some(mut tex_info) = PendingStudioTexture::parse(
-                        &c.text,
-                        &current_tex_path,
-                        &mut geometry.textures,
-                    ) {
+                    if let Some(mut tex_info) =
+                        PendingStudioTexture::parse(&c.text, &current_tex_path, geometry)
+                    {
                         if tex_info.path == [-1] {
                             tex_info.path.clear()
                         }
@@ -641,11 +664,17 @@ fn add_face<const N: usize>(
     geometry.face_sizes.push(N as u32);
 
     if let Some(texmap) = texmap {
-        geometry.texture_indices.push(texmap.texture_index);
-        geometry.uvs.extend(texmap.uvs);
+        // Lazily initialize the texture info, because we have actual data to insert.
+        let texture_info = geometry.texture_info();
+        texture_info.indices.push(texmap.texture_index);
+        texture_info.uvs.extend(texmap.uvs);
     } else {
-        geometry.texture_indices.push(u8::MAX); // Sentinel value indicating no texture for this face.
-        geometry.uvs.extend([Vec2::ZERO; N]); // "Padding" so that all vertices get a UV.
+        // Avoid initializing the texture info,
+        // as we only need to add placeholder data if the buffers are already there.
+        if let Some(texture_info) = &mut geometry.texture_info {
+            texture_info.indices.push(u8::MAX); // Sentinel value indicating no texture for this face.
+            texture_info.uvs.extend([Vec2::ZERO; N]); // "Padding" so that all vertices get a UV.
+        }
     }
 }
 

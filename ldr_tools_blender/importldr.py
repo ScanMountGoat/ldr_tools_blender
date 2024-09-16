@@ -323,7 +323,7 @@ def assign_materials(
     color_by_code: dict[int, LDrawColor],
     geometry: LDrawGeometry,
 ):
-    if len(geometry.face_colors) == 1 and not geometry.textures:
+    if len(geometry.face_colors) == 1 and not geometry.texture_info:
         # Geometry is cached with code 16, so also handle color replacement.
         face_color = geometry.face_colors[0]
         color = current_color if face_color == 16 else face_color
@@ -333,7 +333,8 @@ def assign_materials(
         mesh.materials.append(material)
         return
 
-    images = [load_png(t) for t in geometry.textures]
+    if tex_info := geometry.texture_info:
+        images = [load_png(t) for t in tex_info.textures]
 
     if len(geometry.face_colors) > 1:
         assert len(geometry.face_colors) == len(mesh.polygons)
@@ -346,9 +347,10 @@ def assign_materials(
 
         # determine texture
         image = None
-        image_index = geometry.texture_indices[i]
-        if image_index != 0xFF:
-            image = images[image_index]
+        if tex_info := geometry.texture_info:
+            image_index = tex_info.indices[i]
+            if image_index != 0xFF:
+                image = images[image_index]
 
         material = get_material(color_by_code, color, geometry.has_grainy_slopes, image)
         if mesh.materials.get(material.name) is None:
@@ -386,8 +388,8 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
         is_stud = mesh.attributes.new(name="ldr_is_stud", type="FLOAT", domain="FACE")
         is_stud.data.foreach_set("value", geometry.is_face_stud)
 
-    if geometry.textures:
+    if tex_info := geometry.texture_info:
         uv_layer = mesh.uv_layers.new()
-        uv_layer.data.foreach_set("uv", geometry.uvs.reshape(-1))
+        uv_layer.data.foreach_set("uv", tex_info.uvs.reshape(-1))
 
     return mesh
