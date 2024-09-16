@@ -564,7 +564,8 @@ fn invert_winding(winding: Winding, invert: bool) -> Winding {
 
 fn init_texture_transform(texture_matrix: Mat4, part_matrix: Mat4) -> (Mat4, Vec3) {
     let (scale, rot, tr) = (part_matrix * texture_matrix).to_scale_rotation_translation();
-    let mirroring = scale.signum();
+    let mut mirroring = scale.signum();
+    mirroring.z *= -1.0;
     let box_extents = scale.abs() / 2.0;
     let rhs = Mat4::from_scale_rotation_translation(mirroring, rot, tr);
     let matrix = part_matrix.inverse() * rhs;
