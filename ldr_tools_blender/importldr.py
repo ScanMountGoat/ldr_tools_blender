@@ -189,57 +189,49 @@ def create_geometry_node_instancing(
     graph.input(NodeSocketGeometry, "Geometry")
     graph.output(NodeSocketGeometry, "Geometry")
 
-    group_input = graph.node(NodeGroupInput, location=(-380, 0))
+    group_input = graph.node(NodeGroupInput) @ (-380, 0)
 
     # Scale instances from the custom attribute.
     scale_attribute = graph.node(
         GeometryNodeInputNamedAttribute,
-        location=(-380, -434),
         data_type="FLOAT_VECTOR",
         inputs={"Name": "instance_scale"},
-    )
+    ) @ (-380, -434)
 
     # Rotate instances from the custom attributes.
     rot_axis = graph.node(
         GeometryNodeInputNamedAttribute,
-        location=(-570, -275),
         data_type="FLOAT_VECTOR",
         inputs={"Name": "instance_rotation_axis"},
-    )
+    ) @ (-570, -275)
+
     rot_angle = graph.node(
         GeometryNodeInputNamedAttribute,
-        location=(-570, -418),
         data_type="FLOAT",
         inputs={"Name": "instance_rotation_angle"},
-    )
+    ) @ (-570, -418)
+
     rotation = graph.node(
-        FunctionNodeAxisAngleToRotation,
-        location=(-380, -318),
-        inputs=[rot_axis, rot_angle],
-    )
+        FunctionNodeAxisAngleToRotation, inputs=[rot_axis, rot_angle]
+    ) @ (-380, -318)
 
     # Set the instance mesh.
     instance_info = graph.node(
-        GeometryNodeObjectInfo,
-        location=(-380, -91),
-        inputs={"Object": instance_object},
-    )
+        GeometryNodeObjectInfo, inputs={"Object": instance_object}
+    ) @ (-380, -91)
 
     # The instancer mesh's points define the instance translation.
     instance_points = graph.node(
         GeometryNodeInstanceOnPoints,
-        location=(-190, 0),
         inputs={
             "Points": group_input,
             "Instance": instance_info["Geometry"],
             "Rotation": rotation,
             "Scale": scale_attribute,
         },
-    )
+    ) @ (-190, 0)
 
-    group_output = graph.node(
-        NodeGroupOutput, location=(0, 0), inputs=[instance_points]
-    )
+    graph.node(NodeGroupOutput, inputs=[instance_points]) @ (0, 0)
 
 
 def create_instancer_mesh(name: str, instances: ldr_tools_py.PointInstances) -> Mesh:

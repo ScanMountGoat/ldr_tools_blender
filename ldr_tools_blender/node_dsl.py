@@ -93,6 +93,10 @@ class GraphNode(Generic[N]):
         else:
             dst_socket.default_value = val  # type: ignore
 
+    def __matmul__(self, location: tuple[int, int]) -> GraphNode[N]:
+        self.location = location
+        return self
+
 
 def _get_default_output(node: Node) -> NodeSocket:
     return next(s for s in node.outputs if s.enabled)
@@ -114,13 +118,16 @@ TreeConstructor: TypeAlias = Callable[[], T]
 # A second-order function that turns an initializer into a constructor.
 TreeDecorator: TypeAlias = Callable[[TreeInitializer[T]], TreeConstructor[T]]
 
+
 # A decorator factory (third-order function) to aid in the definition of tree constructors.
 @overload
 def group(name: str, ty: type[T]) -> TreeDecorator[T]: ...
 
+
 # A concise overload for the (very) common case.
 @overload
 def group(name: str) -> TreeDecorator[ShaderNodeTree]: ...
+
 
 def group(name: str, ty: type | None = None) -> TreeDecorator:
     ty = ty or ShaderNodeTree
@@ -137,6 +144,7 @@ def group(name: str, ty: type | None = None) -> TreeDecorator:
 
     # The outer lambda is the decorator. The inner lambda is the constructor.
     return lambda f: lambda: build_node(f)
+
 
 Vec2: TypeAlias = tuple[float, float]
 Vec3: TypeAlias = tuple[float, float, float]
