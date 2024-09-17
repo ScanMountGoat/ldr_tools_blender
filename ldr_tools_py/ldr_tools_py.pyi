@@ -1,11 +1,14 @@
 from typing import Final, ClassVar
 
 from .stub_helpers import (
+    UByteArray,
     UIntArray,
     FloatArray,
     UVec2Array,
+    Vec2Array,
     Vec3Array,
     Mat4Array,
+    Vec2,
     Vec4,
     Mat4,
 )
@@ -26,6 +29,12 @@ class LDrawGeometry:
     is_face_stud: list[bool]
     edge_line_indices: UVec2Array
     has_grainy_slopes: bool
+    texture_info: LDrawTextureInfo | None
+
+class LDrawTextureInfo:
+    textures: list[bytes]
+    indices: UByteArray
+    uvs: Vec2Array
 
 class LDrawColor:
     name: str

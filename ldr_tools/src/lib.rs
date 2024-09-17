@@ -11,7 +11,7 @@ use rayon::prelude::*;
 use weldr::{Command, FileRefResolver, ResolveError};
 
 pub use color::{load_color_table, LDrawColor};
-pub use geometry::LDrawGeometry;
+pub use geometry::{LDrawGeometry, LDrawTextureInfo};
 pub use glam;
 pub use weldr::Color;
 use zip::ZipArchive;

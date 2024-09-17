@@ -2,7 +2,9 @@ import bpy
 import numpy as np
 import mathutils
 import math
+import struct
 import typing
+import itertools
 
 from bpy.types import (
     NodesModifier,
@@ -305,13 +307,23 @@ def create_colored_mesh_from_geometry(
     return mesh
 
 
+def load_png(data: bytes, name: str = "img") -> bpy.types.Image:
+    # TODO: pass image names up from the Rust side
+    w, h = struct.unpack(b">LL", data[16:24])
+    img = bpy.data.images.new(name, w, h)
+    img.use_fake_user = True
+    img.pack(data=data, data_len=len(data))  # type: ignore[arg-type]
+    img.source = "FILE"  # ?
+    return img
+
+
 def assign_materials(
     mesh: bpy.types.Mesh,
     current_color: int,
     color_by_code: dict[int, LDrawColor],
     geometry: LDrawGeometry,
 ):
-    if len(geometry.face_colors) == 1:
+    if len(geometry.face_colors) == 1 and not geometry.texture_info:
         # Geometry is cached with code 16, so also handle color replacement.
         face_color = geometry.face_colors[0]
         color = current_color if face_color == 16 else face_color
@@ -319,45 +331,65 @@ def assign_materials(
         # Cache materials by name.
         material = get_material(color_by_code, color, geometry.has_grainy_slopes)
         mesh.materials.append(material)
-    else:
-        # Handle the case where not all faces have the same color.
-        # This includes patterned (printed) parts and stickers.
-        for face, face_color in zip(mesh.polygons, geometry.face_colors):
-            color = current_color if face_color == 16 else face_color
+        return
 
-            material = get_material(color_by_code, color, geometry.has_grainy_slopes)
-            if mesh.materials.get(material.name) is None:
-                mesh.materials.append(material)
-            face.material_index = mesh.materials.find(material.name)
+    if tex_info := geometry.texture_info:
+        images = [load_png(t) for t in tex_info.textures]
+
+    if len(geometry.face_colors) > 1:
+        assert len(geometry.face_colors) == len(mesh.polygons)
+
+    for i, face in enumerate(mesh.polygons):
+        # determine color
+        color_index = i if len(geometry.face_colors) > 1 else 0
+        face_color = geometry.face_colors[color_index]
+        color = current_color if face_color == 16 else face_color
+
+        # determine texture
+        image = None
+        if tex_info := geometry.texture_info:
+            image_index = tex_info.indices[i]
+            if image_index != 0xFF:
+                image = images[image_index]
+
+        material = get_material(color_by_code, color, geometry.has_grainy_slopes, image)
+        if mesh.materials.get(material.name) is None:
+            mesh.materials.append(material)
+
+        face.material_index = mesh.materials.find(material.name)
 
 
 def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
     mesh = bpy.data.meshes.new(name)
-    if geometry.vertices.shape[0] > 0:
-        # Using foreach_set is faster than bmesh or from_pydata.
-        # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
-        # We can assume the data is already a numpy array.
-        mesh.vertices.add(geometry.vertices.shape[0])
-        mesh.vertices.foreach_set("co", geometry.vertices.reshape(-1))
+    if geometry.vertices.shape[0] == 0:
+        return mesh
 
-        mesh.loops.add(geometry.vertex_indices.size)
-        mesh.loops.foreach_set("vertex_index", geometry.vertex_indices)
+    # Using foreach_set is faster than bmesh or from_pydata.
+    # https://devtalk.blender.org/t/alternative-in-2-80-to-create-meshes-from-python-using-the-tessfaces-api/7445/3
+    # We can assume the data is already a numpy array.
+    mesh.vertices.add(geometry.vertices.shape[0])
+    mesh.vertices.foreach_set("co", geometry.vertices.reshape(-1))
 
-        mesh.polygons.add(geometry.face_sizes.size)
-        mesh.polygons.foreach_set("loop_start", geometry.face_start_indices)
-        mesh.polygons.foreach_set("loop_total", geometry.face_sizes)
+    mesh.loops.add(geometry.vertex_indices.size)
+    mesh.loops.foreach_set("vertex_index", geometry.vertex_indices)
 
-        # TODO: Enable autosmooth to handle some cases where edges aren't split.
-        # TODO: Just do this in ldr_tools and set custom normals?
-        # mesh.use_auto_smooth = True
-        # mesh.auto_smooth_angle = math.radians(89.0)
-        mesh.polygons.foreach_set("use_smooth", [True] * len(mesh.polygons))
+    mesh.polygons.add(geometry.face_sizes.size)
+    mesh.polygons.foreach_set("loop_start", geometry.face_start_indices)
+    mesh.polygons.foreach_set("loop_total", geometry.face_sizes)
 
-        # Add attributes needed to render grainy slopes properly.
-        if geometry.has_grainy_slopes:
-            is_stud = mesh.attributes.new(
-                name="ldr_is_stud", type="FLOAT", domain="FACE"
-            )
-            is_stud.data.foreach_set("value", geometry.is_face_stud)
+    # TODO: Enable autosmooth to handle some cases where edges aren't split.
+    # TODO: Just do this in ldr_tools and set custom normals?
+    # mesh.use_auto_smooth = True
+    # mesh.auto_smooth_angle = math.radians(89.0)
+    mesh.polygons.foreach_set("use_smooth", [True] * len(mesh.polygons))
+
+    # Add attributes needed to render grainy slopes properly.
+    if geometry.has_grainy_slopes:
+        is_stud = mesh.attributes.new(name="ldr_is_stud", type="FLOAT", domain="FACE")
+        is_stud.data.foreach_set("value", geometry.is_face_stud)
+
+    if tex_info := geometry.texture_info:
+        uv_layer = mesh.uv_layers.new()
+        uv_layer.data.foreach_set("uv", tex_info.uvs.reshape(-1))
 
     return mesh
