@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 * Added support for importing .io files saved by recent versions of Bricklink Studio.
 * Added an option for adjusting the scale when importing.
+* Added support for Studio texture parts using the PE_TEX_INFO extension.
 
 ### Fixed
 * Fixed an issue where some slope pieces did not use slope materials.
