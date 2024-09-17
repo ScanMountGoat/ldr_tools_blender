@@ -14,6 +14,12 @@ if typing.TYPE_CHECKING:
 else:
     from . import ldr_tools_py
 
+Status: typing.TypeAlias = set[
+    typing.Literal[
+        "RUNNING_MODAL", "CANCELLED", "FINISHED", "PASS_THROUGH", "INTERFACE"
+    ]
+]
+
 
 def find_ldraw_library() -> str:
     # Get list of possible ldraw installation directories for the platform
@@ -61,17 +67,17 @@ def find_ldraw_library() -> str:
 class Preferences:
     preferences_path = os.path.join(os.path.dirname(__file__), "preferences.json")
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.ldraw_path = find_ldraw_library()
         self.instance_type = "LinkedDuplicates"
         self.stud_type = "Logo4"
         self.primitive_resolution = "Normal"
-        self.additional_paths = []
+        self.additional_paths: list[str] = []
         self.add_gap_between_parts = True
         # default matches hardcoded behavior of previous versions
         self.scene_scale = 0.01
 
-    def from_dict(self, dict: dict[str, Any]):
+    def from_dict(self, dict: dict[str, Any]) -> None:
         # Fill in defaults for any missing values.
         defaults = Preferences()
         self.ldraw_path = dict.get("ldraw_path", defaults.ldraw_path)
@@ -86,12 +92,12 @@ class Preferences:
         )
         self.scene_scale = dict.get("scene_scale", defaults.scene_scale)
 
-    def save(self):
+    def save(self) -> None:
         with open(Preferences.preferences_path, "w+") as file:
             json.dump(self, file, default=lambda o: o.__dict__)
 
     @staticmethod
-    def load():
+    def load() -> Preferences:
         preferences = Preferences()
         try:
             with open(Preferences.preferences_path, "r") as file:
@@ -109,10 +115,10 @@ class LIST_OT_NewItem(bpy.types.Operator):
     bl_idname = "additional_paths.new_item"
     bl_label = "Add a new item"
 
-    def execute(self, context):
+    def execute(self, context: bpy.types.Context) -> Status:
         # TODO: Don't store the preferences in the operator itself?
         # TODO: singleton pattern?
-        p = context.scene.ldr_path_to_add
+        p = context.scene.ldr_path_to_add  # type: ignore[attr-defined]
         ImportOperator.preferences.additional_paths.append(p)
         return {"FINISHED"}
 
@@ -124,10 +130,10 @@ class LIST_OT_DeleteItem(bpy.types.Operator):
     bl_label = "Deletes an item"
 
     @classmethod
-    def poll(cls, context):
+    def poll(cls, context: bpy.types.Context) -> list[str]:  # type: ignore[override]
         return ImportOperator.preferences.additional_paths
 
-    def execute(self, context):
+    def execute(self, context: bpy.types.Context) -> Status:
         ImportOperator.preferences.additional_paths.pop()
         return {"FINISHED"}
 
@@ -150,8 +156,8 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         filter_glob: str
         ldraw_path: str
         instance_type: typing.Literal["LinkedDuplicates", "GeometryNodes"]
-        stud_type: ldr_tools_py.StudType
-        primitive_resolution: ldr_tools_py.PrimitiveResolution
+        stud_type: typing.Literal["Disabled", "Normal", "Logo4", "HighContrast"]
+        primitive_resolution: typing.Literal["Low", "Normal", "High"]
         add_gap_between_parts: bool
         scene_scale: float
     else:
@@ -221,7 +227,7 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
             default=preferences.scene_scale,
         )
 
-    def draw(self, context):
+    def draw(self, context: bpy.types.Context) -> None:
         layout = self.layout
         layout.use_property_split = True
         layout.prop(self, "ldraw_path")
@@ -243,7 +249,7 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         row = layout.row()
         row.operator("additional_paths.delete_item", text="Remove Path")
 
-    def execute(self, context):
+    def execute(self, context: bpy.types.Context) -> Status:
         # Update from the UI values to support saving them to disk later.
         ImportOperator.preferences.ldraw_path = self.ldraw_path
         ImportOperator.preferences.instance_type = self.instance_type
@@ -259,7 +265,7 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         start = time.time()
         import_ldraw(
             self,
-            self.filepath,
+            self.filepath,  # type: ignore[attr-defined]
             self.ldraw_path,
             ImportOperator.preferences.additional_paths,
             self.instance_type,
