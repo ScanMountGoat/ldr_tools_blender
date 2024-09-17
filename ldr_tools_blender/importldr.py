@@ -7,6 +7,7 @@ import typing
 import itertools
 
 from bpy.types import (
+    Mesh,
     NodesModifier,
     GeometryNodeTree,
     NodeSocketGeometry,
@@ -29,8 +30,6 @@ from .material import get_material
 
 from .node_dsl import NodeGraph
 
-# TODO: Add type hints for all functions.
-
 
 def import_ldraw(
     operator: bpy.types.Operator,
@@ -39,7 +38,7 @@ def import_ldraw(
     additional_paths: list[str],
     instance_type: str,
     settings: GeometrySettings,
-):
+) -> None:
     color_by_code = ldr_tools_py.load_color_table(ldraw_path)
 
     # TODO: Add an option to make the lowest point have a height of 0 using obj.dimensions?
@@ -57,10 +56,10 @@ def import_objects(
     additional_paths: list[str],
     color_by_code: dict[int, LDrawColor],
     settings: GeometrySettings,
-):
+) -> None:
     # Create an object for each part in the scene.
     # This still uses instances the mesh data blocks for reduced memory usage.
-    blender_mesh_cache = {}
+    blender_mesh_cache: dict[tuple[str, int], Mesh] = {}
 
     # Don't scale any coordinates on the Rust side, just change the scale of the parent object
     scale = settings.scene_scale
@@ -79,9 +78,9 @@ def import_objects(
 def add_nodes(
     node: LDrawNode,
     geometry_cache: dict[str, LDrawGeometry],
-    blender_mesh_cache: dict[tuple[str, int], bpy.types.Mesh],
-    color_by_code: dict[str, LDrawColor],
-):
+    blender_mesh_cache: dict[tuple[str, int], Mesh],
+    color_by_code: dict[int, LDrawColor],
+) -> bpy.types.Object:
 
     if node.geometry_name is not None:
         geometry = geometry_cache[node.geometry_name]
@@ -122,7 +121,7 @@ def import_instanced(
     additional_paths: list[str],
     color_by_code: dict[int, LDrawColor],
     settings: GeometrySettings,
-):
+) -> None:
     scale = settings.scene_scale
     settings.scene_scale = 1.0
 
@@ -243,7 +242,7 @@ def create_geometry_node_instancing(
     )
 
 
-def create_instancer_mesh(name: str, instances: ldr_tools_py.PointInstances):
+def create_instancer_mesh(name: str, instances: ldr_tools_py.PointInstances) -> Mesh:
     # Create a vertex at each instance.
     instancer_mesh = bpy.data.meshes.new(name)
 
@@ -257,20 +256,18 @@ def create_instancer_mesh(name: str, instances: ldr_tools_py.PointInstances):
 
         # Encode rotation and scale into custom attributes.
         # This allows geometry nodes to access the attributes later.
-        scale_attribute = instancer_mesh.attributes.new(
-            name="instance_scale", type="FLOAT_VECTOR", domain="POINT"
-        )
+        scale_attribute = vector_attr(instancer_mesh, "instance_scale", "POINT")
         scale_attribute.data.foreach_set("vector", instances.scales.reshape(-1))
 
-        rot_axis_attribute = instancer_mesh.attributes.new(
-            name="instance_rotation_axis", type="FLOAT_VECTOR", domain="POINT"
+        rot_axis_attribute = vector_attr(
+            instancer_mesh, "instance_rotation_axis", "POINT"
         )
         rot_axis_attribute.data.foreach_set(
             "vector", instances.rotations_axis.reshape(-1)
         )
 
-        rot_angle_attribute = instancer_mesh.attributes.new(
-            name="instance_rotation_angle", type="FLOAT", domain="POINT"
+        rot_angle_attribute = float_attr(
+            instancer_mesh, "instance_rotation_angle", "POINT"
         )
         rot_angle_attribute.data.foreach_set("value", instances.rotations_angle)
 
@@ -281,7 +278,7 @@ def create_instancer_mesh(name: str, instances: ldr_tools_py.PointInstances):
 
 def create_colored_mesh_from_geometry(
     name: str, color: int, color_by_code: dict[int, LDrawColor], geometry: LDrawGeometry
-):
+) -> Mesh:
     mesh = create_mesh_from_geometry(name, geometry)
 
     assign_materials(mesh, color, color_by_code, geometry)
@@ -299,9 +296,7 @@ def create_colored_mesh_from_geometry(
         loop_normals = np.zeros(len(mesh.loops) * 3)
         mesh.loops.foreach_get("normal", loop_normals)
 
-        normals = mesh.attributes.new(
-            name="ldr_normals", type="FLOAT_VECTOR", domain="CORNER"
-        )
+        normals = float_attr(mesh, "ldr_normals", "CORNER")
         normals.data.foreach_set("vector", loop_normals)
 
     return mesh
@@ -318,11 +313,11 @@ def load_png(data: bytes, name: str = "img") -> bpy.types.Image:
 
 
 def assign_materials(
-    mesh: bpy.types.Mesh,
+    mesh: Mesh,
     current_color: int,
     color_by_code: dict[int, LDrawColor],
     geometry: LDrawGeometry,
-):
+) -> None:
     if len(geometry.face_colors) == 1 and not geometry.texture_info:
         # Geometry is cached with code 16, so also handle color replacement.
         face_color = geometry.face_colors[0]
@@ -359,7 +354,7 @@ def assign_materials(
         face.material_index = mesh.materials.find(material.name)
 
 
-def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
+def create_mesh_from_geometry(name: str, geometry: LDrawGeometry) -> Mesh:
     mesh = bpy.data.meshes.new(name)
     if geometry.vertices.shape[0] == 0:
         return mesh
@@ -385,7 +380,7 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
 
     # Add attributes needed to render grainy slopes properly.
     if geometry.has_grainy_slopes:
-        is_stud = mesh.attributes.new(name="ldr_is_stud", type="FLOAT", domain="FACE")
+        is_stud = float_attr(mesh, "ldr_is_stud", "FACE")
         is_stud.data.foreach_set("value", geometry.is_face_stud)
 
     if tex_info := geometry.texture_info:
@@ -393,3 +388,30 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry):
         uv_layer.data.foreach_set("uv", tex_info.uvs.reshape(-1))
 
     return mesh
+
+
+AttributeDomain: typing.TypeAlias = typing.Literal[
+    "POINT",
+    "EDGE",
+    "FACE",
+    "CORNER",
+    "CURVE",
+    "INSTANCE",
+    "LAYER",
+]
+
+
+def float_attr(
+    mesh: Mesh, name: str, domain: AttributeDomain
+) -> bpy.types.FloatAttribute:
+    attr = mesh.attributes.new(name=name, type="FLOAT", domain=domain)
+    assert isinstance(attr, bpy.types.FloatAttribute)
+    return attr
+
+
+def vector_attr(
+    mesh: Mesh, name: str, domain: AttributeDomain
+) -> bpy.types.FloatVectorAttribute:
+    attr = mesh.attributes.new(name=name, type="FLOAT_VECTOR", domain=domain)
+    assert isinstance(attr, bpy.types.FloatVectorAttribute)
+    return attr
