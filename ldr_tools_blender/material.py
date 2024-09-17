@@ -121,11 +121,9 @@ def get_material(
             # TODO: Are all speckled colors metals?
             metallicity = 1.0
 
-            speckle_node = graph.node(
-                ShaderNodeGroup,
-                node_tree=speckle_node_group(),
-                # Adjust the thresholds to control speckle size and density.
-                inputs={"Min": 0.5, "Max": 0.6},
+            # Adjust the thresholds to control speckle size and density.
+            speckle_node = graph.group_node(
+                speckle_node_group(), inputs={"Min": 0.5, "Max": 0.6}
             ) @ (-620, 700)
 
             speckle_r, speckle_g, speckle_b, _ = ldraw_color.speckle_rgba_linear
@@ -161,26 +159,20 @@ def get_material(
         ) @ (-430, 750)
 
     # Procedural roughness.
-    roughness_node = graph.node(
-        ShaderNodeGroup,
-        node_tree=roughness_node_group(),
+    roughness_node = graph.group_node(
+        roughness_node_group(),
         inputs={"Min": roughness[0], "Max": roughness[1]},
     ) @ (-430, 500)
 
     # Procedural normals.
-    main_normals = graph.node(ShaderNodeGroup, node_tree=normals_node_group())
-    main_normals @ (-630, 200)
+    main_normals = graph.group_node(normals_node_group()) @ (-630, 200)
 
     normals: GraphNode[ShaderNodeGroup | ShaderNodeMix] = main_normals
 
     if is_slope:
-        is_slope_node = graph.node(ShaderNodeGroup, node_tree=is_slope_node_group())
-        is_slope_node @ (-630, 300)
+        is_slope_node = graph.group_node(is_slope_node_group()) @ (-630, 300)
 
-        slope_normals = graph.node(
-            ShaderNodeGroup, node_tree=slope_normals_node_group()
-        )
-        slope_normals = (-630, 100)
+        slope_normals = graph.group_node(slope_normals_node_group()) @ (-630, 100)
 
         # Choose between grainy and smooth normals depending on the face.
         normals = graph.node(
@@ -193,11 +185,9 @@ def get_material(
             },
         ) @ (-430, 330)
 
-    scale = graph.node(ShaderNodeGroup, node_tree=object_scale_node_group()) @ (-630, 0)
+    scale = graph.group_node(object_scale_node_group()) @ (-630, 0)
 
-    subsurface_scale = graph.node(
-        ShaderNodeMath, operation="MULTIPLY", inputs=[scale, 2.5]
-    ) @ (-430, 105)
+    subsurface_scale = graph.math_node("MULTIPLY", inputs=[scale, 2.5]) @ (-430, 105)
 
     bsdf = graph.node(
         ShaderNodeBsdfPrincipled,
@@ -344,9 +334,7 @@ def slope_normals_node_group(graph: ShaderGraph) -> None:
         },
     ) @ (-480, 0)
 
-    bump_distance = graph.node(
-        ShaderNodeMath, operation="MULTIPLY", inputs=[scale, 0.5]
-    ) @ (-480, 165)
+    bump_distance = graph.math_node("MULTIPLY", inputs=[scale, 0.5]) @ (-480, 165)
 
     bump = graph.node(
         ShaderNodeBump,
@@ -375,27 +363,18 @@ def is_slope_node_group(graph: ShaderGraph) -> None:
 
     # Use normal.y to check if the face is horizontal (-1.0 or 1.0) or vertical (0.0).
     # Any values in between are considered "slopes" and use grainy normals.
-    absolute = graph.node(
-        ShaderNodeMath, operation="ABSOLUTE", inputs=[separate["Y"]]
-    ) @ (-1200, 400)
-    compare = graph.node(
-        ShaderNodeMath, operation="COMPARE", inputs=[absolute, 0.5, 0.45]
-    ) @ (-1000, 400)
+    absolute = graph.math_node("ABSOLUTE", inputs=[separate["Y"]]) @ (-1200, 400)
+    compare = graph.math_node("COMPARE", inputs=[absolute, 0.5, 0.45]) @ (-1000, 400)
 
-    slope_normals = graph.node(
-        ShaderNodeGroup, node_tree=slope_normals_node_group()
-    ) @ (-630, 100)
+    slope_normals = graph.group_node(slope_normals_node_group()) @ (-630, 100)
 
     is_stud = graph.node(ShaderNodeAttribute, attribute_name="ldr_is_stud")
     is_stud @ (-1000, 200)
 
     # Don't apply the grainy slopes to any faces marked as studs.
     # We use an attribute here to avoid per face material assignment.
-    subtract_studs = graph.node(
-        ShaderNodeMath,
-        operation="SUBTRACT",
-        inputs=[compare, is_stud["Fac"]],
-    ) @ (-800, 400)
+    subtract_studs = graph.math_node("SUBTRACT", inputs=[compare, is_stud["Fac"]])
+    subtract_studs @ (-800, 400)
 
     graph.node(NodeGroupOutput, inputs=[subtract_studs]) @ (-600, 400)
 

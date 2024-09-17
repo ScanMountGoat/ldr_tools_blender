@@ -6,6 +6,7 @@ from typing import (
     TypeAlias,
     Iterable,
     Callable,
+    Literal,
     overload,
 )
 
@@ -15,6 +16,8 @@ from bpy.types import (
     Node,
     NodeSocket,
     ShaderNodeTree,
+    ShaderNodeMath,
+    ShaderNodeGroup,
 )
 
 X = TypeVar("X")
@@ -56,6 +59,26 @@ class NodeGraph(Generic[T]):
                 node[socket_name] = socket_val
 
         return node
+
+    def group_node(
+        self,
+        /,
+        subtree: T,
+        *,
+        inputs: dict[str | int, NodeInput] | list[NodeInput] | None = None,
+        **kwargs: object,
+    ) -> GraphNode[ShaderNodeGroup]:
+        return self.node(ShaderNodeGroup, node_tree=subtree, inputs=inputs, **kwargs)
+
+    def math_node(
+        self,
+        /,
+        operation: str,
+        *,
+        inputs: dict[str | int, NodeInput] | list[NodeInput] | None = None,
+        **kwargs: object,
+    ) -> GraphNode[ShaderNodeMath]:
+        return self.node(ShaderNodeMath, operation=operation, inputs=inputs, **kwargs)
 
 
 class GraphNode(Generic[N]):
