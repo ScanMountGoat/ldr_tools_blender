@@ -102,7 +102,7 @@ class GraphNode(Generic[N]):
             dst_socket.default_value = val  # type: ignore
 
     def __matmul__(self, location: tuple[int, int]) -> GraphNode[N]:
-        self.location = location
+        self.node.location = location
         return self
 
 
