@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 
 /// Calculate new vertices and indices by splitting the edges in `edges_to_split`.
 /// The geometry must be triangulated!
@@ -14,7 +14,7 @@ pub fn split_edges<T: Copy>(
 ) -> (Vec<T>, Vec<u32>) {
     // TODO: should ldr_tools just store sharp edges?
     let mut should_split_vertex = vec![false; vertices.len()];
-    let mut undirected_edges = HashSet::new();
+    let mut undirected_edges = BTreeSet::new();
     for [v0, v1] in edges_to_split {
         // Treat edges as undirected.
         undirected_edges.insert([*v0, *v1]);
@@ -82,8 +82,8 @@ fn merge_duplicate_edges(
     vertex_indices: &[u32],
     face_starts: &[u32],
     face_sizes: &[u32],
-    duplicate_edges: HashSet<[u32; 2]>,
-    edges_to_split: HashSet<[u32; 2]>,
+    duplicate_edges: BTreeSet<[u32; 2]>,
+    edges_to_split: BTreeSet<[u32; 2]>,
     old_adjacent_faces: &[BTreeSet<usize>],
     new_adjacent_faces: &mut [BTreeSet<usize>],
 ) {
@@ -238,13 +238,13 @@ fn split_face_verts<T: Copy>(
     face_sizes: &[u32],
     adjacent_faces: &[BTreeSet<usize>],
     should_split_vertex: &[bool],
-) -> (Vec<T>, Vec<u32>, HashSet<[u32; 2]>) {
+) -> (Vec<T>, Vec<u32>, BTreeSet<[u32; 2]>) {
     // Split edges by duplicating the vertices.
     // This creates some duplicate edges to be cleaned up later.
     let mut split_vertices = vertices.to_vec();
     let mut split_vertex_indices = vertex_indices.to_vec();
 
-    let mut duplicate_edges = HashSet::new();
+    let mut duplicate_edges = BTreeSet::new();
 
     // Iterate over all the indices of marked vertices.
     for vertex_index in should_split_vertex
@@ -420,7 +420,7 @@ mod tests {
         assert_eq!(
             (
                 vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 0.0, 0.0, 1.0, 1.0, 2.0, 4.0],
-                vec![2, 1, 0, 3, 2, 0, 1, 5, 4, 0, 1, 4]
+                vec![2, 8, 0, 3, 2, 0, 8, 5, 4, 0, 8, 4]
             ),
             split_edges(
                 &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
