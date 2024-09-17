@@ -39,12 +39,7 @@ class NodeGraph(Generic[T]):
         self.tree.interface.new_socket(name, in_out="OUTPUT", socket_type=stype)
 
     def node(
-        self,
-        /,
-        node_type: type[N],
-        *,
-        inputs: dict[str | int, NodeInput] | list[NodeInput] | None = None,
-        **kwargs: object,
+        self, node_type: type[N], inputs: NodeInputs = None, **kwargs: object
     ) -> GraphNode[N]:
         inner_node = self.tree.nodes.new(node_type.__name__)
         assert isinstance(inner_node, node_type)
@@ -61,22 +56,12 @@ class NodeGraph(Generic[T]):
         return node
 
     def group_node(
-        self,
-        /,
-        subtree: T,
-        *,
-        inputs: dict[str | int, NodeInput] | list[NodeInput] | None = None,
-        **kwargs: object,
+        self, subtree: T, inputs: NodeInputs = None, **kwargs: object
     ) -> GraphNode[ShaderNodeGroup]:
         return self.node(ShaderNodeGroup, node_tree=subtree, inputs=inputs, **kwargs)
 
     def math_node(
-        self,
-        /,
-        operation: str,
-        *,
-        inputs: dict[str | int, NodeInput] | list[NodeInput] | None = None,
-        **kwargs: object,
+        self, operation: str, inputs: NodeInputs = None, **kwargs: object
     ) -> GraphNode[ShaderNodeMath]:
         return self.node(ShaderNodeMath, operation=operation, inputs=inputs, **kwargs)
 
@@ -174,4 +159,5 @@ Vec3: TypeAlias = tuple[float, float, float]
 Vec4: TypeAlias = tuple[float, float, float, float]
 Value: TypeAlias = int | float | bool | str | Vec2 | Vec3 | Vec4 | bpy.types.Object
 NodeInput: TypeAlias = GraphNode | Node | NodeSocket | Value
+NodeInputs = dict[str | int, NodeInput] | list[NodeInput] | None
 ShaderGraph: TypeAlias = NodeGraph[ShaderNodeTree]

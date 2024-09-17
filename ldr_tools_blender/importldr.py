@@ -211,19 +211,17 @@ def create_geometry_node_instancing(
         inputs={"Name": "instance_rotation_angle"},
     ) @ (-570, -418)
 
-    rotation = graph.node(
-        FunctionNodeAxisAngleToRotation, inputs=[rot_axis, rot_angle]
-    ) @ (-380, -318)
+    rotation = graph.node(FunctionNodeAxisAngleToRotation, [rot_axis, rot_angle])
+    rotation @ (-380, -318)
 
     # Set the instance mesh.
-    instance_info = graph.node(
-        GeometryNodeObjectInfo, inputs={"Object": instance_object}
-    ) @ (-380, -91)
+    instance_info = graph.node(GeometryNodeObjectInfo, {"Object": instance_object})
+    instance_info @ (-380, -91)
 
     # The instancer mesh's points define the instance translation.
     instance_points = graph.node(
         GeometryNodeInstanceOnPoints,
-        inputs={
+        {
             "Points": group_input,
             "Instance": instance_info["Geometry"],
             "Rotation": rotation,
@@ -231,7 +229,7 @@ def create_geometry_node_instancing(
         },
     ) @ (-190, 0)
 
-    graph.node(NodeGroupOutput, inputs=[instance_points]) @ (0, 0)
+    graph.node(NodeGroupOutput, [instance_points]) @ (0, 0)
 
 
 def create_instancer_mesh(name: str, instances: ldr_tools_py.PointInstances) -> Mesh:
