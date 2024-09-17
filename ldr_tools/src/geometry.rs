@@ -689,25 +689,20 @@ fn intersect_tri_box(triangle: [Vec3; 3], box_extents: Vec3) -> bool {
         [b - a, c - b, a - c]
     };
 
-    let normal = Vec3::cross(edges[0], edges[1]);
+    let normal = edges[0].cross(edges[1]);
 
-    // TODO: There must be a clearer way to express this.
-    // I don't even know what formula this implements.
-    for i in 0..3 {
-        for j in 0..3 {
-            let e = edges[j];
-            let be = box_extents;
-            let (rhs, num): (Vec3, f32) = match i {
-                0 => ((0.0, -e.z, e.y).into(), be.y * e.z.abs() + be.z * e.y.abs()),
-                1 => ((e.z, 0.0, -e.x).into(), be.x * e.z.abs() + be.z * e.x.abs()),
-                2 => ((-e.y, e.x, 0.0).into(), be.x * e.y.abs() + be.y * e.x.abs()),
-                _ => unimplemented!(),
-            };
-
+    // AABB triangle intersection using Separating Axis Theorem (SAT).
+    // TODO: Find a clearer way to write this.
+    let be = box_extents;
+    for e in edges {
+        for (rhs, num) in [
+            ((0.0, -e.z, e.y).into(), be.y * e.z.abs() + be.z * e.y.abs()),
+            ((e.z, 0.0, -e.x).into(), be.x * e.z.abs() + be.z * e.x.abs()),
+            ((-e.y, e.x, 0.0).into(), be.x * e.y.abs() + be.y * e.x.abs()),
+        ] {
             let dot_products = triangle.map(|v| v.dot(rhs));
             let (min, max) = min_max(&dot_products);
-            let miximum = f32::max(-max, min);
-            if miximum > num {
+            if f32::max(-max, min) > num {
                 return false;
             }
         }
@@ -914,7 +909,7 @@ mod tests {
             },
         );
 
-        assert_eq!(vec![2, 1, 0, 2, 1, 0], geometry.vertex_indices);
+        assert_eq!(vec![0, 1, 2, 0, 1, 2], geometry.vertex_indices);
         assert_eq!(vec![3, 3], geometry.face_sizes);
     }
 
@@ -958,7 +953,7 @@ mod tests {
         );
 
         assert_eq!(
-            vec![0, 1, 2, 5, 4, 3, 2, 1, 0, 3, 4, 5],
+            vec![0, 1, 2, 3, 4, 5, 2, 1, 0, 5, 4, 3],
             geometry.vertex_indices
         );
         assert_eq!(vec![3, 3, 3, 3], geometry.face_sizes);

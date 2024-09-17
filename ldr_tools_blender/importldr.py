@@ -296,7 +296,7 @@ def create_colored_mesh_from_geometry(
         loop_normals = np.zeros(len(mesh.loops) * 3)
         mesh.loops.foreach_get("normal", loop_normals)
 
-        normals = float_attr(mesh, "ldr_normals", "CORNER")
+        normals = vector_attr(mesh, "ldr_normals", "CORNER")
         normals.data.foreach_set("vector", loop_normals)
 
     return mesh

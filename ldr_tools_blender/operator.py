@@ -4,7 +4,7 @@ import bpy
 from bpy.props import StringProperty, EnumProperty, BoolProperty, FloatProperty
 from bpy_extras.io_utils import ImportHelper
 import typing
-from typing import Any
+from typing import Any, Self
 import platform
 
 from .importldr import import_ldraw
@@ -97,7 +97,7 @@ class Preferences:
             json.dump(self, file, default=lambda o: o.__dict__)
 
     @staticmethod
-    def load() -> Preferences:
+    def load() -> Self:
         preferences = Preferences()
         try:
             with open(Preferences.preferences_path, "r") as file:
