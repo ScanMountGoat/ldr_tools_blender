@@ -145,65 +145,81 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
     # TODO: Consistent usage of "" vs ''
     # File type filter in file browser
     filename_ext = ".ldr"
-    filter_glob: StringProperty(default="*.mpd;*.ldr;*.dat;*.io", options={"HIDDEN"})
 
-    ldraw_path: StringProperty(name="LDraw Library", default=preferences.ldraw_path)
+    if typing.TYPE_CHECKING:
+        filter_glob: str
+        ldraw_path: str
+        instance_type: typing.Literal["LinkedDuplicates", "GeometryNodes"]
+        stud_type: ldr_tools_py.StudType
+        primitive_resolution: ldr_tools_py.PrimitiveResolution
+        add_gap_between_parts: bool
+        scene_scale: float
+    else:
+        filter_glob: StringProperty(
+            default="*.mpd;*.ldr;*.dat;*.io", options={"HIDDEN"}
+        )
 
-    instance_type: EnumProperty(
-        name="Instance Type",
-        items=[
-            (
-                "LinkedDuplicates",
-                "Linked Duplicates",
-                "Objects with linked mesh data blocks (Alt+D). Easy to edit.",
-            ),
-            (
-                "GeometryNodes",
-                "Geometry Nodes",
-                "Geometry node instances on an instancer mesh. Faster imports for large scenes but harder to edit.",
-            ),
-        ],
-        description="The method to use for instancing part meshes",
-        # TODO: this doesn't set properly?
-        default=preferences.instance_type,
-    )
+        ldraw_path: StringProperty(name="LDraw Library", default=preferences.ldraw_path)
 
-    stud_type: EnumProperty(
-        name="Stud Type",
-        items=[
-            ("Disabled", "Disabled", "No studs"),
-            ("Normal", "Normal", "Studs without logos"),
-            ("Logo4", "Logo4", "Studs with modeled LEGO logos"),
-            ("HighContrast", "High Contrast", "Studs with instruction style colors"),
-        ],
-        description="The type of stud for imported parts",
-        # TODO: this doesn't set properly?
-        default=preferences.stud_type,
-    )
+        instance_type: EnumProperty(
+            name="Instance Type",
+            items=[
+                (
+                    "LinkedDuplicates",
+                    "Linked Duplicates",
+                    "Objects with linked mesh data blocks (Alt+D). Easy to edit.",
+                ),
+                (
+                    "GeometryNodes",
+                    "Geometry Nodes",
+                    "Geometry node instances on an instancer mesh. Faster imports for large scenes but harder to edit.",
+                ),
+            ],
+            description="The method to use for instancing part meshes",
+            # TODO: this doesn't set properly?
+            default=preferences.instance_type,
+        )
 
-    primitive_resolution: EnumProperty(
-        name="Resolution",
-        items=[
-            ("Low", "Low", "Low resolution 8 segment primitives"),
-            ("Normal", "Normal", "Normal resolution 16 segment primitives"),
-            ("High", "High", "High resolution 48 segment primitives"),
-        ],
-        description="The segment quality for part primitives",
-        # TODO: this doesn't set properly?
-        default=preferences.primitive_resolution,
-    )
+        stud_type: EnumProperty(
+            name="Stud Type",
+            items=[
+                ("Disabled", "Disabled", "No studs"),
+                ("Normal", "Normal", "Studs without logos"),
+                ("Logo4", "Logo4", "Studs with modeled LEGO logos"),
+                (
+                    "HighContrast",
+                    "High Contrast",
+                    "Studs with instruction style colors",
+                ),
+            ],
+            description="The type of stud for imported parts",
+            # TODO: this doesn't set properly?
+            default=preferences.stud_type,
+        )
 
-    add_gap_between_parts: BoolProperty(
-        name="Gap Between Parts",
-        description="Scale to add a small gap horizontally between parts",
-        default=preferences.add_gap_between_parts,
-    )
+        primitive_resolution: EnumProperty(
+            name="Resolution",
+            items=[
+                ("Low", "Low", "Low resolution 8 segment primitives"),
+                ("Normal", "Normal", "Normal resolution 16 segment primitives"),
+                ("High", "High", "High resolution 48 segment primitives"),
+            ],
+            description="The segment quality for part primitives",
+            # TODO: this doesn't set properly?
+            default=preferences.primitive_resolution,
+        )
 
-    scene_scale: FloatProperty(
-        name="Scale",
-        description="Scale factor for the imported model",
-        default=preferences.scene_scale,
-    )
+        add_gap_between_parts: BoolProperty(
+            name="Gap Between Parts",
+            description="Scale to add a small gap horizontally between parts",
+            default=preferences.add_gap_between_parts,
+        )
+
+        scene_scale: FloatProperty(
+            name="Scale",
+            description="Scale factor for the imported model",
+            default=preferences.scene_scale,
+        )
 
     def draw(self, context):
         layout = self.layout
