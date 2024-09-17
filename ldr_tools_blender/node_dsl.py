@@ -5,6 +5,7 @@ from typing import (
     Generic,
     TypeAlias,
     Iterable,
+    Callable,
     overload,
 )
 
@@ -13,6 +14,7 @@ from bpy.types import (
     NodeTree,
     Node,
     NodeSocket,
+    ShaderNodeTree,
 )
 
 X = TypeVar("X")
@@ -105,8 +107,40 @@ def _iter_items(
         return collection.items()
 
 
+# A function that, given a tree, populates it with a graph of nodes.
+TreeInitializer: TypeAlias = Callable[[NodeGraph[T]], None]
+# A function that constructs and returns a node graph (or gets an existing copy of it).
+TreeConstructor: TypeAlias = Callable[[], T]
+# A second-order function that turns an initializer into a constructor.
+TreeDecorator: TypeAlias = Callable[[TreeInitializer[T]], TreeConstructor[T]]
+
+# A decorator factory (third-order function) to aid in the definition of tree constructors.
+@overload
+def group(name: str, ty: type[T]) -> TreeDecorator[T]: ...
+
+# A concise overload for the (very) common case.
+@overload
+def group(name: str) -> TreeDecorator[ShaderNodeTree]: ...
+
+def group(name: str, ty: type | None = None) -> TreeDecorator:
+    ty = ty or ShaderNodeTree
+
+    def build_node(f: TreeInitializer) -> NodeTree:
+        if tree := bpy.data.node_groups.get(name):
+            assert isinstance(tree, ty)
+            return tree
+
+        tree = bpy.data.node_groups.new(name, ty.__name__)  # type: ignore[arg-type]
+        assert isinstance(tree, ty)
+        f(NodeGraph(tree))
+        return tree
+
+    # The outer lambda is the decorator. The inner lambda is the constructor.
+    return lambda f: lambda: build_node(f)
+
 Vec2: TypeAlias = tuple[float, float]
 Vec3: TypeAlias = tuple[float, float, float]
 Vec4: TypeAlias = tuple[float, float, float, float]
 Value: TypeAlias = int | float | bool | str | Vec2 | Vec3 | Vec4 | bpy.types.Object
 NodeInput: TypeAlias = GraphNode | Node | NodeSocket | Value
+ShaderGraph: TypeAlias = NodeGraph[ShaderNodeTree]

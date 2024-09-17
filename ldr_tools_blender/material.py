@@ -7,7 +7,7 @@ else:
     from .ldr_tools_py import LDrawColor
 
 from .colors import rgb_peeron_by_code, rgb_ldr_tools_by_code
-from .node_dsl import NodeGraph, GraphNode, NodeInput
+from .node_dsl import NodeGraph, GraphNode, NodeInput, ShaderGraph, group
 
 import bpy
 
@@ -235,21 +235,8 @@ def get_material(
     return material
 
 
-def _shader_node_group(name: str) -> tuple[ShaderNodeTree, bool]:
-    tree = bpy.data.node_groups.get(name)
-    existing = tree is not None
-    tree = tree or bpy.data.node_groups.new(name, "ShaderNodeTree")  # type: ignore[arg-type]
-    assert isinstance(tree, ShaderNodeTree)
-    return tree, existing
-
-
-def roughness_node_group() -> ShaderNodeTree:
-    tree, existing = _shader_node_group("Roughness (ldr_tools)")
-    if existing:
-        return tree
-
-    graph = NodeGraph(tree)
-
+@group("Roughness (ldr_tools)")
+def roughness_node_group(graph: ShaderGraph) -> None:
     graph.input(NodeSocketFloat, "Min")
     graph.input(NodeSocketFloat, "Max")
     graph.output(NodeSocketFloat, "Roughness")
@@ -280,16 +267,10 @@ def roughness_node_group() -> ShaderNodeTree:
     )
 
     graph.node(NodeGroupOutput, location=(0, 0), inputs=[map_range])
-    return graph.tree
 
 
-def speckle_node_group() -> ShaderNodeTree:
-    tree, existing = _shader_node_group("Speckle (ldr_tools)")
-    if existing:
-        return tree
-
-    graph = NodeGraph(tree)
-
+@group("Speckle (ldr_tools)")
+def speckle_node_group(graph: ShaderGraph) -> None:
     graph.input(NodeSocketFloat, "Min")
     graph.input(NodeSocketFloat, "Max")
     graph.output(NodeSocketFloat, "Fac")
@@ -319,16 +300,10 @@ def speckle_node_group() -> ShaderNodeTree:
     )
 
     graph.node(NodeGroupOutput, location=(0, 0), inputs=[map_range])
-    return graph.tree
 
 
-def normals_node_group() -> ShaderNodeTree:
-    tree, existing = _shader_node_group("Normals (ldr_tools)")
-    if existing:
-        return tree
-
-    graph = NodeGraph(tree)
-
+@group("Normals (ldr_tools)")
+def normals_node_group(graph: ShaderGraph) -> None:
     graph.output(NodeSocketVector, "Normal")
 
     scale = graph.node(
@@ -365,16 +340,10 @@ def normals_node_group() -> ShaderNodeTree:
     )
 
     graph.node(NodeGroupOutput, location=(0, 0), inputs=[bump])
-    return graph.tree
 
 
-def slope_normals_node_group() -> ShaderNodeTree:
-    tree, existing = _shader_node_group("Slope Normals (ldr_tools)")
-    if existing:
-        return tree
-
-    graph = NodeGraph(tree)
-
+@group("Slope Normals (ldr_tools)")
+def slope_normals_node_group(graph: ShaderGraph) -> None:
     graph.output(NodeSocketVector, "Normal")
 
     scale = graph.node(
@@ -412,16 +381,10 @@ def slope_normals_node_group() -> ShaderNodeTree:
     )
 
     graph.node(NodeGroupOutput, location=(0, 0), inputs=[bump])
-    return graph.tree
 
 
-def is_slope_node_group() -> ShaderNodeTree:
-    tree, existing = _shader_node_group("Is Slope (ldr_tools)")
-    if existing:
-        return tree
-
-    graph = NodeGraph(tree)
-
+@group("Is Slope (ldr_tools)")
+def is_slope_node_group(graph: ShaderGraph) -> None:
     graph.output(NodeSocketFloat, "Factor")
 
     # Apply grainy normals to faces that aren't vertical or horizontal.
@@ -467,16 +430,10 @@ def is_slope_node_group() -> ShaderNodeTree:
     )
 
     graph.node(NodeGroupOutput, location=(-600, 400), inputs=[subtract_studs])
-    return graph.tree
 
 
-def object_scale_node_group() -> NodeTree:
-    tree, existing = _shader_node_group("Object Scale (ldr_tools)")
-    if existing:
-        return tree
-
-    graph = NodeGraph(tree)
-
+@group("Object Scale (ldr_tools)")
+def object_scale_node_group(graph: ShaderGraph) -> None:
     # Extract the magnitude of the object space scale.
     graph.output(NodeSocketFloat, "Value")
 
@@ -493,4 +450,3 @@ def object_scale_node_group() -> NodeTree:
     )
 
     graph.node(NodeGroupOutput, location=(400, 0), inputs=[length])
-    return graph.tree
