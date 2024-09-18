@@ -101,10 +101,6 @@ class GraphNode(Generic[N]):
         else:
             dst_socket.default_value = val  # type: ignore
 
-    def __matmul__(self, location: tuple[int, int]) -> GraphNode[N]:
-        self.node.location = location
-        return self
-
 
 def _get_default_output(node: Node) -> NodeSocket:
     return next(s for s in node.outputs if s.enabled)

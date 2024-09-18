@@ -124,7 +124,8 @@ def get_material(
             # Adjust the thresholds to control speckle size and density.
             speckle_node = graph.group_node(
                 speckle_node_group(), {"Min": 0.5, "Max": 0.6}
-            ) @ (-620, 700)
+            )
+            speckle_node.node.location = (-620, 700)
 
             speckle_r, speckle_g, speckle_b, _ = ldraw_color.speckle_rgba_linear
 
@@ -137,7 +138,8 @@ def get_material(
                     "A": base_color,
                     "B": (speckle_r, speckle_g, speckle_b, 1.0),
                 },
-            ) @ (-430, 750)
+            )
+            base_color.node.location = (-430, 750)
 
     # Transparent colors specify an alpha of 128 / 255.
     if a <= 0.6:
@@ -150,29 +152,35 @@ def get_material(
             roughness = (0.01, 0.15)
 
     if image is not None:
-        texture = graph.node(ShaderNodeTexImage, image=image) @ (-730, 800)
+        texture = graph.node(ShaderNodeTexImage, image=image)
+        texture.node.location = (-730, 800)
 
         base_color = graph.node(
             ShaderNodeMix,
             data_type="RGBA",
             inputs={"Factor": texture["Alpha"], "A": base_color, "B": texture["Color"]},
-        ) @ (-430, 750)
+        )
+        base_color.node.location = (-430, 750)
 
     # Procedural roughness.
     roughness_node = graph.group_node(
         roughness_node_group(),
         {"Min": roughness[0], "Max": roughness[1]},
-    ) @ (-430, 500)
+    )
+    roughness_node.node.location = (-430, 500)
 
     # Procedural normals.
-    main_normals = graph.group_node(normals_node_group()) @ (-630, 200)
+    main_normals = graph.group_node(normals_node_group())
+    main_normals.node.location = (-630, 200)
 
     normals: GraphNode[ShaderNodeGroup | ShaderNodeMix] = main_normals
 
     if is_slope:
-        is_slope_node = graph.group_node(is_slope_node_group()) @ (-630, 300)
+        is_slope_node = graph.group_node(is_slope_node_group())
+        is_slope_node.node.location = (-630, 300)
 
-        slope_normals = graph.group_node(slope_normals_node_group()) @ (-630, 100)
+        slope_normals = graph.group_node(slope_normals_node_group())
+        slope_normals.node.location = (-630, 100)
 
         # Choose between grainy and smooth normals depending on the face.
         normals = graph.node(
@@ -183,11 +191,14 @@ def get_material(
                 "A": main_normals,
                 "B": slope_normals,
             },
-        ) @ (-430, 330)
+        )
+        normals.node.location = (-430, 330)
 
-    scale = graph.group_node(object_scale_node_group()) @ (-630, 0)
+    scale = graph.group_node(object_scale_node_group())
+    scale.node.location = (-630, 0)
 
-    subsurface_scale = graph.math_node("MULTIPLY", [scale, 2.5]) @ (-430, 105)
+    subsurface_scale = graph.math_node("MULTIPLY", [scale, 2.5])
+    subsurface_scale.node.location = (-430, 105)
 
     bsdf = graph.node(
         ShaderNodeBsdfPrincipled,
@@ -205,9 +216,11 @@ def get_material(
             "Transmission Weight": transmission,
             "IOR": refraction,
         },
-    ) @ (-240, 460)
+    )
+    bsdf.node.location = (-240, 460)
 
-    graph.node(ShaderNodeOutputMaterial, {"Surface": bsdf}) @ (60, 460)
+    output = graph.node(ShaderNodeOutputMaterial, {"Surface": bsdf})
+    output.node.location = (60, 460)
 
     return material
 
@@ -218,7 +231,8 @@ def roughness_node_group(graph: ShaderGraph) -> None:
     graph.input(NodeSocketFloat, "Max")
     graph.output(NodeSocketFloat, "Roughness")
 
-    input = graph.node(NodeGroupInput) @ (-480, -300)
+    input = graph.node(NodeGroupInput)
+    input.node.location = (-480, -300)
 
     # TODO: Create frame called "smudges" or at least name the nodes.
     noise = graph.node(
@@ -229,7 +243,8 @@ def roughness_node_group(graph: ShaderGraph) -> None:
             "Roughness": 0.5,
             "Distortion": 0.0,
         },
-    ) @ (-480, 0)
+    )
+    noise.node.location = (-480, 0)
 
     # Easier to configure than a color ramp since the input is 1D.
     map_range = graph.node(
@@ -239,9 +254,11 @@ def roughness_node_group(graph: ShaderGraph) -> None:
             "To Min": input["Min"],
             "To Max": input["Max"],
         },
-    ) @ (-240, 0)
+    )
+    map_range.node.location = (-240, 0)
 
-    graph.node(NodeGroupOutput, [map_range]) @ (0, 0)
+    output = graph.node(NodeGroupOutput, [map_range])
+    output.node.location = (0, 0)
 
 
 @group("Speckle (ldr_tools)")
@@ -250,7 +267,8 @@ def speckle_node_group(graph: ShaderGraph) -> None:
     graph.input(NodeSocketFloat, "Max")
     graph.output(NodeSocketFloat, "Fac")
 
-    input = graph.node(NodeGroupInput) @ (-480, -300)
+    input = graph.node(NodeGroupInput)
+    input.node.location = (-480, -300)
 
     noise = graph.node(
         ShaderNodeTexNoise,
@@ -260,7 +278,8 @@ def speckle_node_group(graph: ShaderGraph) -> None:
             "Roughness": 1.0,
             "Distortion": 0.0,
         },
-    ) @ (-480, 0)
+    )
+    noise.node.location = (-480, 0)
 
     # Easier to configure than a color ramp since the input is 1D.
     map_range = graph.node(
@@ -270,20 +289,25 @@ def speckle_node_group(graph: ShaderGraph) -> None:
             "From Min": input["Min"],
             "From Max": input["Max"],
         },
-    ) @ (-240, 0)
+    )
+    map_range.node.location = (-240, 0)
 
-    graph.node(NodeGroupOutput, [map_range]) @ (0, 0)
+    output = graph.node(NodeGroupOutput, [map_range])
+    output.node.location = (0, 0)
 
 
 @group("Normals (ldr_tools)")
 def normals_node_group(graph: ShaderGraph) -> None:
     graph.output(NodeSocketVector, "Normal")
 
-    scale = graph.group_node(object_scale_node_group()) @ (-720, 100)
+    scale = graph.group_node(object_scale_node_group())
+    scale.node.location = (-720, 100)
 
-    tex_coord = graph.node(ShaderNodeTexCoord) @ (-720, 0)
+    tex_coord = graph.node(ShaderNodeTexCoord)
+    tex_coord.node.location = (-720, 0)
 
-    bevel = graph.node(ShaderNodeBevel, {"Radius": scale}) @ (-480, -300)
+    bevel = graph.node(ShaderNodeBevel, {"Radius": scale})
+    bevel.node.location = (-480, -300)
 
     # Faces of bricks are never perfectly flat.
     # Create a very low frequency noise to break up highlights
@@ -296,7 +320,8 @@ def normals_node_group(graph: ShaderGraph) -> None:
             # "Distortion": 0.0, # already the default
             "Vector": tex_coord["Object"],
         },
-    ) @ (-480, 0)
+    )
+    noise.node.location = (-480, 0)
 
     bump = graph.node(
         ShaderNodeBump,
@@ -306,20 +331,25 @@ def normals_node_group(graph: ShaderGraph) -> None:
             "Height": noise["Fac"],
             "Normal": bevel,
         },
-    ) @ (-240, 0)
+    )
+    bump.node.location = (-240, 0)
 
-    graph.node(NodeGroupOutput, [bump]) @ (0, 0)
+    output = graph.node(NodeGroupOutput, [bump])
+    output.node.location = (0, 0)
 
 
 @group("Slope Normals (ldr_tools)")
 def slope_normals_node_group(graph: ShaderGraph) -> None:
     graph.output(NodeSocketVector, "Normal")
 
-    scale = graph.group_node(object_scale_node_group()) @ (-720, 100)
+    scale = graph.group_node(object_scale_node_group())
+    scale.node.location = (-720, 100)
 
-    tex_coord = graph.node(ShaderNodeTexCoord) @ (-720, 0)
+    tex_coord = graph.node(ShaderNodeTexCoord)
+    tex_coord.node.location = (-720, 0)
 
-    bevel = graph.node(ShaderNodeBevel, {"Radius": scale}) @ (-480, -300)
+    bevel = graph.node(ShaderNodeBevel, {"Radius": scale})
+    bevel.node.location = (-480, -300)
 
     noise = graph.node(
         ShaderNodeTexNoise,
@@ -330,9 +360,11 @@ def slope_normals_node_group(graph: ShaderGraph) -> None:
             # "Lacunarity": 2.0, # already the default
             "Vector": tex_coord["Object"],
         },
-    ) @ (-480, 0)
+    )
+    noise.node.location = (-480, 0)
 
-    bump_distance = graph.math_node("MULTIPLY", [scale, 0.5]) @ (-480, 165)
+    bump_distance = graph.math_node("MULTIPLY", [scale, 0.5])
+    bump_distance.node.location = (-480, 165)
 
     bump = graph.node(
         ShaderNodeBump,
@@ -342,9 +374,11 @@ def slope_normals_node_group(graph: ShaderGraph) -> None:
             "Height": noise["Fac"],
             "Normal": bevel,
         },
-    ) @ (-240, 0)
+    )
+    bump.node.location = (-240, 0)
 
-    graph.node(NodeGroupOutput, [bump]) @ (0, 0)
+    output = graph.node(NodeGroupOutput, [bump])
+    output.node.location = (0, 0)
 
 
 @group("Is Slope (ldr_tools)")
@@ -354,26 +388,31 @@ def is_slope_node_group(graph: ShaderGraph) -> None:
     # Apply grainy normals to faces that aren't vertical or horizontal.
     # Use non transformed normals to not consider object rotation.
     ldr_normals = graph.node(ShaderNodeAttribute, attribute_name="ldr_normals")
-    ldr_normals @ (-1600, 400)
+    ldr_normals.node.location = (-1600, 400)
 
-    separate = graph.node(ShaderNodeSeparateXYZ, [ldr_normals["Vector"]]) @ (-1400, 400)
+    separate = graph.node(ShaderNodeSeparateXYZ, [ldr_normals["Vector"]])
+    separate.node.location = (-1400, 400)
 
     # Use normal.y to check if the face is horizontal (-1.0 or 1.0) or vertical (0.0).
     # Any values in between are considered "slopes" and use grainy normals.
-    absolute = graph.math_node("ABSOLUTE", [separate["Y"]]) @ (-1200, 400)
-    compare = graph.math_node("COMPARE", [absolute, 0.5, 0.45]) @ (-1000, 400)
+    absolute = graph.math_node("ABSOLUTE", [separate["Y"]])
+    absolute.node.location = (-1200, 400)
+    compare = graph.math_node("COMPARE", [absolute, 0.5, 0.45])
+    compare.node.location = (-1000, 400)
 
-    slope_normals = graph.group_node(slope_normals_node_group()) @ (-630, 100)
+    slope_normals = graph.group_node(slope_normals_node_group())
+    slope_normals.node.location = (-630, 100)
 
     is_stud = graph.node(ShaderNodeAttribute, attribute_name="ldr_is_stud")
-    is_stud @ (-1000, 200)
+    is_stud.node.location = (-1000, 200)
 
     # Don't apply the grainy slopes to any faces marked as studs.
     # We use an attribute here to avoid per face material assignment.
     subtract_studs = graph.math_node("SUBTRACT", [compare, is_stud["Fac"]])
-    subtract_studs @ (-800, 400)
+    subtract_studs.node.location = (-800, 400)
 
-    graph.node(NodeGroupOutput, [subtract_studs]) @ (-600, 400)
+    output = graph.node(NodeGroupOutput, [subtract_studs])
+    output.node.location = (-600, 400)
 
 
 @group("Object Scale (ldr_tools)")
@@ -388,9 +427,10 @@ def object_scale_node_group(graph: ShaderGraph) -> None:
         convert_to="WORLD",
         inputs=[(1.0, 0.0, 0.0)],
     )
+    transform.node.location = (0, 0)
 
-    length = graph.node(
-        ShaderNodeVectorMath, operation="LENGTH", inputs=[transform]
-    ) @ (200, 0)
+    length = graph.node(ShaderNodeVectorMath, operation="LENGTH", inputs=[transform])
+    length.node.location = (200, 0)
 
-    graph.node(NodeGroupOutput, [length]) @ (400, 0)
+    output = graph.node(NodeGroupOutput, [length])
+    output.node.location = (400, 0)

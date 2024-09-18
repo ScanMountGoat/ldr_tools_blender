@@ -189,34 +189,38 @@ def create_geometry_node_instancing(
     graph.input(NodeSocketGeometry, "Geometry")
     graph.output(NodeSocketGeometry, "Geometry")
 
-    group_input = graph.node(NodeGroupInput) @ (-380, 0)
+    group_input = graph.node(NodeGroupInput)
+    group_input.node.location = (-380, 0)
 
     # Scale instances from the custom attribute.
     scale_attribute = graph.node(
         GeometryNodeInputNamedAttribute,
         data_type="FLOAT_VECTOR",
         inputs={"Name": "instance_scale"},
-    ) @ (-380, -434)
+    )
+    scale_attribute.node.location = (-380, -434)
 
     # Rotate instances from the custom attributes.
     rot_axis = graph.node(
         GeometryNodeInputNamedAttribute,
         data_type="FLOAT_VECTOR",
         inputs={"Name": "instance_rotation_axis"},
-    ) @ (-570, -275)
+    )
+    rot_axis.node.location = (-570, -275)
 
     rot_angle = graph.node(
         GeometryNodeInputNamedAttribute,
         data_type="FLOAT",
         inputs={"Name": "instance_rotation_angle"},
-    ) @ (-570, -418)
+    )
+    rot_angle.node.location = (-570, -418)
 
     rotation = graph.node(FunctionNodeAxisAngleToRotation, [rot_axis, rot_angle])
-    rotation @ (-380, -318)
+    rotation.node.location = (-380, -318)
 
     # Set the instance mesh.
     instance_info = graph.node(GeometryNodeObjectInfo, {"Object": instance_object})
-    instance_info @ (-380, -91)
+    instance_info.node.location = (-380, -91)
 
     # The instancer mesh's points define the instance translation.
     instance_points = graph.node(
@@ -227,9 +231,11 @@ def create_geometry_node_instancing(
             "Rotation": rotation,
             "Scale": scale_attribute,
         },
-    ) @ (-190, 0)
+    )
+    instance_points.node.location = (-190, 0)
 
-    graph.node(NodeGroupOutput, [instance_points]) @ (0, 0)
+    output = graph.node(NodeGroupOutput, [instance_points])
+    output.node.location = (0, 0)
 
 
 def create_instancer_mesh(name: str, instances: ldr_tools_py.PointInstances) -> Mesh:
