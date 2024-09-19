@@ -5,6 +5,7 @@ from typing import (
     Generic,
     TypeAlias,
     Iterable,
+    Callable,
     overload,
 )
 
@@ -13,6 +14,9 @@ from bpy.types import (
     NodeTree,
     Node,
     NodeSocket,
+    ShaderNodeTree,
+    ShaderNodeMath,
+    ShaderNodeGroup,
 )
 
 X = TypeVar("X")
@@ -34,12 +38,7 @@ class NodeGraph(Generic[T]):
         self.tree.interface.new_socket(name, in_out="OUTPUT", socket_type=stype)
 
     def node(
-        self,
-        /,
-        node_type: type[N],
-        *,
-        inputs: dict[str | int, NodeInput] | list[NodeInput] | None = None,
-        **kwargs: object,
+        self, node_type: type[N], inputs: NodeInputs = None, **kwargs: object
     ) -> GraphNode[N]:
         inner_node = self.tree.nodes.new(node_type.__name__)
         assert isinstance(inner_node, node_type)
@@ -54,6 +53,35 @@ class NodeGraph(Generic[T]):
                 node[socket_name] = socket_val
 
         return node
+
+
+class ShaderGraph(NodeGraph[ShaderNodeTree]):
+    def math_node(
+        self, operation: str, inputs: NodeInputs = None, **kwargs: object
+    ) -> GraphNode[ShaderNodeMath]:
+        return self.node(ShaderNodeMath, operation=operation, inputs=inputs, **kwargs)
+
+    def group_node(
+        self,
+        init: Callable[[ShaderGraph], None] | ShaderNodeTree,
+        inputs: NodeInputs = None,
+        **kwargs: object,
+    ) -> GraphNode[ShaderNodeGroup]:
+        if isinstance(init, ShaderNodeTree):
+            return self.node(ShaderNodeGroup, node_tree=init, inputs=inputs, **kwargs)
+
+        group_name = init.__name__.removesuffix("_node_group").replace("_", " ").title()
+        group_name += " (ldr_tools)"
+
+        tree = bpy.data.node_groups.get(group_name)
+        if tree is None:
+            tree = bpy.data.node_groups.new(group_name, "ShaderNodeTree")
+            assert isinstance(tree, ShaderNodeTree)
+            init(ShaderGraph(tree))
+        else:
+            assert isinstance(tree, ShaderNodeTree)
+
+        return self.node(ShaderNodeGroup, node_tree=tree, inputs=inputs, **kwargs)
 
 
 class GraphNode(Generic[N]):
@@ -110,3 +138,4 @@ Vec3: TypeAlias = tuple[float, float, float]
 Vec4: TypeAlias = tuple[float, float, float, float]
 Value: TypeAlias = int | float | bool | str | Vec2 | Vec3 | Vec4 | bpy.types.Object
 NodeInput: TypeAlias = GraphNode | Node | NodeSocket | Value
+NodeInputs = dict[str | int, NodeInput] | list[NodeInput] | None
