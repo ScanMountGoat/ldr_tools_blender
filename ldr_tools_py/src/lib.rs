@@ -1,8 +1,8 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
 
 use numpy::IntoPyArray;
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 
 macro_rules! python_enum {
     ($py_ty:ident, $rust_ty:ty, $( $i:ident ),+) => {
@@ -124,7 +124,7 @@ impl LDrawGeometry {
 #[pyclass(get_all)]
 #[derive(Debug, Clone)]
 pub struct LDrawTextureInfo {
-    textures: Vec<Cow<'static, [u8]>>, // marshaled as list[bytes]
+    textures: Vec<Py<PyBytes>>,
     indices: PyObject,
     uvs: PyObject,
 }
@@ -134,7 +134,11 @@ impl LDrawTextureInfo {
         let uv_count = tex_info.uvs.len();
 
         Self {
-            textures: tex_info.textures.into_iter().map(Cow::Owned).collect(),
+            textures: tex_info
+                .textures
+                .into_iter()
+                .map(|bytes| PyBytes::new(py, &bytes).into())
+                .collect(),
             indices: tex_info.indices.into_pyarray(py).into(),
             uvs: tex_info
                 .uvs
