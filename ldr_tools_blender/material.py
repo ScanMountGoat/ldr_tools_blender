@@ -7,7 +7,7 @@ else:
     from .ldr_tools_py import LDrawColor
 
 from .colors import rgb_peeron_by_code, rgb_ldr_tools_by_code
-from .node_dsl import NodeGraph, GraphNode, NodeInput, ShaderGraph, group
+from .node_dsl import NodeGraph, GraphNode, NodeInput, ShaderGraph
 
 import bpy
 
@@ -74,7 +74,7 @@ def get_material(
     # This avoids hard coding names like "Material Output" that depend on the UI language.
     material.node_tree.nodes.clear()
 
-    graph = NodeGraph(material.node_tree)
+    graph = ShaderGraph(material.node_tree)
 
     # TODO: Error if color is missing?
     r, g, b, a = 1.0, 1.0, 1.0, 1.0
@@ -123,7 +123,7 @@ def get_material(
 
             # Adjust the thresholds to control speckle size and density.
             speckle_node = graph.group_node(
-                speckle_node_group(), {"Min": 0.5, "Max": 0.6}
+                speckle_node_group, {"Min": 0.5, "Max": 0.6}
             )
             speckle_node.node.location = (-620, 700)
 
@@ -164,22 +164,22 @@ def get_material(
 
     # Procedural roughness.
     roughness_node = graph.group_node(
-        roughness_node_group(),
+        roughness_node_group,
         {"Min": roughness[0], "Max": roughness[1]},
     )
     roughness_node.node.location = (-430, 500)
 
     # Procedural normals.
-    main_normals = graph.group_node(normals_node_group())
+    main_normals = graph.group_node(normals_node_group)
     main_normals.node.location = (-630, 200)
 
     normals: GraphNode[ShaderNodeGroup | ShaderNodeMix] = main_normals
 
     if is_slope:
-        is_slope_node = graph.group_node(is_slope_node_group())
+        is_slope_node = graph.group_node(is_slope_node_group)
         is_slope_node.node.location = (-630, 300)
 
-        slope_normals = graph.group_node(slope_normals_node_group())
+        slope_normals = graph.group_node(slope_normals_node_group)
         slope_normals.node.location = (-630, 100)
 
         # Choose between grainy and smooth normals depending on the face.
@@ -194,7 +194,7 @@ def get_material(
         )
         normals.node.location = (-430, 330)
 
-    scale = graph.group_node(object_scale_node_group())
+    scale = graph.group_node(object_scale_node_group)
     scale.node.location = (-630, 0)
 
     subsurface_scale = graph.math_node("MULTIPLY", [scale, 2.5])
@@ -225,7 +225,6 @@ def get_material(
     return material
 
 
-@group("Roughness (ldr_tools)")
 def roughness_node_group(graph: ShaderGraph) -> None:
     graph.input(NodeSocketFloat, "Min")
     graph.input(NodeSocketFloat, "Max")
@@ -261,7 +260,6 @@ def roughness_node_group(graph: ShaderGraph) -> None:
     output.node.location = (0, 0)
 
 
-@group("Speckle (ldr_tools)")
 def speckle_node_group(graph: ShaderGraph) -> None:
     graph.input(NodeSocketFloat, "Min")
     graph.input(NodeSocketFloat, "Max")
@@ -296,11 +294,10 @@ def speckle_node_group(graph: ShaderGraph) -> None:
     output.node.location = (0, 0)
 
 
-@group("Normals (ldr_tools)")
 def normals_node_group(graph: ShaderGraph) -> None:
     graph.output(NodeSocketVector, "Normal")
 
-    scale = graph.group_node(object_scale_node_group())
+    scale = graph.group_node(object_scale_node_group)
     scale.node.location = (-720, 100)
 
     tex_coord = graph.node(ShaderNodeTexCoord)
@@ -338,11 +335,10 @@ def normals_node_group(graph: ShaderGraph) -> None:
     output.node.location = (0, 0)
 
 
-@group("Slope Normals (ldr_tools)")
 def slope_normals_node_group(graph: ShaderGraph) -> None:
     graph.output(NodeSocketVector, "Normal")
 
-    scale = graph.group_node(object_scale_node_group())
+    scale = graph.group_node(object_scale_node_group)
     scale.node.location = (-720, 100)
 
     tex_coord = graph.node(ShaderNodeTexCoord)
@@ -381,7 +377,6 @@ def slope_normals_node_group(graph: ShaderGraph) -> None:
     output.node.location = (0, 0)
 
 
-@group("Is Slope (ldr_tools)")
 def is_slope_node_group(graph: ShaderGraph) -> None:
     graph.output(NodeSocketFloat, "Factor")
 
@@ -400,7 +395,7 @@ def is_slope_node_group(graph: ShaderGraph) -> None:
     compare = graph.math_node("COMPARE", [absolute, 0.5, 0.45])
     compare.node.location = (-1000, 400)
 
-    slope_normals = graph.group_node(slope_normals_node_group())
+    slope_normals = graph.group_node(slope_normals_node_group)
     slope_normals.node.location = (-630, 100)
 
     is_stud = graph.node(ShaderNodeAttribute, attribute_name="ldr_is_stud")
@@ -415,7 +410,6 @@ def is_slope_node_group(graph: ShaderGraph) -> None:
     output.node.location = (-600, 400)
 
 
-@group("Object Scale (ldr_tools)")
 def object_scale_node_group(graph: ShaderGraph) -> None:
     # Extract the magnitude of the object space scale.
     graph.output(NodeSocketFloat, "Value")
