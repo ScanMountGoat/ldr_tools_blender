@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
-use numpy::IntoPyArray;
+use numpy::{IntoPyArray, PyArrayMethods};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
 macro_rules! python_enum {
     ($py_ty:ident, $rust_ty:ty, $( $i:ident ),+) => {
-        #[pyclass]
-        #[derive(Debug, Clone, Copy)]
+        #[pyclass(eq, eq_int)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         pub enum $py_ty {
             $($i),*
         }
@@ -99,17 +99,17 @@ impl LDrawGeometry {
         // This avoids needing unsafe code.
         Self {
             vertices: pyarray_vec3(py, geometry.vertices),
-            vertex_indices: geometry.vertex_indices.into_pyarray(py).into(),
-            face_start_indices: geometry.face_start_indices.into_pyarray(py).into(),
-            face_sizes: geometry.face_sizes.into_pyarray(py).into(),
-            face_colors: geometry.face_colors.into_pyarray(py).into(),
+            vertex_indices: geometry.vertex_indices.into_pyarray_bound(py).into(),
+            face_start_indices: geometry.face_start_indices.into_pyarray_bound(py).into(),
+            face_sizes: geometry.face_sizes.into_pyarray_bound(py).into(),
+            face_colors: geometry.face_colors.into_pyarray_bound(py).into(),
             is_face_stud: geometry.is_face_stud,
             edge_line_indices: geometry
                 .edge_line_indices
                 .into_iter()
                 .flatten()
                 .collect::<Vec<u32>>()
-                .into_pyarray(py)
+                .into_pyarray_bound(py)
                 .reshape((sharp_edge_count, 2))
                 .unwrap()
                 .into(),
@@ -137,15 +137,15 @@ impl LDrawTextureInfo {
             textures: tex_info
                 .textures
                 .into_iter()
-                .map(|bytes| PyBytes::new(py, &bytes).into())
+                .map(|bytes| PyBytes::new_bound(py, &bytes).into())
                 .collect(),
-            indices: tex_info.indices.into_pyarray(py).into(),
+            indices: tex_info.indices.into_pyarray_bound(py).into(),
             uvs: tex_info
                 .uvs
                 .into_iter()
                 .flat_map(|uv| uv.to_array())
                 .collect::<Vec<f32>>()
-                .into_pyarray(py)
+                .into_pyarray_bound(py)
                 .reshape((uv_count, 2))
                 .unwrap()
                 .into(),
@@ -249,7 +249,7 @@ impl PointInstances {
         Self {
             translations: pyarray_vec3(py, instances.translations),
             rotations_axis: pyarray_vec3(py, instances.rotations_axis),
-            rotations_angle: instances.rotations_angle.into_pyarray(py).into(),
+            rotations_angle: instances.rotations_angle.into_pyarray_bound(py).into(),
             scales: pyarray_vec3(py, instances.scales),
         }
     }
@@ -258,14 +258,14 @@ impl PointInstances {
 #[pyfunction]
 fn load_file(
     py: Python,
-    path: &str,
-    ldraw_path: &str,
-    additional_paths: Vec<&str>,
+    path: String,
+    ldraw_path: String,
+    additional_paths: Vec<String>,
     settings: &GeometrySettings,
 ) -> PyResult<LDrawScene> {
     // TODO: This timing code doesn't need to be here.
     let start = std::time::Instant::now();
-    let scene = ldr_tools::load_file(path, ldraw_path, &additional_paths, &settings.into());
+    let scene = ldr_tools::load_file(&path, &ldraw_path, &additional_paths, &settings.into());
 
     let geometry_cache = scene
         .geometry_cache
@@ -283,14 +283,14 @@ fn load_file(
 #[pyfunction]
 fn load_file_instanced(
     py: Python,
-    path: &str,
-    ldraw_path: &str,
-    additional_paths: Vec<&str>,
+    path: String,
+    ldraw_path: String,
+    additional_paths: Vec<String>,
     settings: &GeometrySettings,
 ) -> PyResult<LDrawSceneInstanced> {
     let start = std::time::Instant::now();
     let scene =
-        ldr_tools::load_file_instanced(path, ldraw_path, &additional_paths, &settings.into());
+        ldr_tools::load_file_instanced(&path, &ldraw_path, &additional_paths, &settings.into());
 
     let geometry_cache = scene
         .geometry_cache
@@ -311,7 +311,7 @@ fn load_file_instanced(
                 .into_iter()
                 .flat_map(|v| v.to_cols_array())
                 .collect::<Vec<f32>>()
-                .into_pyarray(py)
+                .into_pyarray_bound(py)
                 .reshape((transform_count, 4, 4))
                 .unwrap()
                 .into();
@@ -332,15 +332,15 @@ fn load_file_instanced(
 #[pyfunction]
 fn load_file_instanced_points(
     py: Python,
-    path: &str,
-    ldraw_path: &str,
-    additional_paths: Vec<&str>,
+    path: String,
+    ldraw_path: String,
+    additional_paths: Vec<String>,
     settings: &GeometrySettings,
 ) -> PyResult<LDrawSceneInstancedPoints> {
     let start = std::time::Instant::now();
     let scene = ldr_tools::load_file_instanced_points(
-        path,
-        ldraw_path,
+        &path,
+        &ldraw_path,
         &additional_paths,
         &settings.into(),
     );
@@ -382,14 +382,14 @@ fn pyarray_vec3(py: Python, values: Vec<ldr_tools::glam::Vec3>) -> PyObject {
         .into_iter()
         .flat_map(|v| [v.x, v.y, v.z])
         .collect::<Vec<f32>>()
-        .into_pyarray(py)
+        .into_pyarray_bound(py)
         .reshape((count, 3))
         .unwrap()
         .into()
 }
 
 #[pymodule]
-fn ldr_tools_py(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
+fn ldr_tools_py(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<LDrawNode>()?;
     m.add_class::<LDrawGeometry>()?;
     m.add_class::<LDrawColor>()?;

@@ -242,7 +242,7 @@ struct GeometryInitDescriptor<'a> {
 pub fn load_file(
     path: &str,
     ldraw_path: &str,
-    additional_paths: &[&str],
+    additional_paths: &[String],
     settings: &GeometrySettings,
 ) -> LDrawScene {
     let (source_map, main_model_name) = parse_file(path, ldraw_path, additional_paths, settings);
@@ -272,12 +272,12 @@ pub fn load_file(
 fn parse_file(
     path: &str,
     ldraw_path: &str,
-    additional_paths: &[&str],
+    additional_paths: &[String],
     settings: &GeometrySettings,
 ) -> (weldr::SourceMap, String) {
     let mut resolver = DiskResolver::new_from_library(
         ldraw_path,
-        additional_paths.iter().cloned(),
+        additional_paths.iter().map(|s| s.as_str()),
         settings.primitive_resolution,
     );
     // Resolve paths relative to the current file.
@@ -429,7 +429,7 @@ fn scaled_transform(transform: &Mat4, scale: f32) -> Mat4 {
 pub fn load_file_instanced_points(
     path: &str,
     ldraw_path: &str,
-    additional_paths: &[&str],
+    additional_paths: &[String],
     settings: &GeometrySettings,
 ) -> LDrawSceneInstancedPoints {
     let scene = load_file_instanced(path, ldraw_path, additional_paths, settings);
@@ -487,7 +487,7 @@ fn geometry_point_instances(transforms: Vec<Mat4>) -> PointInstances {
 pub fn load_file_instanced(
     path: &str,
     ldraw_path: &str,
-    additional_paths: &[&str],
+    additional_paths: &[String],
     settings: &GeometrySettings,
 ) -> LDrawSceneInstanced {
     let (source_map, main_model_name) = parse_file(path, ldraw_path, additional_paths, settings);
