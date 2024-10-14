@@ -25,7 +25,7 @@ Bricklink Studio models from newer versions of the program can be imported direc
 5. Import an LDraw model into Blender by clicking File > Import > LDraw and selecting a .mpd, .ldr, or .io file.
 
 ## Uninstalling/Upgrading
-Upgrading the addon requires uninstalling the addon, downloading the latest version from releases, and then reinstalling the addon. On some operating systems, it may be necessary to disable the addon, restart Blender, and then uninstall the addon. This workaround is only be necessary on Windows.
+Upgrading the addon requires uninstalling the addon, downloading the latest version from releases, and then reinstalling the addon. Windows users will need to disable the addon, restart Blender, and then uninstall the addon to properly remove the previous version.
 
 ## Performance
 This project is built from the ground up with performance in mind. The ldr_tools_blender addon can easily handle very large models with hundreds of thousands of parts. The addon will always instance geometry by part name and color to reduce memory usage and improve import times. Memory usage will be similar for both methods.
