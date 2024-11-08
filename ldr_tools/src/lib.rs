@@ -9,12 +9,13 @@ use geometry::create_geometry;
 use glam::{vec4, Mat4, Vec3};
 use rayon::prelude::*;
 use weldr::{Command, FileRefResolver, ResolveError};
+use zip::ZipArchive;
 
 pub use color::{load_color_table, LDrawColor};
-pub use geometry::{LDrawGeometry, LDrawTextureInfo};
+pub use geometry::LDrawGeometry;
 pub use glam;
+pub use pe_tex_info::LDrawTextureInfo;
 pub use weldr::Color;
-use zip::ZipArchive;
 
 pub type ColorCode = u32;
 
@@ -24,6 +25,7 @@ const CURRENT_COLOR: ColorCode = 16;
 mod color;
 mod edge_split;
 mod geometry;
+mod pe_tex_info;
 mod slope;
 
 pub struct LDrawNode {
