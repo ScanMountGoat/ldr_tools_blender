@@ -1,4 +1,4 @@
-use numpy::{IntoPyArray, PyArrayMethods};
+use numpy::{IntoPyArray, PyArray2, PyArrayMethods};
 use pyo3::prelude::*;
 
 macro_rules! python_enum {
@@ -51,7 +51,8 @@ mod ldr_tools_py {
 
     use std::collections::HashMap;
 
-    use numpy::{IntoPyArray, PyArrayMethods};
+    use numpy::PyArray3;
+    use numpy::{IntoPyArray, PyArray1, PyArray2, PyArrayMethods};
     use pyo3::types::PyBytes;
 
     #[pymodule_export]
@@ -93,7 +94,7 @@ mod ldr_tools_py {
     #[derive(Debug, Clone)]
     pub struct LDrawSceneInstanced {
         pub main_model_name: String,
-        pub geometry_world_transforms: HashMap<(String, u32), PyObject>,
+        pub geometry_world_transforms: HashMap<(String, u32), Py<PyArray3<f32>>>,
         pub geometry_cache: HashMap<String, LDrawGeometry>,
     }
 
@@ -105,17 +106,17 @@ mod ldr_tools_py {
         pub geometry_cache: HashMap<String, LDrawGeometry>,
     }
 
-    // Use numpy arrays (PyObject) for reduced overhead.
+    // Use numpy arrays for reduced overhead.
     #[pyclass(get_all)]
     #[derive(Debug, Clone)]
     pub struct LDrawGeometry {
-        vertices: PyObject,
-        vertex_indices: PyObject,
-        face_start_indices: PyObject,
-        face_sizes: PyObject,
-        face_colors: PyObject,
+        vertices: Py<PyArray2<f32>>,
+        vertex_indices: Py<PyArray1<u32>>,
+        face_start_indices: Py<PyArray1<u32>>,
+        face_sizes: Py<PyArray1<u32>>,
+        face_colors: Py<PyArray1<u32>>,
         is_face_stud: Vec<bool>,
-        edge_line_indices: PyObject,
+        edge_line_indices: Py<PyArray2<u32>>,
         has_grainy_slopes: bool,
         texture_info: Option<LDrawTextureInfo>,
     }
@@ -128,17 +129,17 @@ mod ldr_tools_py {
             // This avoids needing unsafe code.
             Self {
                 vertices: pyarray_vec3(py, geometry.vertices),
-                vertex_indices: geometry.vertex_indices.into_pyarray_bound(py).into(),
-                face_start_indices: geometry.face_start_indices.into_pyarray_bound(py).into(),
-                face_sizes: geometry.face_sizes.into_pyarray_bound(py).into(),
-                face_colors: geometry.face_colors.into_pyarray_bound(py).into(),
+                vertex_indices: geometry.vertex_indices.into_pyarray(py).into(),
+                face_start_indices: geometry.face_start_indices.into_pyarray(py).into(),
+                face_sizes: geometry.face_sizes.into_pyarray(py).into(),
+                face_colors: geometry.face_colors.into_pyarray(py).into(),
                 is_face_stud: geometry.is_face_stud,
                 edge_line_indices: geometry
                     .edge_line_indices
                     .into_iter()
                     .flatten()
                     .collect::<Vec<u32>>()
-                    .into_pyarray_bound(py)
+                    .into_pyarray(py)
                     .reshape((sharp_edge_count, 2))
                     .unwrap()
                     .into(),
@@ -154,8 +155,8 @@ mod ldr_tools_py {
     #[derive(Debug, Clone)]
     pub struct LDrawTextureInfo {
         textures: Vec<Py<PyBytes>>,
-        indices: PyObject,
-        uvs: PyObject,
+        indices: Py<PyArray1<u8>>,
+        uvs: Py<PyArray2<f32>>,
     }
 
     impl LDrawTextureInfo {
@@ -166,15 +167,15 @@ mod ldr_tools_py {
                 textures: tex_info
                     .textures
                     .into_iter()
-                    .map(|bytes| PyBytes::new_bound(py, &bytes).into())
+                    .map(|bytes| PyBytes::new(py, &bytes).into())
                     .collect(),
-                indices: tex_info.indices.into_pyarray_bound(py).into(),
+                indices: tex_info.indices.into_pyarray(py).into(),
                 uvs: tex_info
                     .uvs
                     .into_iter()
                     .flat_map(|uv| uv.to_array())
                     .collect::<Vec<f32>>()
-                    .into_pyarray_bound(py)
+                    .into_pyarray(py)
                     .reshape((uv_count, 2))
                     .unwrap()
                     .into(),
@@ -250,10 +251,10 @@ mod ldr_tools_py {
     #[pyclass(get_all, set_all)]
     #[derive(Debug, Clone)]
     pub struct PointInstances {
-        translations: PyObject,
-        rotations_axis: PyObject,
-        rotations_angle: PyObject,
-        scales: PyObject,
+        translations: Py<PyArray2<f32>>,
+        rotations_axis: Py<PyArray2<f32>>,
+        rotations_angle: Py<PyArray1<f32>>,
+        scales: Py<PyArray2<f32>>,
     }
 
     impl PointInstances {
@@ -261,7 +262,7 @@ mod ldr_tools_py {
             Self {
                 translations: pyarray_vec3(py, instances.translations),
                 rotations_axis: pyarray_vec3(py, instances.rotations_axis),
-                rotations_angle: instances.rotations_angle.into_pyarray_bound(py).into(),
+                rotations_angle: instances.rotations_angle.into_pyarray(py).into(),
                 scales: pyarray_vec3(py, instances.scales),
             }
         }
@@ -323,7 +324,7 @@ mod ldr_tools_py {
                     .into_iter()
                     .flat_map(|v| v.to_cols_array())
                     .collect::<Vec<f32>>()
-                    .into_pyarray_bound(py)
+                    .into_pyarray(py)
                     .reshape((transform_count, 4, 4))
                     .unwrap()
                     .into();
@@ -387,7 +388,7 @@ mod ldr_tools_py {
     }
 }
 
-fn pyarray_vec3(py: Python, values: Vec<ldr_tools::glam::Vec3>) -> PyObject {
+fn pyarray_vec3(py: Python, values: Vec<ldr_tools::glam::Vec3>) -> Py<PyArray2<f32>> {
     // This flatten will be optimized in Release mode.
     // This avoids needing unsafe code.
     let count = values.len();
@@ -395,7 +396,7 @@ fn pyarray_vec3(py: Python, values: Vec<ldr_tools::glam::Vec3>) -> PyObject {
         .into_iter()
         .flat_map(|v| [v.x, v.y, v.z])
         .collect::<Vec<f32>>()
-        .into_pyarray_bound(py)
+        .into_pyarray(py)
         .reshape((count, 3))
         .unwrap()
         .into()
