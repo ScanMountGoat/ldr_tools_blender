@@ -351,9 +351,9 @@ def slope_normals_node_group(graph: ShaderGraph) -> None:
         ShaderNodeTexNoise,
         {
             "Scale": 2.5,
-            "Detail": 3.0,
+            "Detail": 0.0,
             "Roughness": 0.5,
-            # "Lacunarity": 2.0, # already the default
+            "Lacunarity": 2.0,
             "Vector": tex_coord["Object"],
         },
     )
