@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Calculate new vertices and indices by splitting the edges in `edges_to_split`.
 /// The geometry must be triangulated!
@@ -55,8 +55,25 @@ pub fn split_edges<T: Copy>(
         &mut new_adjacent_faces,
     );
 
-    // TODO: Reindex the vertices to reduce unneeded duplicate elements.
-    (split_vertices, split_vertex_indices)
+    // Reindex and keep only unique vertices to remove loose vertices.
+    // TODO: Why are there loose vertices?
+    remove_loose_vertices(&split_vertices, &split_vertex_indices)
+}
+
+fn remove_loose_vertices<T: Copy>(vertices: &[T], vertex_indices: &[u32]) -> (Vec<T>, Vec<u32>) {
+    // Collect unique indices in sorted order.
+    let indices: BTreeSet<u32> = vertex_indices.iter().copied().collect();
+    let old_to_new_index: BTreeMap<u32, u32> = indices
+        .iter()
+        .enumerate()
+        .map(|(i, index)| (*index, i as u32))
+        .collect();
+
+    // Map indices to a consecutive range to remove unused vertices.
+    let new_vertices = indices.iter().map(|i| vertices[*i as usize]).collect();
+    let new_indices = vertex_indices.iter().map(|i| old_to_new_index[i]).collect();
+
+    (new_vertices, new_indices)
 }
 
 fn adjacent_faces<T>(
@@ -320,7 +337,7 @@ mod tests {
 
         let indices = vec![0, 1, 2, 2, 1, 3];
         assert_eq!(
-            (vec![0.0, 1.0, 2.0, 3.0, 2.0], vec![0, 1, 2, 2, 1, 3]),
+            (vec![0.0, 1.0, 2.0, 3.0], vec![0, 1, 2, 2, 1, 3]),
             split_edges(&[0.0, 1.0, 2.0, 3.0], &indices, &[0, 3], &[3, 3], &[[2, 3]])
         );
     }
@@ -328,7 +345,7 @@ mod tests {
     #[test]
     fn split_edges_two_quads() {
         // Two quads of two tris.
-        // The topology shouldn't change.
+        // The topology shouldn't change for splitting boundaries.
         // 2 - 3 - 5
         // | \ | \ |
         // 0 - 1 - 4
@@ -336,7 +353,7 @@ mod tests {
         let indices = vec![0, 1, 2, 2, 1, 3, 3, 1, 4, 3, 4, 5];
         assert_eq!(
             (
-                vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 1.0, 2.0, 3.0, 3.0, 4.0],
+                vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
                 vec![0, 1, 2, 2, 1, 3, 3, 1, 4, 3, 4, 5]
             ),
             split_edges(
@@ -357,15 +374,15 @@ mod tests {
         // 0 - 1 - 5
 
         // The edge 1-3 splits the quads in two.
-        // 2 - 3    8 - 4
+        // 2 - 3    7 - 4
         // | \ |    | \ |
-        // 0 - 1    7 - 5
+        // 0 - 1    6 - 5
 
         let indices = vec![0, 1, 2, 2, 1, 3, 3, 1, 5, 3, 5, 4];
         assert_eq!(
             (
-                vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 1.0, 3.0, 3.0],
-                vec![0, 1, 2, 2, 1, 3, 8, 7, 5, 8, 5, 4]
+                vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 3.0],
+                vec![0, 1, 2, 2, 1, 3, 7, 6, 5, 7, 5, 4]
             ),
             split_edges(
                 &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
@@ -407,20 +424,19 @@ mod tests {
 
     #[test]
     fn split_edges_split_1_8cyli_dat() {
+        // TODO: Is this right?
         // Example taken from p/1-8cyli.dat.
         // 3 - 0 - 4
         // | / | / |
         // 2 - 1 - 5
 
-        // After splitting sharp edges.
-        // 3 - 0 - 4
+        // 4 - 1 - 5
         // | / | / |
-        // 2 - 1 - 5
-
+        // 3 - 2 - 0
         assert_eq!(
             (
-                vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 0.0, 0.0, 1.0, 1.0, 2.0, 4.0],
-                vec![2, 8, 0, 3, 2, 0, 8, 5, 4, 0, 8, 4]
+                vec![0.0, 2.0, 3.0, 4.0, 5.0, 1.0],
+                vec![1, 5, 0, 2, 1, 0, 5, 4, 3, 0, 5, 3]
             ),
             split_edges(
                 &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0],

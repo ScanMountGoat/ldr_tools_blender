@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## unreleased
+### Fixed
+* Fixed an issue where splitting edge lines would produce loose vertices in some cases.
+
 ## 0.4.5 - 2024-11-11
 ### Changed
 * Improved compatibility with older Linux distributions for compiled releases.
