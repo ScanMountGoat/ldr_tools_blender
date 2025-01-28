@@ -368,12 +368,6 @@ def create_mesh_from_geometry(name: str, geometry: LDrawGeometry) -> Mesh:
     mesh.polygons.foreach_set("loop_start", geometry.face_start_indices)
     mesh.polygons.foreach_set("loop_total", geometry.face_sizes)
 
-    # TODO: Enable autosmooth to handle some cases where edges aren't split.
-    # TODO: Just do this in ldr_tools and set custom normals?
-    # mesh.use_auto_smooth = True
-    # mesh.auto_smooth_angle = math.radians(89.0)
-    mesh.polygons.foreach_set("use_smooth", [True] * len(mesh.polygons))
-
     # Add attributes needed to render grainy slopes properly.
     if geometry.has_grainy_slopes:
         is_stud = float_attr(mesh, "ldr_is_stud", "FACE")

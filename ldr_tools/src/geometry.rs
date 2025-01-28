@@ -126,6 +126,7 @@ pub fn create_geometry(
     let mut vertex_map = VertexMap::new();
     let mut hard_edges = Vec::new();
 
+    // TODO: Cache geometry creation for studs?
     append_geometry(
         &mut geometry,
         &mut hard_edges,
@@ -140,8 +141,7 @@ pub fn create_geometry(
     geometry.edge_line_indices = edge_indices(&hard_edges, &vertex_map);
 
     // TODO: make this optional.
-    // TODO: Should this be disabled when not welding vertices?
-    if !geometry.edge_line_indices.is_empty() {
+    if settings.weld_vertices && !geometry.edge_line_indices.is_empty() {
         let (split_positions, split_indices) = split_edges(
             &geometry.vertices,
             &geometry.vertex_indices,

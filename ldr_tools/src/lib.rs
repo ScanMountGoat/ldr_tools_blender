@@ -25,6 +25,7 @@ const CURRENT_COLOR: ColorCode = 16;
 mod color;
 mod edge_split;
 mod geometry;
+mod normal;
 mod pe_tex_info;
 mod slope;
 

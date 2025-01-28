@@ -1,21 +1,43 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use glam::Vec3;
+
+use crate::normal::face_normals;
+
 /// Calculate new vertices and indices by splitting the edges in `edges_to_split`.
 /// The geometry must be triangulated!
 ///
 /// This works similarly to Blender's "edge split" for calculating normals.
+///
+/// The current implementation hardcodes a normal angle threshold of 89 degrees to split sharp edges.
 // https://github.com/blender/blender/blob/a32dbb8/source/blender/geometry/intern/mesh_split_edges.cc
-pub fn split_edges<T: Copy>(
-    vertices: &[T],
+pub fn split_edges(
+    vertices: &[Vec3],
     vertex_indices: &[u32],
     face_starts: &[u32],
     face_sizes: &[u32],
     edges_to_split: &[[u32; 2]],
-) -> (Vec<T>, Vec<u32>) {
-    // TODO: should ldr_tools just store sharp edges?
+) -> (Vec<Vec3>, Vec<u32>) {
+    let old_adjacent_faces = adjacent_faces(vertices, vertex_indices, face_starts, face_sizes);
+
+    let mut edges_to_split = edges_to_split.to_vec();
+
+    // Find sharp edges based on an angle threshold.
+    let normals = face_normals(vertices, vertex_indices, face_starts, face_sizes);
+
+    add_sharp_edges(
+        &mut edges_to_split,
+        vertex_indices,
+        face_starts,
+        face_sizes,
+        &old_adjacent_faces,
+        normals,
+        89f32.to_radians(),
+    );
+
     let mut should_split_vertex = vec![false; vertices.len()];
     let mut undirected_edges = BTreeSet::new();
-    for [v0, v1] in edges_to_split {
+    for [v0, v1] in &edges_to_split {
         // Treat edges as undirected.
         undirected_edges.insert([*v0, *v1]);
         undirected_edges.insert([*v1, *v0]);
@@ -24,8 +46,6 @@ pub fn split_edges<T: Copy>(
         should_split_vertex[*v0 as usize] = true;
         should_split_vertex[*v1 as usize] = true;
     }
-
-    let old_adjacent_faces = adjacent_faces(vertices, vertex_indices, face_starts, face_sizes);
 
     let (split_vertices, mut split_vertex_indices, duplicate_edges) = split_face_verts(
         vertices,
@@ -58,6 +78,34 @@ pub fn split_edges<T: Copy>(
     // Reindex and keep only unique vertices to remove loose vertices.
     // TODO: Why are there loose vertices?
     remove_loose_vertices(&split_vertices, &split_vertex_indices)
+}
+
+fn add_sharp_edges(
+    edges_to_split: &mut Vec<[u32; 2]>,
+    vertex_indices: &[u32],
+    face_starts: &[u32],
+    face_sizes: &[u32],
+    adjacent_faces: &[BTreeSet<usize>],
+    normals: Vec<Vec3>,
+    angle_threshold: f32,
+) {
+    for i in 0..face_starts.len() {
+        let face = face_indices(i, vertex_indices, face_starts, face_sizes);
+        for j in 0..face.len().saturating_sub(1) {
+            let v0 = face[j];
+            let v1 = face[(j + 1) % face.len()];
+            // Assume vertices are fully welded.
+            let v0_faces = &adjacent_faces[v0 as usize];
+            let v1_faces = &adjacent_faces[v1 as usize];
+
+            let mut faces = v0_faces.intersection(v1_faces).copied();
+            if let (Some(f0), Some(f1)) = (faces.next(), faces.next()) {
+                if normals[f0].angle_between(normals[f1]) >= angle_threshold {
+                    edges_to_split.push([v0, v1]);
+                }
+            }
+        }
+    }
 }
 
 fn remove_loose_vertices<T: Copy>(vertices: &[T], vertex_indices: &[u32]) -> (Vec<T>, Vec<u32>) {
@@ -313,7 +361,13 @@ fn find_incident_edges(face: &[u32], vertex_index: usize) -> ([u32; 2], [u32; 2]
 
 #[cfg(test)]
 mod tests {
+    use glam::vec3;
+
     use super::*;
+
+    fn v3(f: f32) -> Vec3 {
+        Vec3::splat(f)
+    }
 
     #[test]
     fn split_edges_triangle_no_sharp_edges() {
@@ -322,8 +376,8 @@ mod tests {
         // 0 - 1
 
         assert_eq!(
-            (vec![0.0, 1.0, 2.0], vec![0, 1, 2]),
-            split_edges(&[0.0, 1.0, 2.0], &[0, 1, 2], &[0], &[3], &[])
+            (vec![v3(0.0), v3(1.0), v3(2.0)], vec![0, 1, 2]),
+            split_edges(&[v3(0.0), v3(1.0), v3(2.0)], &[0, 1, 2], &[0], &[3], &[])
         );
     }
 
@@ -337,8 +391,17 @@ mod tests {
 
         let indices = vec![0, 1, 2, 2, 1, 3];
         assert_eq!(
-            (vec![0.0, 1.0, 2.0, 3.0], vec![0, 1, 2, 2, 1, 3]),
-            split_edges(&[0.0, 1.0, 2.0, 3.0], &indices, &[0, 3], &[3, 3], &[[2, 3]])
+            (
+                vec![v3(0.0), v3(1.0), v3(2.0), v3(3.0)],
+                vec![0, 1, 2, 2, 1, 3]
+            ),
+            split_edges(
+                &[v3(0.0), v3(1.0), v3(2.0), v3(3.0)],
+                &indices,
+                &[0, 3],
+                &[3, 3],
+                &[[2, 3]]
+            )
         );
     }
 
@@ -353,11 +416,11 @@ mod tests {
         let indices = vec![0, 1, 2, 2, 1, 3, 3, 1, 4, 3, 4, 5];
         assert_eq!(
             (
-                vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+                vec![v3(0.0), v3(1.0), v3(2.0), v3(3.0), v3(4.0), v3(5.0)],
                 vec![0, 1, 2, 2, 1, 3, 3, 1, 4, 3, 4, 5]
             ),
             split_edges(
-                &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+                &[v3(0.0), v3(1.0), v3(2.0), v3(3.0), v3(4.0), v3(5.0)],
                 &indices,
                 &[0, 3, 6, 9],
                 &[3, 3, 3, 3],
@@ -381,11 +444,20 @@ mod tests {
         let indices = vec![0, 1, 2, 2, 1, 3, 3, 1, 5, 3, 5, 4];
         assert_eq!(
             (
-                vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 3.0],
+                vec![
+                    v3(0.0),
+                    v3(1.0),
+                    v3(2.0),
+                    v3(3.0),
+                    v3(4.0),
+                    v3(5.0),
+                    v3(1.0),
+                    v3(3.0)
+                ],
                 vec![0, 1, 2, 2, 1, 3, 7, 6, 5, 7, 5, 4]
             ),
             split_edges(
-                &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+                &[v3(0.0), v3(1.0), v3(2.0), v3(3.0), v3(4.0), v3(5.0)],
                 &indices,
                 &[0, 3, 6, 9],
                 &[3, 3, 3, 3],
@@ -409,11 +481,20 @@ mod tests {
         let indices = vec![0, 1, 2, 3, 1, 4, 5, 2];
         assert_eq!(
             (
-                vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 2.0],
+                vec![
+                    v3(0.0),
+                    v3(1.0),
+                    v3(2.0),
+                    v3(3.0),
+                    v3(4.0),
+                    v3(5.0),
+                    v3(1.0),
+                    v3(2.0)
+                ],
                 vec![0, 1, 2, 3, 6, 4, 5, 7]
             ),
             split_edges(
-                &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+                &[v3(0.0), v3(1.0), v3(2.0), v3(3.0), v3(4.0), v3(5.0)],
                 &indices,
                 &[0, 4],
                 &[4, 4],
@@ -435,11 +516,11 @@ mod tests {
         // 3 - 2 - 0
         assert_eq!(
             (
-                vec![0.0, 2.0, 3.0, 4.0, 5.0, 1.0],
+                vec![v3(0.0), v3(2.0), v3(3.0), v3(4.0), v3(5.0), v3(1.0)],
                 vec![1, 5, 0, 2, 1, 0, 5, 4, 3, 0, 5, 3]
             ),
             split_edges(
-                &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+                &[v3(0.0), v3(1.0), v3(2.0), v3(3.0), v3(4.0), v3(5.0)],
                 &[2, 1, 0, 3, 2, 0, 1, 5, 4, 0, 1, 4],
                 &[0, 3, 6, 9],
                 &[3, 3, 3, 3],
@@ -447,4 +528,41 @@ mod tests {
             )
         );
     }
+
+    #[test]
+    fn split_edges_normals_tetrahedron() {
+        // TODO: Make this more mathematically precise
+        // The angle threshold should split all faces.
+        assert_eq!(
+            (
+                vec![
+                    vec3(0.0, -0.707, -1.0),
+                    vec3(0.866025, -0.707, 0.5),
+                    vec3(-0.866025, -0.707, 0.5),
+                    vec3(0.0, 0.707, 0.0),
+                    vec3(0.0, -0.707, -1.0),
+                    vec3(0.866025, -0.707, 0.5),
+                    vec3(0.866025, -0.707, 0.5),
+                    vec3(-0.866025, -0.707, 0.5),
+                    vec3(0.0, 0.707, 0.0),
+                    vec3(0.0, 0.707, 0.0)
+                ],
+                vec![0, 3, 1, 4, 5, 2, 6, 8, 7, 2, 9, 4]
+            ),
+            split_edges(
+                &[
+                    vec3(0.000000, -0.707000, -1.000000),
+                    vec3(0.866025, -0.707000, 0.500000),
+                    vec3(-0.866025, -0.707000, 0.500000),
+                    vec3(0.000000, 0.707000, 0.000000),
+                ],
+                &[0, 3, 1, 0, 1, 2, 1, 3, 2, 2, 3, 0],
+                &[0, 3, 6, 9],
+                &[3, 3, 3, 3],
+                &[]
+            )
+        );
+    }
+
+    // TODO: test normal threshold and hard edges together.
 }
