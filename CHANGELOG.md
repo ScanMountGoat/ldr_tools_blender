@@ -3,7 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## unreleased
+## 0.4.6 - 2025-01-28
+### Changed
+* Adjusted procedural normals for grainy slope materials.
+
 ### Fixed
 * Fixed an issue where splitting edge lines would produce loose vertices in some cases.
 * Fixed an issue where some parts would have incorrectly smoothed edges in some cases.
