@@ -7,15 +7,15 @@ use std::{
 
 use geometry::create_geometry;
 use glam::{vec4, Mat4, Vec3};
+use ldraw::{Command, FileRefResolver, ResolveError};
 use rayon::prelude::*;
-use weldr::{Command, FileRefResolver, ResolveError};
 use zip::ZipArchive;
 
 pub use color::{load_color_table, LDrawColor};
 pub use geometry::LDrawGeometry;
 pub use glam;
+pub use ldraw::Color;
 pub use pe_tex_info::LDrawTextureInfo;
-pub use weldr::Color;
 
 pub type ColorCode = u32;
 
@@ -25,6 +25,7 @@ const CURRENT_COLOR: ColorCode = 16;
 mod color;
 mod edge_split;
 mod geometry;
+pub mod ldraw;
 mod normal;
 mod pe_tex_info;
 mod slope;
@@ -235,7 +236,7 @@ fn replace_color(color: ColorCode, current_color: ColorCode) -> ColorCode {
 
 #[derive(Debug)]
 struct GeometryInitDescriptor<'a> {
-    source_file: &'a weldr::SourceFile,
+    source_file: &'a ldraw::SourceFile,
     current_color: ColorCode,
     recursive: bool,
 }
@@ -277,7 +278,7 @@ fn parse_file(
     ldraw_path: &str,
     additional_paths: &[String],
     settings: &GeometrySettings,
-) -> (weldr::SourceMap, String) {
+) -> (ldraw::SourceMap, String) {
     let mut resolver = DiskResolver::new_from_library(
         ldraw_path,
         additional_paths.iter().map(|s| s.as_str()),
@@ -288,16 +289,16 @@ fn parse_file(
         resolver.base_paths.insert(0, parent.to_owned());
     }
 
-    let mut source_map = weldr::SourceMap::new();
+    let mut source_map = ldraw::SourceMap::new();
     ensure_studs(settings, &resolver, &mut source_map);
 
     let is_io = Path::new(path).extension() == Some("io".as_ref());
 
     let main_model_name = if is_io {
         let io_resolver = IoFileResolver::new(path.to_owned(), resolver).unwrap();
-        weldr::parse(path, &io_resolver, &mut source_map).unwrap()
+        ldraw::parse(path, &io_resolver, &mut source_map).unwrap()
     } else {
-        weldr::parse(path, &resolver, &mut source_map).unwrap()
+        ldraw::parse(path, &resolver, &mut source_map).unwrap()
     };
 
     (source_map, main_model_name)
@@ -306,21 +307,21 @@ fn parse_file(
 fn ensure_studs(
     settings: &GeometrySettings,
     resolver: &DiskResolver,
-    source_map: &mut weldr::SourceMap,
+    source_map: &mut ldraw::SourceMap,
 ) {
     // The replaced studs likely won't be referenced by existing files.
     // Make sure the selected stud type is in the source map.
     if settings.stud_type == StudType::Logo4 {
-        weldr::parse("stud-logo4.dat", resolver, source_map).unwrap();
-        weldr::parse("stud2-logo4.dat", resolver, source_map).unwrap();
+        ldraw::parse("stud-logo4.dat", resolver, source_map).unwrap();
+        ldraw::parse("stud2-logo4.dat", resolver, source_map).unwrap();
     }
 }
 
 fn load_node<'a>(
-    source_file: &'a weldr::SourceFile,
+    source_file: &'a ldraw::SourceFile,
     filename: &str,
     transform: &Mat4,
-    source_map: &'a weldr::SourceMap,
+    source_map: &'a ldraw::SourceMap,
     geometry_descriptors: &mut HashMap<String, GeometryInitDescriptor<'a>>,
     current_color: ColorCode,
     settings: &GeometrySettings,
@@ -392,7 +393,7 @@ fn load_node<'a>(
 #[tracing::instrument]
 fn create_geometry_cache(
     geometry_descriptors: HashMap<String, GeometryInitDescriptor>,
-    source_map: &weldr::SourceMap,
+    source_map: &ldraw::SourceMap,
     settings: &GeometrySettings,
 ) -> HashMap<String, LDrawGeometry> {
     // Create the actual geometry in parallel to improve performance.
@@ -522,10 +523,10 @@ pub fn load_file_instanced(
 
 // TODO: Share code with the non instanced function?
 fn load_node_instanced<'a>(
-    source_file: &'a weldr::SourceFile,
+    source_file: &'a ldraw::SourceFile,
     filename: &str,
     world_transform: &Mat4,
-    source_map: &'a weldr::SourceMap,
+    source_map: &'a ldraw::SourceMap,
     geometry_descriptors: &mut HashMap<String, GeometryInitDescriptor<'a>>,
     geometry_world_transforms: &mut HashMap<(String, ColorCode), Vec<Mat4>>,
     current_color: ColorCode,
@@ -596,12 +597,12 @@ fn load_node_instanced<'a>(
     }
 }
 
-fn is_part(_source_file: &weldr::SourceFile, filename: &str) -> bool {
+fn is_part(_source_file: &ldraw::SourceFile, filename: &str) -> bool {
     // TODO: Check the part type rather than the extension.
     filename.to_lowercase().ends_with(".dat")
 }
 
-fn has_geometry(source_file: &weldr::SourceFile) -> bool {
+fn has_geometry(source_file: &ldraw::SourceFile) -> bool {
     // Some files have subfile ref commands but also define parts inline.
     // This includes tube segments on the Volkswagen Beetle.mpd
     source_file

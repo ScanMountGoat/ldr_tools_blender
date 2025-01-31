@@ -1,6 +1,6 @@
+use crate::ldraw::Command;
 use glam::{Mat4, Vec2, Vec3};
 use rstar::{primitives::GeomWithData, RTree};
-use weldr::Command;
 
 use crate::{
     edge_split::split_edges,
@@ -93,8 +93,8 @@ impl VertexMap {
 
 #[tracing::instrument]
 pub fn create_geometry(
-    source_file: &weldr::SourceFile,
-    source_map: &weldr::SourceMap,
+    source_file: &crate::ldraw::SourceFile,
+    source_map: &crate::ldraw::SourceMap,
     name: &str,
     current_color: ColorCode,
     recursive: bool,
@@ -240,8 +240,8 @@ fn append_geometry(
     geometry: &mut LDrawGeometry,
     hard_edges: &mut Vec<[Vec3; 2]>,
     vertex_map: &mut VertexMap,
-    source_file: &weldr::SourceFile,
-    source_map: &weldr::SourceMap,
+    source_file: &crate::ldraw::SourceFile,
+    source_map: &crate::ldraw::SourceMap,
     mut ctx: GeometryContext,
     recursive: bool,
     settings: &GeometrySettings,
@@ -278,7 +278,7 @@ fn append_geometry(
     for cmd in &source_file.cmds {
         match cmd {
             Command::Comment(c) => {
-                // TODO: Add proper parsing to weldr.
+                // TODO: Add proper parsing.
                 if c.text.starts_with("PE_TEX_PATH ") {
                     if let Some(path) = parse_tex_path(&c.text) {
                         current_tex_path = path;
@@ -439,7 +439,7 @@ fn append_geometry(
     }
 }
 
-fn replace_studs(subfile_cmd: &weldr::SubFileRefCmd, stud_type: StudType) -> &str {
+fn replace_studs(subfile_cmd: &crate::ldraw::SubFileRefCmd, stud_type: StudType) -> &str {
     // https://wiki.ldraw.org/wiki/Studs_with_Logos
     match stud_type {
         StudType::Disabled => {
@@ -577,16 +577,16 @@ mod tests {
         }
     }
 
-    impl weldr::FileRefResolver for DummyResolver {
+    impl crate::ldraw::FileRefResolver for DummyResolver {
         fn resolve<P: AsRef<std::path::Path>>(
             &self,
             filename: P,
-        ) -> Result<Vec<u8>, weldr::ResolveError> {
+        ) -> Result<Vec<u8>, crate::ldraw::ResolveError> {
             let filename = filename.as_ref().to_str().unwrap();
             self.files
                 .get(filename)
                 .cloned()
-                .ok_or(weldr::ResolveError {
+                .ok_or(crate::ldraw::ResolveError {
                     filename: filename.to_owned(),
                     resolve_error: None,
                 })
@@ -595,7 +595,7 @@ mod tests {
 
     #[test]
     fn create_geometry_mpd() {
-        let mut source_map = weldr::SourceMap::new();
+        let mut source_map = crate::ldraw::SourceMap::new();
 
         // Create a basic MPD file to test transforms and color resolution.
         // TODO: Test recursive and non recursive parsing.
@@ -623,7 +623,7 @@ mod tests {
         let mut resolver = DummyResolver::new();
         resolver.files.insert("root", document.as_bytes().to_vec());
 
-        let main_model_name = weldr::parse("root", &resolver, &mut source_map).unwrap();
+        let main_model_name = crate::ldraw::parse("root", &resolver, &mut source_map).unwrap();
         let source_file = source_map.get(&main_model_name).unwrap();
 
         let geometry = create_geometry(
@@ -651,7 +651,7 @@ mod tests {
 
     #[test]
     fn create_geometry_ccw() {
-        let mut source_map = weldr::SourceMap::new();
+        let mut source_map = crate::ldraw::SourceMap::new();
 
         let document = indoc! {"
             0 BFC CERTIFY CCW
@@ -662,7 +662,7 @@ mod tests {
         let mut resolver = DummyResolver::new();
         resolver.files.insert("root", document.as_bytes().to_vec());
 
-        let main_model_name = weldr::parse("root", &resolver, &mut source_map).unwrap();
+        let main_model_name = crate::ldraw::parse("root", &resolver, &mut source_map).unwrap();
         let source_file = source_map.get(&main_model_name).unwrap();
 
         let geometry = create_geometry(
@@ -683,7 +683,7 @@ mod tests {
 
     #[test]
     fn create_geometry_cw() {
-        let mut source_map = weldr::SourceMap::new();
+        let mut source_map = crate::ldraw::SourceMap::new();
 
         let document = indoc! {"
             0 BFC CERTIFY CW
@@ -694,7 +694,7 @@ mod tests {
         let mut resolver = DummyResolver::new();
         resolver.files.insert("root", document.as_bytes().to_vec());
 
-        let main_model_name = weldr::parse("root", &resolver, &mut source_map).unwrap();
+        let main_model_name = crate::ldraw::parse("root", &resolver, &mut source_map).unwrap();
         let source_file = source_map.get(&main_model_name).unwrap();
 
         let geometry = create_geometry(
@@ -715,7 +715,7 @@ mod tests {
 
     #[test]
     fn create_geometry_invert_next_determinant() {
-        let mut source_map = weldr::SourceMap::new();
+        let mut source_map = crate::ldraw::SourceMap::new();
 
         // Check handling of the accumulated matrix determinant.
         // The INVERTNEXT command should flip the entire subfile reference.
@@ -737,7 +737,7 @@ mod tests {
         let mut resolver = DummyResolver::new();
         resolver.files.insert("root", document.as_bytes().to_vec());
 
-        let main_model_name = weldr::parse("root", &resolver, &mut source_map).unwrap();
+        let main_model_name = crate::ldraw::parse("root", &resolver, &mut source_map).unwrap();
         let source_file = source_map.get(&main_model_name).unwrap();
 
         let geometry = create_geometry(

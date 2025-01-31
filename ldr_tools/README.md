@@ -1,0 +1,2 @@
+# ldr_tools
+A library for reading and converting LDraw files into usable geometry. The LDraw representation and parser is based on work done for the implementation in [weldr](https://github.com/djeedai/weldr).
