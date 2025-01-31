@@ -226,15 +226,6 @@ fn edge_indices(edges: &[[Vec3; 2]], vertex_map: &VertexMap) -> Vec<[u32; 2]> {
     edge_indices
 }
 
-fn parse_tex_path(line: &str) -> Option<Vec<i32>> {
-    let body = line.strip_prefix("PE_TEX_PATH ")?;
-    let mut path = vec![];
-    for word in body.split_whitespace() {
-        path.push(word.parse().ok()?);
-    }
-    Some(path)
-}
-
 // TODO: simplify the parameters on these functions.
 fn append_geometry(
     geometry: &mut LDrawGeometry,
@@ -261,7 +252,7 @@ fn append_geometry(
     let mut invert_next = false;
 
     let mut tex_path_index = 0;
-    let mut current_tex_path = vec![];
+    let mut current_tex_path: &[i32] = &[];
 
     let (mut active_textures, pending_textures) = ctx
         .studio_textures
@@ -277,37 +268,35 @@ fn append_geometry(
 
     for cmd in &source_file.cmds {
         match cmd {
+            Command::PeTexPath(pe_tex_path) => {
+                current_tex_path = &pe_tex_path.paths;
+            }
+            Command::PeTexInfo(pe_tex_info) => {
+                if let Some(mut tex_info) =
+                    PendingStudioTexture::from_cmd(pe_tex_info, current_tex_path, geometry)
+                {
+                    if tex_info.path == [-1] {
+                        tex_info.path.clear()
+                    }
+
+                    if tex_info.path.is_empty() {
+                        if active_textures.len() > 1 {
+                            println!("warning: multiple active textures. ignoring all but one");
+                        }
+                        active_textures.push(tex_info);
+                    } else {
+                        ctx.studio_textures.push(tex_info);
+                    }
+                }
+            }
             Command::Comment(c) => {
                 // TODO: Add proper parsing.
-                if c.text.starts_with("PE_TEX_PATH ") {
-                    if let Some(path) = parse_tex_path(&c.text) {
-                        current_tex_path = path;
-                    }
-                } else if c.text.starts_with("PE_TEX_INFO ") {
-                    if let Some(mut tex_info) =
-                        PendingStudioTexture::parse(&c.text, &current_tex_path, geometry)
-                    {
-                        if tex_info.path == [-1] {
-                            tex_info.path.clear()
-                        }
-
-                        if tex_info.path.is_empty() {
-                            if active_textures.len() > 1 {
-                                println!("warning: multiple active textures. ignoring all but one");
-                            }
-                            active_textures.push(tex_info);
-                        } else {
-                            ctx.studio_textures.push(tex_info);
-                        }
-                    }
-                } else {
-                    for word in c.text.split_whitespace() {
-                        match word {
-                            "CCW" => current_winding = Winding::Ccw,
-                            "CW" => current_winding = Winding::Cw,
-                            "INVERTNEXT" => invert_next = true,
-                            _ => (),
-                        }
+                for word in c.text.split_whitespace() {
+                    match word {
+                        "CCW" => current_winding = Winding::Ccw,
+                        "CW" => current_winding = Winding::Cw,
+                        "INVERTNEXT" => invert_next = true,
+                        _ => (),
                     }
                 }
             }
@@ -411,7 +400,7 @@ fn append_geometry(
                 // It should not be included in the child's context.
                 let child_ctx = GeometryContext {
                     current_color,
-                    transform: ctx.transform * subfile_cmd.matrix(),
+                    transform: ctx.transform * subfile_cmd.transform.to_matrix(),
                     inverted: if invert_next {
                         !ctx.inverted
                     } else {

@@ -1,22 +1,24 @@
-use base64::Engine;
+use base64::{prelude::BASE64_STANDARD, Engine};
 use glam::{Vec2, Vec3};
 use nom::{
     branch::alt,
-    bytes::complete::{tag, tag_no_case, take_while, take_while1, take_while_m_n},
-    character::complete::{digit1, line_ending as eol},
+    bytes::complete::{tag, tag_no_case, take_while1, take_while_m_n},
+    character::complete::digit1,
     combinator::{complete, map, map_res, opt},
     error::ErrorKind,
     multi::{many0, separated_list1},
     number::complete::float,
-    sequence::terminated,
     AsChar, IResult, Input, Parser,
 };
 use std::str;
 
+use crate::ldraw::PeTexInfoTransform;
+
 use super::{
     error::ParseError, Base64DataCmd, CategoryCmd, Color, ColorFinish, ColourCmd, Command,
     CommentCmd, DataCmd, Error, FileCmd, GlitterMaterial, GrainSize, KeywordsCmd, LineCmd,
-    MaterialFinish, OptLineCmd, QuadCmd, SpeckleMaterial, SubFileRefCmd, TriangleCmd,
+    MaterialFinish, OptLineCmd, PeTexInfoCmd, PeTexPathCmd, QuadCmd, SpeckleMaterial,
+    SubFileRefCmd, Transform, TriangleCmd,
 };
 
 // LDraw File Format Specification
@@ -38,22 +40,6 @@ fn nom_error(i: &[u8], kind: ErrorKind) -> nom::Err<nom::error::Error<&[u8]>> {
 // "Whitespace is defined as one or more spaces (#32), tabs (#9), or combination thereof."
 fn is_space(chr: u8) -> bool {
     chr == b'\t' || chr == b' '
-}
-
-fn take_spaces(i: &[u8]) -> IResult<&[u8], &[u8]> {
-    take_while(is_space)(i)
-}
-
-// "All lines in the file must use the standard DOS/Windows line termination of <CR><LF>
-// (carriage return/line feed). The file is permitted (but not required) to end with a <CR><LF>.
-// It is recommended that all LDraw-compliant programs also be capable of reading files with the
-// standard Unix line termination of <LF> (line feed)."
-fn end_of_line(i: &[u8]) -> IResult<&[u8], &[u8]> {
-    if i.is_empty() {
-        Ok((i, i))
-    } else {
-        eol(i)
-    }
 }
 
 // Detect a *potential* end of line <CR><LF> or <LF> by testing for either of <CR>
@@ -118,7 +104,7 @@ fn keywords_list(i: &[u8]) -> IResult<&[u8], Vec<&str>> {
 }
 
 fn keywords(i: &[u8]) -> IResult<&[u8], Command> {
-    let (i, (_, _, keywords)) = ((tag(&b"!KEYWORDS"[..]), sp, keywords_list)).parse(i)?;
+    let (i, (_, _, keywords)) = (tag(&b"!KEYWORDS"[..]), sp, keywords_list).parse(i)?;
     Ok((
         i,
         Command::Keywords(KeywordsCmd {
@@ -147,12 +133,16 @@ fn hex_primary(i: &[u8]) -> IResult<&[u8], u8> {
 
 fn hex_color(i: &[u8]) -> IResult<&[u8], Color> {
     let (i, _) = tag(&b"#"[..]).parse(i)?;
-    let (i, (red, green, blue)) = ((hex_primary, hex_primary, hex_primary)).parse(i)?;
+    let (i, (red, green, blue)) = (hex_primary, hex_primary, hex_primary).parse(i)?;
     Ok((i, Color { red, green, blue }))
 }
 
 fn digit1_as_u8(i: &[u8]) -> IResult<&[u8], u8> {
     map_res(map_res(digit1, str::from_utf8), str::parse::<u8>).parse(i)
+}
+
+fn digit1_as_i32(i: &[u8]) -> IResult<&[u8], i32> {
+    map_res(map_res(digit1, str::from_utf8), str::parse::<i32>).parse(i)
 }
 
 // ALPHA part of !COLOUR
@@ -183,14 +173,14 @@ fn material_grain_size(i: &[u8]) -> IResult<&[u8], GrainSize> {
 
 fn grain_size(i: &[u8]) -> IResult<&[u8], GrainSize> {
     // TODO: Create tagged float helper?
-    let (i, (_, _, size)) = ((tag(&b"SIZE"[..]), sp, float)).parse(i)?;
+    let (i, (_, _, size)) = (tag(&b"SIZE"[..]), sp, float).parse(i)?;
     Ok((i, GrainSize::Size(size)))
 }
 
 fn grain_min_max_size(i: &[u8]) -> IResult<&[u8], GrainSize> {
-    let (i, (_, _, min_size)) = ((tag(&b"MINSIZE"[..]), sp, float)).parse(i)?;
+    let (i, (_, _, min_size)) = (tag(&b"MINSIZE"[..]), sp, float).parse(i)?;
     let (i, _) = sp(i)?;
-    let (i, (_, _, max_size)) = ((tag(&b"MAXSIZE"[..]), sp, float)).parse(i)?;
+    let (i, (_, _, max_size)) = (tag(&b"MAXSIZE"[..]), sp, float).parse(i)?;
     Ok((i, GrainSize::MinMaxSize((min_size, max_size))))
 }
 
@@ -357,14 +347,15 @@ fn meta_data(i: &[u8]) -> IResult<&[u8], Command> {
     ))
 }
 
+fn read_base64(i: &[u8]) -> IResult<&[u8], Vec<u8>> {
+    // Use standard decoding since data may not be padded.
+    map_res(take_not_cr_or_lf, |b| BASE64_STANDARD.decode(b)).parse(i)
+}
+
 fn meta_base_64_data(i: &[u8]) -> IResult<&[u8], Command> {
-    // TODO: Validate base64 characters?
     let (i, _) = tag(&b"!:"[..])(i)?;
     let (i, _) = sp(i)?;
-    let (i, data) = map_res(take_not_cr_or_lf, |b| {
-        base64::engine::general_purpose::STANDARD_NO_PAD.decode(b)
-    })
-    .parse(i)?;
+    let (i, data) = read_base64(i)?;
 
     Ok((i, Command::Base64Data(Base64DataCmd { data })))
 }
@@ -383,18 +374,20 @@ fn meta_cmd(i: &[u8]) -> IResult<&[u8], Command> {
         complete(meta_nofile),
         complete(meta_data),
         complete(meta_base_64_data),
+        complete(pe_tex_path),
+        complete(pe_tex_info),
         comment,
     ))
     .parse(i)
 }
 
 fn read_vec2(i: &[u8]) -> IResult<&[u8], Vec2> {
-    let (i, (x, _, y)) = ((float, sp, float)).parse(i)?;
+    let (i, (x, _, y)) = (float, sp, float).parse(i)?;
     Ok((i, Vec2 { x, y }))
 }
 
 fn read_vec3(i: &[u8]) -> IResult<&[u8], Vec3> {
-    let (i, (x, _, y, _, z)) = ((float, sp, float, sp, float)).parse(i)?;
+    let (i, (x, _, y, _, z)) = (float, sp, float, sp, float).parse(i)?;
     Ok((i, Vec3 { x, y, z }))
 }
 
@@ -410,13 +403,7 @@ fn filename(i: &[u8]) -> IResult<&[u8], &str> {
 fn file_ref_cmd(i: &[u8]) -> IResult<&[u8], Command> {
     let (i, color) = color_id(i)?;
     let (i, _) = sp(i)?;
-    let (i, pos) = read_vec3(i)?;
-    let (i, _) = sp(i)?;
-    let (i, row0) = read_vec3(i)?;
-    let (i, _) = sp(i)?;
-    let (i, row1) = read_vec3(i)?;
-    let (i, _) = sp(i)?;
-    let (i, row2) = read_vec3(i)?;
+    let (i, transform) = transform(i)?;
     let (i, _) = sp(i)?;
     let (i, file) = filename(i)?;
 
@@ -424,12 +411,29 @@ fn file_ref_cmd(i: &[u8]) -> IResult<&[u8], Command> {
         i,
         Command::SubFileRef(SubFileRefCmd {
             color,
+            transform,
+            file: file.into(),
+        }),
+    ))
+}
+
+fn transform(i: &[u8]) -> IResult<&[u8], Transform> {
+    let (i, pos) = read_vec3(i)?;
+    let (i, _) = sp(i)?;
+    let (i, row0) = read_vec3(i)?;
+    let (i, _) = sp(i)?;
+    let (i, row1) = read_vec3(i)?;
+    let (i, _) = sp(i)?;
+    let (i, row2) = read_vec3(i)?;
+
+    Ok((
+        i,
+        Transform {
             pos,
             row0,
             row1,
             row2,
-            file: file.into(),
-        }),
+        },
     ))
 }
 
@@ -538,6 +542,43 @@ fn opt_line_cmd(i: &[u8]) -> IResult<&[u8], Command> {
     ))
 }
 
+fn pe_tex_path(i: &[u8]) -> IResult<&[u8], Command> {
+    let (i, _) = tag_no_case(&b"PE_TEX_PATH"[..])(i)?;
+    let (i, _) = sp(i)?;
+    let (i, paths) = separated_list1(sp, digit1_as_i32).parse(i)?;
+
+    Ok((i, Command::PeTexPath(PeTexPathCmd { paths })))
+}
+
+fn pe_tex_info(i: &[u8]) -> IResult<&[u8], Command> {
+    let (i, _) = tag_no_case(&b"PE_TEX_INFO"[..])(i)?;
+    let (i, _) = sp(i)?;
+
+    let (i, transform) = opt(complete(|i| {
+        let (i, transform) = transform(i)?;
+        let (i, _) = sp(i)?;
+
+        let (i, point_min) = read_vec2(i)?;
+        let (i, _) = sp(i)?;
+        let (i, point_max) = read_vec2(i)?;
+        let (i, _) = sp(i)?;
+
+        Ok((
+            i,
+            PeTexInfoTransform {
+                transform,
+                point_min,
+                point_max,
+            },
+        ))
+    }))
+    .parse(i)?;
+
+    let (i, data) = read_base64(i)?;
+
+    Ok((i, Command::PeTexInfo(PeTexInfoCmd { transform, data })))
+}
+
 // Zero or more "spaces", as defined in LDraw standard.
 // Valid even on empty input.
 fn space0(i: &[u8]) -> IResult<&[u8], &[u8]> {
@@ -554,13 +595,6 @@ fn sp(i: &[u8]) -> IResult<&[u8], &[u8]> {
 // Valid even on empty input.
 fn space_or_eol0(i: &[u8]) -> IResult<&[u8], &[u8]> {
     i.split_at_position_complete(|item| !is_space(item) && !is_cr_or_lf(item))
-}
-
-// An empty line made of optional spaces, and ending with an end-of-line sequence
-// (either <CR><LF> or <LF> alone) or the end of input.
-// Valid even on empty input.
-fn empty_line(i: &[u8]) -> IResult<&[u8], &[u8]> {
-    terminated(space0, end_of_line).parse(i)
 }
 
 // "There is no line length restriction. Each command consists of optional leading
@@ -589,9 +623,10 @@ fn read_line(i: &[u8]) -> IResult<&[u8], Command> {
 
 #[cfg(test)]
 mod tests {
-    use nom::error::ErrorKind;
-
     use super::*;
+
+    use glam::{vec2, vec3};
+    use nom::error::ErrorKind;
 
     #[test]
     fn test_color_id() {
@@ -1105,13 +1140,6 @@ mod tests {
     }
 
     #[test]
-    fn test_end_of_line() {
-        assert_eq!(end_of_line(b""), Ok((&b""[..], &b""[..])));
-        assert_eq!(end_of_line(b"\n"), Ok((&b""[..], &b"\n"[..])));
-        assert_eq!(end_of_line(b"\r\n"), Ok((&b""[..], &b"\r\n"[..])));
-    }
-
-    #[test]
     fn test_take_not_cr_or_lf() {
         assert_eq!(take_not_cr_or_lf(b""), Ok((&b""[..], &b""[..])));
         assert_eq!(take_not_cr_or_lf(b"\n"), Ok((&b"\n"[..], &b""[..])));
@@ -1210,10 +1238,12 @@ mod tests {
     fn test_file_ref_cmd() {
         let res = Command::SubFileRef(SubFileRefCmd {
             color: 16,
-            pos: Vec3::new(0.0, 0.0, 0.0),
-            row0: Vec3::new(1.0, 0.0, 0.0),
-            row1: Vec3::new(0.0, 1.0, 0.0),
-            row2: Vec3::new(0.0, 0.0, 1.0),
+            transform: Transform {
+                pos: Vec3::new(0.0, 0.0, 0.0),
+                row0: Vec3::new(1.0, 0.0, 0.0),
+                row1: Vec3::new(0.0, 1.0, 0.0),
+                row2: Vec3::new(0.0, 0.0, 1.0),
+            },
             file: "aaaaaaddd".to_string(),
         });
         assert_eq!(
@@ -1260,21 +1290,6 @@ mod tests {
         assert_eq!(
             space_or_eol0(b"  \n  \r\nsa"),
             Ok((&b"sa"[..], &b"  \n  \r\n"[..]))
-        );
-    }
-
-    #[test]
-    fn test_empty_line() {
-        assert_eq!(empty_line(b""), Ok((&b""[..], &b""[..])));
-        assert_eq!(empty_line(b" "), Ok((&b""[..], &b" "[..])));
-        assert_eq!(empty_line(b"   "), Ok((&b""[..], &b"   "[..])));
-        assert_eq!(
-            empty_line(b"  a"),
-            Err(nom_error(&b"a"[..], ErrorKind::CrLf))
-        );
-        assert_eq!(
-            empty_line(b"a  "),
-            Err(nom_error(&b"a  "[..], ErrorKind::CrLf))
         );
     }
 
@@ -1406,10 +1421,12 @@ mod tests {
     fn test_read_line_subfileref() {
         let res = Command::SubFileRef(SubFileRefCmd {
             color: 16,
-            pos: Vec3::new(0.0, 0.0, 0.0),
-            row0: Vec3::new(1.0, 0.0, 0.0),
-            row1: Vec3::new(0.0, 1.0, 0.0),
-            row2: Vec3::new(0.0, 0.0, 1.0),
+            transform: Transform {
+                pos: Vec3::new(0.0, 0.0, 0.0),
+                row0: Vec3::new(1.0, 0.0, 0.0),
+                row1: Vec3::new(0.0, 1.0, 0.0),
+                row2: Vec3::new(0.0, 0.0, 1.0),
+            },
             file: "aa/aaaaddd".to_string(),
         });
         assert_eq!(
@@ -1446,5 +1463,38 @@ mod tests {
     fn test_nofile_cmd() {
         let res = Command::NoFile;
         assert_eq!(meta_cmd(b"NOFILE"), Ok((&b""[..], res)));
+    }
+
+    #[test]
+    fn test_pe_tex_path_cmd() {
+        let res = Command::PeTexPath(PeTexPathCmd { paths: vec![0, 1] });
+        assert_eq!(meta_cmd(b"PE_TEX_PATH 0 1"), Ok((&b""[..], res)));
+    }
+
+    #[test]
+    fn test_pe_tex_info_cmd() {
+        let res = Command::PeTexInfo(PeTexInfoCmd {
+            transform: Some(PeTexInfoTransform {
+                transform: Transform {
+                    pos: vec3(0.0, 0.8938, -0.25),
+                    row0: vec3(-1.3367, 0.0, 0.0),
+                    row1: vec3(0.0, -0.275, 0.0),
+                    row2: vec3(0.0, 0.0, -1.505),
+                },
+                point_min: vec2(-60.0001, 50.0001),
+                point_max: vec2(60.0001, -30.0001),
+            }),
+            data: b"abc".to_vec(),
+        });
+        assert_eq!(meta_cmd(b"PE_TEX_INFO 0.0000 0.8938 -0.2500 -1.3367 0.0000 0.0000 0.0000 -0.2750 0.0000 0.0000 0.0000 -1.5050 -60.0001 50.0001 60.0001 -30.0001 YWJj"), Ok((&b""[..], res)));
+    }
+
+    #[test]
+    fn test_pe_tex_info_cmd_no_matrix() {
+        let res = Command::PeTexInfo(PeTexInfoCmd {
+            transform: None,
+            data: b"abc".to_vec(),
+        });
+        assert_eq!(meta_cmd(b"PE_TEX_INFO YWJj"), Ok((&b""[..], res)));
     }
 }

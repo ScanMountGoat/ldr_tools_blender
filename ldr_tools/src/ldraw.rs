@@ -1,5 +1,6 @@
-// The LDraw representation and parser is based on work
-// done for the implementation in [weldr](https://github.com/djeedai/weldr).
+//! LDraw file format and parser.
+
+// The LDraw representation and parser are based on work done for [weldr](https://github.com/djeedai/weldr).
 use std::{collections::HashMap, path::Path, str};
 
 pub use glam::{Mat4, Vec2, Vec3, Vec4};
@@ -10,9 +11,6 @@ mod parse;
 
 pub use error::{Error, ResolveError};
 use log::{debug, trace};
-
-// Special color code that "inherits" the existing color.
-const CURRENT_COLOR: u32 = 16;
 
 /// RGB color in sRGB color space.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,11 +30,11 @@ impl Color {
 /// Parse raw LDR content without sub-file resolution.
 ///
 /// Parse the given LDR data passed in `ldr_content` and return the list of parsed commands.
-/// Sub-file references (Line Type 1) are not resolved, and returned as [`SubFileRef::UnresolvedRef`].
+/// Sub-file references (Line Type 1) are not resolved, and returned as [`Command::SubFileRef`].
 ///
 /// The input LDR content must comply to the LDraw standard. In particular this means:
 /// - UTF-8 encoded, without Byte Order Mark (BOM)
-/// - Both DOS/Windows <CR><LF> and Unix <LF> line termination accepted
+/// - Both DOS/Windows `<CR><LF>` and Unix `<LF>` line termination accepted
 ///
 /// ```rust
 /// use ldr_tools::ldraw::{parse_raw, Command, CommentCmd, LineCmd, Vec3};
@@ -58,79 +56,6 @@ pub fn parse_raw(ldr_content: &[u8]) -> Result<Vec<Command>, Error> {
 struct FileRef {
     /// Filename of unresolved source file.
     filename: String,
-}
-
-/// Drawing context used when iterating over all drawing commands of a file via [`SourceFile::iter()`].
-#[derive(Debug, Copy, Clone)]
-pub struct DrawContext {
-    /// Current transformation matrix for the drawing command. This is the accumulated transformation
-    /// of all parent files.
-    ///
-    /// When drawing a primitive (line, triangle, quad), the actual position of vertices is obtained
-    /// by transforming the local-space positions of the drawing command by this transformation matrix.
-    ///
-    /// ```rustc,ignore
-    /// let v0 = draw_ctx.transform.transform_point3(cmd.vertices[0]);
-    /// ```
-    pub transform: Mat4,
-
-    /// Current color for substitution of color 16.
-    pub color: u32,
-}
-
-/// Iterator over all drawing commands of a [`SourceFile`] and all its referenced sub-files.
-///
-/// Sub-file reference commands are not yielded, but instead the drawing commands of those
-/// sub-files are iterated over.
-pub struct CommandIterator<'a> {
-    stack: Vec<(&'a SourceFile, usize, DrawContext)>,
-    source_map: &'a SourceMap,
-}
-
-impl SourceFile {
-    /// Return an iterator over all drawing commands, recursively stepping into sub-file references
-    /// without returning the corresponding [`SubFileRefCmd`] command.
-    pub fn iter<'a>(&'a self, source_map: &'a SourceMap) -> CommandIterator<'a> {
-        let draw_ctx = DrawContext {
-            transform: Mat4::IDENTITY,
-            color: CURRENT_COLOR,
-        };
-        CommandIterator {
-            stack: vec![(self, 0, draw_ctx)],
-            source_map,
-        }
-    }
-}
-
-impl<'a> Iterator for CommandIterator<'a> {
-    type Item = (DrawContext, &'a Command);
-
-    fn next(&mut self) -> Option<(DrawContext, &'a Command)> {
-        while let Some((file, index, draw_ctx)) = self.stack.last_mut() {
-            if let Some(cmd) = file.cmds.get(*index) {
-                *index += 1;
-                if let Command::SubFileRef(sfr_cmd) = &cmd {
-                    if let Some(source_file) = self.source_map.get(&sfr_cmd.file) {
-                        let local_transform = sfr_cmd.matrix();
-                        // Accumulate transforms and replace colors.
-                        let draw_ctx = DrawContext {
-                            transform: draw_ctx.transform * local_transform,
-                            color: if sfr_cmd.color == CURRENT_COLOR {
-                                draw_ctx.color
-                            } else {
-                                sfr_cmd.color
-                            },
-                        };
-                        self.stack.push((source_file, 0, draw_ctx));
-                        continue;
-                    }
-                }
-                return Some((*draw_ctx, cmd));
-            }
-            self.stack.pop();
-        }
-        None
-    }
 }
 
 fn load_and_parse_single_file<P: AsRef<Path>, R: FileRefResolver>(
@@ -335,7 +260,7 @@ impl CommentCmd {
 }
 
 /// [Line Type 0](https://www.ldraw.org/article/218.html#lt0) FILE start.
-/// [MPD Extension[(https://www.ldraw.org/article/47.html)
+/// [MPD Extension[(<https://www.ldraw.org/article/47.html>)
 #[derive(Debug, PartialEq, Clone)]
 pub struct FileCmd {
     /// The filename for this file.
@@ -343,7 +268,7 @@ pub struct FileCmd {
 }
 
 /// [Line Type 0](https://www.ldraw.org/article/218.html#lt0) DATA.
-/// [MPD Extension[(https://www.ldraw.org/article/47.html)
+/// [MPD Extension[(<https://www.ldraw.org/article/47.html>)
 #[derive(Debug, PartialEq, Clone)]
 pub struct DataCmd {
     /// The filename for this data file.
@@ -351,7 +276,7 @@ pub struct DataCmd {
 }
 
 /// [Line Type 0](https://www.ldraw.org/article/218.html#lt0) base64 data chunk.
-/// [MPD Extension[(https://www.ldraw.org/article/47.html)
+/// [MPD Extension[(<https://www.ldraw.org/article/47.html>)
 #[derive(Debug, PartialEq, Clone)]
 pub struct Base64DataCmd {
     /// The decoded base64 data chunk.
@@ -482,12 +407,9 @@ impl Default for SourceMap {
     }
 }
 
-/// [Line Type 1](https://www.ldraw.org/article/218.html#lt1) LDraw command:
-/// Reference a sub-file from the current file.
+/// A transformation matrix.
 #[derive(Debug, PartialEq, Clone)]
-pub struct SubFileRefCmd {
-    /// Color code of the part.
-    pub color: u32,
+pub struct Transform {
     /// Position.
     pub pos: Vec3,
     /// First row of rotation+scaling matrix part.
@@ -496,6 +418,16 @@ pub struct SubFileRefCmd {
     pub row1: Vec3,
     /// Third row of rotation+scaling matrix part.
     pub row2: Vec3,
+}
+
+/// [Line Type 1](https://www.ldraw.org/article/218.html#lt1) LDraw command:
+/// Reference a sub-file from the current file.
+#[derive(Debug, PartialEq, Clone)]
+pub struct SubFileRefCmd {
+    /// Color code of the part.
+    pub color: u32,
+    /// Transform of this part relative to parent.
+    pub transform: Transform,
     /// Referenced sub-file.
     pub file: String,
 }
@@ -547,6 +479,26 @@ pub struct OptLineCmd {
     pub control_points: [Vec3; 2],
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct PeTexPathCmd {
+    pub paths: Vec<i32>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct PeTexInfoCmd {
+    /// Transform for projecting vertex positions to texture coordinates.
+    pub transform: Option<PeTexInfoTransform>,
+    /// The decoded base64 image data chunk.
+    pub data: Vec<u8>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct PeTexInfoTransform {
+    pub transform: Transform,
+    pub point_min: Vec2,
+    pub point_max: Vec2,
+}
+
 /// Types of commands contained in a LDraw file.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Command {
@@ -584,6 +536,11 @@ pub enum Command {
     Quad(QuadCmd),
     /// [Line Type 5](https://www.ldraw.org/article/218.html#lt5) optional line.
     OptLine(OptLineCmd),
+    // TODO: better docs for studio texture extension.
+    /// Bricklink Studio texture extension
+    PeTexPath(PeTexPathCmd),
+    /// Bricklink Studio texture extension
+    PeTexInfo(PeTexInfoCmd),
 }
 
 /// Resolver trait for sub-file references ([Line Type 1](https://www.ldraw.org/article/218.html#lt1) LDraw command).
@@ -607,9 +564,9 @@ pub trait FileRefResolver {
     fn resolve<P: AsRef<Path>>(&self, filename: P) -> Result<Vec<u8>, ResolveError>;
 }
 
-impl SubFileRefCmd {
+impl Transform {
     /// Get the 4x4 transformation matrix applied to the subfile.
-    pub fn matrix(&self) -> Mat4 {
+    pub fn to_matrix(&self) -> Mat4 {
         Mat4::from_cols(
             self.row0.extend(self.pos.x),
             self.row1.extend(self.pos.y),
@@ -632,10 +589,12 @@ mod tests {
             }),
             Command::SubFileRef(SubFileRefCmd {
                 color: 16,
-                pos: Vec3::new(0.0, 0.0, 0.0),
-                row0: Vec3::new(1.0, 0.0, 0.0),
-                row1: Vec3::new(0.0, 1.0, 0.0),
-                row2: Vec3::new(0.0, 0.0, 1.0),
+                transform: Transform {
+                    pos: Vec3::new(0.0, 0.0, 0.0),
+                    row0: Vec3::new(1.0, 0.0, 0.0),
+                    row1: Vec3::new(0.0, 1.0, 0.0),
+                    row2: Vec3::new(0.0, 0.0, 1.0),
+                },
                 file: "1.dat".to_string(),
             }),
             Command::NoFile,
@@ -644,10 +603,12 @@ mod tests {
             }),
             Command::SubFileRef(SubFileRefCmd {
                 color: 16,
-                pos: Vec3::new(0.0, 0.0, 0.0),
-                row0: Vec3::new(1.0, 0.0, 0.0),
-                row1: Vec3::new(0.0, 1.0, 0.0),
-                row2: Vec3::new(0.0, 0.0, 1.0),
+                transform: Transform {
+                    pos: Vec3::new(0.0, 0.0, 0.0),
+                    row0: Vec3::new(1.0, 0.0, 0.0),
+                    row1: Vec3::new(0.0, 1.0, 0.0),
+                    row2: Vec3::new(0.0, 0.0, 1.0),
+                },
                 file: "2.dat".to_string(),
             }),
             Command::NoFile,
@@ -680,10 +641,12 @@ mod tests {
             }),
             Command::SubFileRef(SubFileRefCmd {
                 color: 16,
-                pos: Vec3::new(0.0, 0.0, 0.0),
-                row0: Vec3::new(1.0, 0.0, 0.0),
-                row1: Vec3::new(0.0, 1.0, 0.0),
-                row2: Vec3::new(0.0, 0.0, 1.0),
+                transform: Transform {
+                    pos: Vec3::new(0.0, 0.0, 0.0),
+                    row0: Vec3::new(1.0, 0.0, 0.0),
+                    row1: Vec3::new(0.0, 1.0, 0.0),
+                    row2: Vec3::new(0.0, 0.0, 1.0),
+                },
                 file: "1.dat".to_string(),
             }),
             Command::File(FileCmd {
@@ -691,10 +654,12 @@ mod tests {
             }),
             Command::SubFileRef(SubFileRefCmd {
                 color: 16,
-                pos: Vec3::new(0.0, 0.0, 0.0),
-                row0: Vec3::new(1.0, 0.0, 0.0),
-                row1: Vec3::new(0.0, 1.0, 0.0),
-                row2: Vec3::new(0.0, 0.0, 1.0),
+                transform: Transform {
+                    pos: Vec3::new(0.0, 0.0, 0.0),
+                    row0: Vec3::new(1.0, 0.0, 0.0),
+                    row1: Vec3::new(0.0, 1.0, 0.0),
+                    row2: Vec3::new(0.0, 0.0, 1.0),
+                },
                 file: "2.dat".to_string(),
             }),
         ];
@@ -776,10 +741,12 @@ mod tests {
         let cmd0 = Command::Comment(CommentCmd::new("this doesn't matter"));
         let cmd1 = Command::SubFileRef(SubFileRefCmd {
             color: 16,
-            pos: Vec3::new(0.0, 0.0, 0.0),
-            row0: Vec3::new(1.0, 0.0, 0.0),
-            row1: Vec3::new(0.0, 1.0, 0.0),
-            row2: Vec3::new(0.0, 0.0, 1.0),
+            transform: Transform {
+                pos: Vec3::new(0.0, 0.0, 0.0),
+                row0: Vec3::new(1.0, 0.0, 0.0),
+                row1: Vec3::new(0.0, 1.0, 0.0),
+                row2: Vec3::new(0.0, 0.0, 1.0),
+            },
             file: "aa/aaaaddd".to_string(),
         });
         assert_eq!(
@@ -791,10 +758,12 @@ mod tests {
         let cmd0 = Command::Comment(CommentCmd::new("this doesn't \"matter\""));
         let cmd1 = Command::SubFileRef(SubFileRefCmd {
             color: 16,
-            pos: Vec3::new(0.0, 0.0, 0.0),
-            row0: Vec3::new(1.0, 0.0, 0.0),
-            row1: Vec3::new(0.0, 1.0, 0.0),
-            row2: Vec3::new(0.0, 0.0, 1.0),
+            transform: Transform {
+                pos: Vec3::new(0.0, 0.0, 0.0),
+                row0: Vec3::new(1.0, 0.0, 0.0),
+                row1: Vec3::new(0.0, 1.0, 0.0),
+                row2: Vec3::new(0.0, 0.0, 1.0),
+            },
             file: "aa/aaaaddd".to_string(),
         });
         assert_eq!(
@@ -807,18 +776,22 @@ mod tests {
 
         let cmd0 = Command::SubFileRef(SubFileRefCmd {
             color: 16,
-            pos: Vec3::new(0.0, 0.0, 0.0),
-            row0: Vec3::new(1.0, 0.0, 0.0),
-            row1: Vec3::new(0.0, 1.0, 0.0),
-            row2: Vec3::new(0.0, 0.0, 1.0),
+            transform: Transform {
+                pos: Vec3::new(0.0, 0.0, 0.0),
+                row0: Vec3::new(1.0, 0.0, 0.0),
+                row1: Vec3::new(0.0, 1.0, 0.0),
+                row2: Vec3::new(0.0, 0.0, 1.0),
+            },
             file: "aa/aaaaddd".to_string(),
         });
         let cmd1 = Command::SubFileRef(SubFileRefCmd {
             color: 16,
-            pos: Vec3::new(0.0, 0.0, 0.0),
-            row0: Vec3::new(1.0, 0.0, 0.0),
-            row1: Vec3::new(0.0, 1.0, 0.0),
-            row2: Vec3::new(0.0, 0.0, 1.0),
+            transform: Transform {
+                pos: Vec3::new(0.0, 0.0, 0.0),
+                row0: Vec3::new(1.0, 0.0, 0.0),
+                row1: Vec3::new(0.0, 1.0, 0.0),
+                row2: Vec3::new(0.0, 0.0, 1.0),
+            },
             file: "aa/aaaaddd".to_string(),
         });
         assert_eq!(
@@ -841,77 +814,5 @@ mod tests {
 
         source_map.insert("a//b\\\\c//d.dat", SourceFile { cmds: Vec::new() });
         assert!(source_map.get("a/b/c/d.dat").is_some());
-    }
-
-    #[test]
-    fn test_source_file_iter() {
-        let mut source_map = SourceMap::new();
-        let source_file = SourceFile {
-            cmds: vec![Command::Triangle(TriangleCmd {
-                color: 2,
-                vertices: [
-                    Vec3::new(0.0, 0.0, 0.0),
-                    Vec3::new(1.0, 0.0, 0.0),
-                    Vec3::new(0.0, 1.0, 0.0),
-                ],
-                uvs: None,
-            })],
-        };
-        source_map.insert("tata", source_file);
-        let s = SourceFile {
-            cmds: vec![
-                Command::Triangle(TriangleCmd {
-                    color: 16,
-                    vertices: [
-                        Vec3::new(0.0, 0.0, 1.0),
-                        Vec3::new(1.0, 0.0, 1.0),
-                        Vec3::new(0.0, 1.0, 1.0),
-                    ],
-                    uvs: None,
-                }),
-                Command::Comment(CommentCmd::new("!APPLICATION STUFF")),
-                Command::SubFileRef(SubFileRefCmd {
-                    color: 24,
-                    pos: Vec3::new(0.0, 0.0, 0.0),
-                    row0: Vec3::new(0.0, 0.0, 0.0),
-                    row1: Vec3::new(0.0, 0.0, 0.0),
-                    row2: Vec3::new(0.0, 0.0, 0.0),
-                    file: "tata".to_string(),
-                }),
-                Command::Quad(QuadCmd {
-                    color: 1,
-                    vertices: [
-                        Vec3::new(0.0, 1.0, 0.0),
-                        Vec3::new(0.0, 1.0, 1.0),
-                        Vec3::new(1.0, 1.0, 1.0),
-                        Vec3::new(1.0, 1.0, 0.0),
-                    ],
-                    uvs: None,
-                }),
-            ],
-        };
-        source_map.insert("toto", s);
-        let source_file = source_map.get("toto").unwrap();
-        for c in source_file.iter(&source_map) {
-            trace!("cmd: {:?}", c);
-        }
-
-        let cmds: Vec<_> = source_file.iter(&source_map).map(|(_, cmd)| cmd).collect();
-        assert_eq!(4, cmds.len());
-        assert!(matches!(&cmds[0], Command::Triangle(_)));
-        // Some applications define their own meta commands.
-        // Check that these are not ignored.
-        assert!(matches!(&cmds[1], Command::Comment(_)));
-        assert!(matches!(&cmds[2], Command::Triangle(_)));
-        assert!(matches!(&cmds[3], Command::Quad(_)));
-        if let Command::Triangle(tri_cmd) = &cmds[0] {
-            assert_eq!(16, tri_cmd.color);
-        }
-        if let Command::Triangle(tri_cmd) = &cmds[1] {
-            assert_eq!(2, tri_cmd.color);
-        }
-        if let Command::Quad(quad_cmd) = &cmds[2] {
-            assert_eq!(1, quad_cmd.color);
-        }
     }
 }

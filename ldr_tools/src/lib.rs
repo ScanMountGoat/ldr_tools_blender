@@ -359,7 +359,7 @@ fn load_node<'a>(
                 if let Some(subfile) = source_map.get(&sfr_cmd.file) {
                     // Don't apply node transforms to preserve the scene hierarchy.
                     // Applications should handle combining the transforms.
-                    let child_transform = sfr_cmd.matrix();
+                    let child_transform = sfr_cmd.transform.to_matrix();
 
                     // Handle replacing colors.
                     let child_color = replace_color(sfr_cmd.color, current_color);
@@ -576,7 +576,7 @@ fn load_node_instanced<'a>(
             if let Command::SubFileRef(sfr_cmd) = cmd {
                 if let Some(subfile) = source_map.get(&sfr_cmd.file) {
                     // Accumulate transforms.
-                    let child_transform = *world_transform * sfr_cmd.matrix();
+                    let child_transform = *world_transform * sfr_cmd.transform.to_matrix();
 
                     // Handle replacing colors.
                     let child_color = replace_color(sfr_cmd.color, current_color);

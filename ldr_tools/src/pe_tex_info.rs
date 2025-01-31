@@ -1,7 +1,6 @@
 // Reverse engineered from C# DLLs for the Unity app for Bricklink Studio.
 
 use crate::LDrawGeometry;
-use base64::prelude::*;
 use glam::{Mat4, Vec2, Vec3, Vec3Swizzles};
 
 #[derive(Debug, PartialEq)]
@@ -91,38 +90,20 @@ pub struct TextureMap<const N: usize> {
 
 impl PendingStudioTexture {
     // TODO: the images probably need names based on their file of origin
-    pub fn parse(line: &str, path: &[i32], geometry: &mut LDrawGeometry) -> Option<Self> {
-        let words = line.split_whitespace().collect::<Vec<_>>();
-        if words.first() != Some(&"PE_TEX_INFO") {
-            return None;
-        }
-
-        let image: &str;
+    pub fn from_cmd(
+        cmd: &crate::ldraw::PeTexInfoCmd,
+        path: &[i32],
+        geometry: &mut LDrawGeometry,
+    ) -> Option<Self> {
         let mut location = None::<TextureLocation>;
-        if let Some((cells, [img])) = words[1..].split_at_checked(16) {
-            let mut iter = cells.iter().filter_map(|c| c.parse::<f32>().ok());
-            let [x, y, z, a, b, c, d, e, f, g, h, i] = next_array(&mut iter)?;
-            let transform = Mat4::from_cols_array_2d(&[
-                [a, d, g, 0.0],
-                [b, e, h, 0.0],
-                [c, f, i, 0.0],
-                [x, y, z, 1.0],
-            ]);
-
+        if let Some(pe_tex_transform) = &cmd.transform {
             location = Some(TextureLocation {
-                transform,
-                point_min: Vec2::from(next_array(&mut iter)?),
-                point_max: Vec2::from(next_array(&mut iter)?),
+                transform: pe_tex_transform.transform.to_matrix(),
+                point_min: pe_tex_transform.point_min,
+                point_max: pe_tex_transform.point_max,
             });
-
-            image = img;
-        } else if words.len() == 2 {
-            image = words[1];
-        } else {
-            return None;
         }
-
-        let image = BASE64_STANDARD.decode(image).ok()?;
+        let image = cmd.data.clone();
 
         // Avoid lazily initializing the texture info until everything else has succeeded.
         let tex_info = geometry.texture_info();
@@ -195,12 +176,4 @@ fn min_max(values: &[f32]) -> (f32, f32) {
         max = max.max(n);
     }
     (min, max)
-}
-
-fn next_array<T: Default, const N: usize>(mut iter: impl Iterator<Item = T>) -> Option<[T; N]> {
-    let mut arr = std::array::from_fn(|_| T::default());
-    for elem in &mut arr {
-        *elem = iter.next()?;
-    }
-    Some(arr)
 }
