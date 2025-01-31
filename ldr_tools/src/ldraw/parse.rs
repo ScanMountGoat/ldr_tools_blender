@@ -3,16 +3,13 @@ use glam::{Vec2, Vec3};
 use nom::{
     branch::alt,
     bytes::complete::{tag, tag_no_case, take_while, take_while1, take_while_m_n},
-    character::{
-        complete::{digit1, line_ending as eol},
-        is_digit,
-    },
+    character::complete::{digit1, line_ending as eol},
     combinator::{complete, map, map_res, opt},
     error::ErrorKind,
     multi::{many0, separated_list1},
     number::complete::float,
-    sequence::{terminated, tuple},
-    IResult, InputTakeAtPosition,
+    sequence::terminated,
+    AsChar, IResult, Input, Parser,
 };
 use std::str;
 
@@ -28,7 +25,7 @@ use super::{
 pub fn parse_raw(ldr_content: &[u8]) -> Result<Vec<Command>, Error> {
     // "An LDraw file consists of one command per line."
     // TODO: What to set for the error message here?
-    many0(read_line)(ldr_content).map_or_else(
+    many0(read_line).parse(ldr_content).map_or_else(
         |e| Err(Error::Parse(ParseError::new_from_nom("", &e))),
         |(_, cmds)| Ok(cmds),
     )
@@ -98,15 +95,15 @@ fn take_not_space(i: &[u8]) -> IResult<&[u8], &[u8]> {
 // Read the command ID and swallow the following space, if any.
 fn read_cmd_id_str(i: &[u8]) -> IResult<&[u8], &[u8]> {
     //terminated(take_while1(is_digit), sp)(i) //< This does not work if there's no space (e.g. 4-4cylo.dat)
-    let (i, o) = i.split_at_position1_complete(|item| !is_digit(item), ErrorKind::Digit)?;
+    let (i, o) = i.split_at_position1_complete(|item| !item.is_dec_digit(), ErrorKind::Digit)?;
     let (i, _) = space0(i)?;
     Ok((i, o))
 }
 
 fn category(i: &[u8]) -> IResult<&[u8], Command> {
-    let (i, _) = tag(b"!CATEGORY")(i)?;
+    let (i, _) = tag(&b"!CATEGORY"[..]).parse(i)?;
     let (i, _) = sp(i)?;
-    let (i, content) = map_res(take_not_cr_or_lf, str::from_utf8)(i)?;
+    let (i, content) = map_res(take_not_cr_or_lf, str::from_utf8).parse(i)?;
 
     Ok((
         i,
@@ -117,11 +114,11 @@ fn category(i: &[u8]) -> IResult<&[u8], Command> {
 }
 
 fn keywords_list(i: &[u8]) -> IResult<&[u8], Vec<&str>> {
-    separated_list1(single_comma, map_res(take_not_comma_or_eol, str::from_utf8))(i)
+    separated_list1(single_comma, map_res(take_not_comma_or_eol, str::from_utf8)).parse(i)
 }
 
 fn keywords(i: &[u8]) -> IResult<&[u8], Command> {
-    let (i, (_, _, keywords)) = tuple((tag(b"!KEYWORDS"), sp, keywords_list))(i)?;
+    let (i, (_, _, keywords)) = ((tag(&b"!KEYWORDS"[..]), sp, keywords_list)).parse(i)?;
     Ok((
         i,
         Command::Keywords(KeywordsCmd {
@@ -145,71 +142,73 @@ fn is_hex_digit(c: u8) -> bool {
 }
 
 fn hex_primary(i: &[u8]) -> IResult<&[u8], u8> {
-    map_res(take_while_m_n(2, 2, is_hex_digit), from_hex)(i)
+    map_res(take_while_m_n(2, 2, is_hex_digit), from_hex).parse(i)
 }
 
 fn hex_color(i: &[u8]) -> IResult<&[u8], Color> {
-    let (i, _) = tag(b"#")(i)?;
-    let (i, (red, green, blue)) = tuple((hex_primary, hex_primary, hex_primary))(i)?;
+    let (i, _) = tag(&b"#"[..]).parse(i)?;
+    let (i, (red, green, blue)) = ((hex_primary, hex_primary, hex_primary)).parse(i)?;
     Ok((i, Color { red, green, blue }))
 }
 
 fn digit1_as_u8(i: &[u8]) -> IResult<&[u8], u8> {
-    map_res(map_res(digit1, str::from_utf8), str::parse::<u8>)(i)
+    map_res(map_res(digit1, str::from_utf8), str::parse::<u8>).parse(i)
 }
 
 // ALPHA part of !COLOUR
 fn colour_alpha(i: &[u8]) -> IResult<&[u8], Option<u8>> {
     opt(complete(|i| {
         let (i, _) = sp(i)?;
-        let (i, _) = tag(b"ALPHA")(i)?;
+        let (i, _) = tag(&b"ALPHA"[..])(i)?;
         let (i, _) = sp(i)?;
         digit1_as_u8(i)
-    }))(i)
+    }))
+    .parse(i)
 }
 
 // LUMINANCE part of !COLOUR
 fn colour_luminance(i: &[u8]) -> IResult<&[u8], Option<u8>> {
     opt(complete(|i| {
         let (i, _) = sp(i)?;
-        let (i, _) = tag(b"LUMINANCE")(i)?;
+        let (i, _) = tag(&b"LUMINANCE"[..])(i)?;
         let (i, _) = sp(i)?;
         digit1_as_u8(i)
-    }))(i)
+    }))
+    .parse(i)
 }
 
 fn material_grain_size(i: &[u8]) -> IResult<&[u8], GrainSize> {
-    alt((grain_size, grain_min_max_size))(i)
+    alt((grain_size, grain_min_max_size)).parse(i)
 }
 
 fn grain_size(i: &[u8]) -> IResult<&[u8], GrainSize> {
     // TODO: Create tagged float helper?
-    let (i, (_, _, size)) = tuple((tag(b"SIZE"), sp, float))(i)?;
+    let (i, (_, _, size)) = ((tag(&b"SIZE"[..]), sp, float)).parse(i)?;
     Ok((i, GrainSize::Size(size)))
 }
 
 fn grain_min_max_size(i: &[u8]) -> IResult<&[u8], GrainSize> {
-    let (i, (_, _, min_size)) = tuple((tag(b"MINSIZE"), sp, float))(i)?;
+    let (i, (_, _, min_size)) = ((tag(&b"MINSIZE"[..]), sp, float)).parse(i)?;
     let (i, _) = sp(i)?;
-    let (i, (_, _, max_size)) = tuple((tag(b"MAXSIZE"), sp, float))(i)?;
+    let (i, (_, _, max_size)) = ((tag(&b"MAXSIZE"[..]), sp, float)).parse(i)?;
     Ok((i, GrainSize::MinMaxSize((min_size, max_size))))
 }
 
 // GLITTER VALUE v [ALPHA a] [LUMINANCE l] FRACTION f VFRACTION vf (SIZE s | MINSIZE min MAXSIZE max)
 fn glitter_material(i: &[u8]) -> IResult<&[u8], ColorFinish> {
-    let (i, _) = tag_no_case(b"GLITTER")(i)?;
+    let (i, _) = tag_no_case(&b"GLITTER"[..])(i)?;
     let (i, _) = sp(i)?;
-    let (i, _) = tag_no_case(b"VALUE")(i)?;
+    let (i, _) = tag_no_case(&b"VALUE"[..])(i)?;
     let (i, _) = sp(i)?;
     let (i, value) = hex_color(i)?;
     let (i, alpha) = colour_alpha(i)?;
     let (i, luminance) = colour_luminance(i)?;
     let (i, _) = sp(i)?;
-    let (i, _) = tag_no_case(b"FRACTION")(i)?;
+    let (i, _) = tag_no_case(&b"FRACTION"[..])(i)?;
     let (i, _) = sp(i)?;
     let (i, surface_fraction) = float(i)?;
     let (i, _) = sp(i)?;
-    let (i, _) = tag_no_case(b"VFRACTION")(i)?;
+    let (i, _) = tag_no_case(&b"VFRACTION"[..])(i)?;
     let (i, _) = sp(i)?;
     let (i, volume_fraction) = float(i)?;
     let (i, _) = sp(i)?;
@@ -230,15 +229,15 @@ fn glitter_material(i: &[u8]) -> IResult<&[u8], ColorFinish> {
 
 // SPECKLE VALUE v [ALPHA a] [LUMINANCE l] FRACTION f (SIZE s | MINSIZE min MAXSIZE max)
 fn speckle_material(i: &[u8]) -> IResult<&[u8], ColorFinish> {
-    let (i, _) = tag_no_case(b"SPECKLE")(i)?;
+    let (i, _) = tag_no_case(&b"SPECKLE"[..])(i)?;
     let (i, _) = sp(i)?;
-    let (i, _) = tag_no_case(b"VALUE")(i)?;
+    let (i, _) = tag_no_case(&b"VALUE"[..])(i)?;
     let (i, _) = sp(i)?;
     let (i, value) = hex_color(i)?;
     let (i, alpha) = colour_alpha(i)?;
     let (i, luminance) = colour_luminance(i)?;
     let (i, _) = sp(i)?;
-    let (i, _) = tag_no_case(b"FRACTION")(i)?;
+    let (i, _) = tag_no_case(&b"FRACTION"[..])(i)?;
     let (i, _) = sp(i)?;
     let (i, surface_fraction) = float(i)?;
     let (i, _) = sp(i)?;
@@ -258,16 +257,16 @@ fn speckle_material(i: &[u8]) -> IResult<&[u8], ColorFinish> {
 
 // Other unrecognized MATERIAL definition
 fn other_material(i: &[u8]) -> IResult<&[u8], ColorFinish> {
-    let (i, content) = map_res(take_not_cr_or_lf, str::from_utf8)(i)?;
+    let (i, content) = map_res(take_not_cr_or_lf, str::from_utf8).parse(i)?;
     let finish = content.trim().to_string();
     Ok((i, ColorFinish::Material(MaterialFinish::Other(finish))))
 }
 
 // MATERIAL finish part of !COLOUR
 fn material_finish(i: &[u8]) -> IResult<&[u8], ColorFinish> {
-    let (i, _) = tag_no_case(b"MATERIAL")(i)?;
+    let (i, _) = tag_no_case(&b"MATERIAL"[..])(i)?;
     let (i, _) = sp(i)?;
-    alt((glitter_material, speckle_material, other_material))(i)
+    alt((glitter_material, speckle_material, other_material)).parse(i)
 }
 
 // Finish part of !COLOUR
@@ -276,33 +275,37 @@ fn color_finish(i: &[u8]) -> IResult<&[u8], Option<ColorFinish>> {
     opt(complete(|i| {
         let (i, _) = sp(i)?;
         alt((
-            map(tag_no_case(b"CHROME"), |_| ColorFinish::Chrome),
-            map(tag_no_case(b"PEARLESCENT"), |_| ColorFinish::Pearlescent),
-            map(tag_no_case(b"RUBBER"), |_| ColorFinish::Rubber),
-            map(tag_no_case(b"MATTE_METALLIC"), |_| {
+            map(tag_no_case(&b"CHROME"[..]), |_| ColorFinish::Chrome),
+            map(tag_no_case(&b"PEARLESCENT"[..]), |_| {
+                ColorFinish::Pearlescent
+            }),
+            map(tag_no_case(&b"RUBBER"[..]), |_| ColorFinish::Rubber),
+            map(tag_no_case(&b"MATTE_METALLIC"[..]), |_| {
                 ColorFinish::MatteMetallic
             }),
-            map(tag_no_case(b"METAL"), |_| ColorFinish::Metal),
+            map(tag_no_case(&b"METAL"[..]), |_| ColorFinish::Metal),
             material_finish,
-        ))(i)
-    }))(i)
+        ))
+        .parse(i)
+    }))
+    .parse(i)
 }
 
 // !COLOUR extension meta-command
 fn meta_colour(i: &[u8]) -> IResult<&[u8], Command> {
-    let (i, _) = tag(b"!COLOUR")(i)?;
+    let (i, _) = tag(&b"!COLOUR"[..])(i)?;
     let (i, _) = sp(i)?;
-    let (i, name) = map_res(take_not_space, str::from_utf8)(i)?;
+    let (i, name) = map_res(take_not_space, str::from_utf8).parse(i)?;
     let (i, _) = sp(i)?;
-    let (i, _) = tag(b"CODE")(i)?;
+    let (i, _) = tag(&b"CODE"[..])(i)?;
     let (i, _) = sp(i)?;
     let (i, code) = color_id(i)?;
     let (i, _) = sp(i)?;
-    let (i, _) = tag(b"VALUE")(i)?;
+    let (i, _) = tag(&b"VALUE"[..])(i)?;
     let (i, _) = sp(i)?;
     let (i, value) = hex_color(i)?;
     let (i, _) = sp(i)?;
-    let (i, _) = tag(b"EDGE")(i)?;
+    let (i, _) = tag(&b"EDGE"[..])(i)?;
     let (i, _) = sp(i)?;
     let (i, edge) = hex_color(i)?;
     let (i, alpha) = colour_alpha(i)?;
@@ -324,14 +327,14 @@ fn meta_colour(i: &[u8]) -> IResult<&[u8], Command> {
 }
 
 fn comment(i: &[u8]) -> IResult<&[u8], Command> {
-    let (i, comment) = map_res(take_not_cr_or_lf, str::from_utf8)(i)?;
+    let (i, comment) = map_res(take_not_cr_or_lf, str::from_utf8).parse(i)?;
     Ok((i, Command::Comment(CommentCmd::new(comment))))
 }
 
 fn meta_file(i: &[u8]) -> IResult<&[u8], Command> {
-    let (i, _) = tag(b"FILE")(i)?;
+    let (i, _) = tag(&b"FILE"[..])(i)?;
     let (i, _) = sp(i)?;
-    let (i, file) = map_res(take_not_cr_or_lf, str::from_utf8)(i)?;
+    let (i, file) = map_res(take_not_cr_or_lf, str::from_utf8).parse(i)?;
 
     Ok((
         i,
@@ -342,9 +345,9 @@ fn meta_file(i: &[u8]) -> IResult<&[u8], Command> {
 }
 
 fn meta_data(i: &[u8]) -> IResult<&[u8], Command> {
-    let (i, _) = tag(b"!DATA")(i)?;
+    let (i, _) = tag(&b"!DATA"[..])(i)?;
     let (i, _) = sp(i)?;
-    let (i, file) = map_res(take_not_cr_or_lf, str::from_utf8)(i)?;
+    let (i, file) = map_res(take_not_cr_or_lf, str::from_utf8).parse(i)?;
 
     Ok((
         i,
@@ -356,17 +359,18 @@ fn meta_data(i: &[u8]) -> IResult<&[u8], Command> {
 
 fn meta_base_64_data(i: &[u8]) -> IResult<&[u8], Command> {
     // TODO: Validate base64 characters?
-    let (i, _) = tag(b"!:")(i)?;
+    let (i, _) = tag(&b"!:"[..])(i)?;
     let (i, _) = sp(i)?;
     let (i, data) = map_res(take_not_cr_or_lf, |b| {
         base64::engine::general_purpose::STANDARD_NO_PAD.decode(b)
-    })(i)?;
+    })
+    .parse(i)?;
 
     Ok((i, Command::Base64Data(Base64DataCmd { data })))
 }
 
 fn meta_nofile(i: &[u8]) -> IResult<&[u8], Command> {
-    let (i, _) = tag(b"NOFILE")(i)?;
+    let (i, _) = tag(&b"NOFILE"[..])(i)?;
     Ok((i, Command::NoFile))
 }
 
@@ -380,26 +384,27 @@ fn meta_cmd(i: &[u8]) -> IResult<&[u8], Command> {
         complete(meta_data),
         complete(meta_base_64_data),
         comment,
-    ))(i)
+    ))
+    .parse(i)
 }
 
 fn read_vec2(i: &[u8]) -> IResult<&[u8], Vec2> {
-    let (i, (x, _, y)) = tuple((float, sp, float))(i)?;
+    let (i, (x, _, y)) = ((float, sp, float)).parse(i)?;
     Ok((i, Vec2 { x, y }))
 }
 
 fn read_vec3(i: &[u8]) -> IResult<&[u8], Vec3> {
-    let (i, (x, _, y, _, z)) = tuple((float, sp, float, sp, float))(i)?;
+    let (i, (x, _, y, _, z)) = ((float, sp, float, sp, float)).parse(i)?;
     Ok((i, Vec3 { x, y, z }))
 }
 
 fn color_id(i: &[u8]) -> IResult<&[u8], u32> {
-    map_res(map_res(digit1, str::from_utf8), str::parse::<u32>)(i)
+    map_res(map_res(digit1, str::from_utf8), str::parse::<u32>).parse(i)
 }
 
 fn filename(i: &[u8]) -> IResult<&[u8], &str> {
     // Assume leading and trailing whitespace isn't part of the filename.
-    map(map_res(take_not_cr_or_lf, str::from_utf8), |s| s.trim())(i)
+    map(map_res(take_not_cr_or_lf, str::from_utf8), |s| s.trim()).parse(i)
 }
 
 fn file_ref_cmd(i: &[u8]) -> IResult<&[u8], Command> {
@@ -463,7 +468,8 @@ fn tri_cmd(i: &[u8]) -> IResult<&[u8], Command> {
         let (i, uv3) = read_vec2(i)?;
         let (i, _) = space0(i)?;
         Ok((i, [uv1, uv2, uv3]))
-    }))(i)?;
+    }))
+    .parse(i)?;
 
     Ok((
         i,
@@ -497,7 +503,8 @@ fn quad_cmd(i: &[u8]) -> IResult<&[u8], Command> {
         let (i, uv4) = read_vec2(i)?;
         let (i, _) = space0(i)?;
         Ok((i, [uv1, uv2, uv3, uv4]))
-    }))(i)?;
+    }))
+    .parse(i)?;
 
     Ok((
         i,
@@ -553,7 +560,7 @@ fn space_or_eol0(i: &[u8]) -> IResult<&[u8], &[u8]> {
 // (either <CR><LF> or <LF> alone) or the end of input.
 // Valid even on empty input.
 fn empty_line(i: &[u8]) -> IResult<&[u8], &[u8]> {
-    terminated(space0, end_of_line)(i)
+    terminated(space0, end_of_line).parse(i)
 }
 
 // "There is no line length restriction. Each command consists of optional leading
