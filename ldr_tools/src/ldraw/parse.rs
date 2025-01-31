@@ -382,12 +382,12 @@ fn meta_cmd(i: &[u8]) -> IResult<&[u8], Command> {
     .parse(i)
 }
 
-fn read_vec2(i: &[u8]) -> IResult<&[u8], Vec2> {
+fn v2(i: &[u8]) -> IResult<&[u8], Vec2> {
     let (i, (x, _, y)) = (float, sp, float).parse(i)?;
     Ok((i, Vec2 { x, y }))
 }
 
-fn read_vec3(i: &[u8]) -> IResult<&[u8], Vec3> {
+fn v3(i: &[u8]) -> IResult<&[u8], Vec3> {
     let (i, (x, _, y, _, z)) = (float, sp, float, sp, float).parse(i)?;
     Ok((i, Vec3 { x, y, z }))
 }
@@ -419,14 +419,7 @@ fn file_ref_cmd(i: &[u8]) -> IResult<&[u8], Command> {
 }
 
 fn transform(i: &[u8]) -> IResult<&[u8], Transform> {
-    let (i, pos) = read_vec3(i)?;
-    let (i, _) = sp(i)?;
-    let (i, row0) = read_vec3(i)?;
-    let (i, _) = sp(i)?;
-    let (i, row1) = read_vec3(i)?;
-    let (i, _) = sp(i)?;
-    let (i, row2) = read_vec3(i)?;
-
+    let (i, (pos, _, row0, _, row1, _, row2)) = (v3, sp, v3, sp, v3, sp, v3).parse(i)?;
     Ok((
         i,
         Transform {
@@ -441,16 +434,14 @@ fn transform(i: &[u8]) -> IResult<&[u8], Transform> {
 fn line_cmd(i: &[u8]) -> IResult<&[u8], Command> {
     let (i, color) = color_id(i)?;
     let (i, _) = sp(i)?;
-    let (i, v1) = read_vec3(i)?;
-    let (i, _) = sp(i)?;
-    let (i, v2) = read_vec3(i)?;
+    let (i, (vert1, _, vert2)) = (v3, sp, v3).parse(i)?;
     let (i, _) = space0(i)?;
 
     Ok((
         i,
         Command::Line(LineCmd {
             color,
-            vertices: [v1, v2],
+            vertices: [vert1, vert2],
         }),
     ))
 }
@@ -458,19 +449,12 @@ fn line_cmd(i: &[u8]) -> IResult<&[u8], Command> {
 fn tri_cmd(i: &[u8]) -> IResult<&[u8], Command> {
     let (i, color) = color_id(i)?;
     let (i, _) = sp(i)?;
-    let (i, v1) = read_vec3(i)?;
-    let (i, _) = sp(i)?;
-    let (i, v2) = read_vec3(i)?;
-    let (i, _) = sp(i)?;
-    let (i, v3) = read_vec3(i)?;
+
+    let (i, (vert1, _, vert2, _, vert3)) = (v3, sp, v3, sp, v3).parse(i)?;
     let (i, _) = space0(i)?;
 
     let (i, uvs) = opt(complete(|i| {
-        let (i, uv1) = read_vec2(i)?;
-        let (i, _) = sp(i)?;
-        let (i, uv2) = read_vec2(i)?;
-        let (i, _) = sp(i)?;
-        let (i, uv3) = read_vec2(i)?;
+        let (i, (uv1, _, uv2, _, uv3)) = (v2, sp, v2, sp, v2).parse(i)?;
         let (i, _) = space0(i)?;
         Ok((i, [uv1, uv2, uv3]))
     }))
@@ -480,7 +464,7 @@ fn tri_cmd(i: &[u8]) -> IResult<&[u8], Command> {
         i,
         Command::Triangle(TriangleCmd {
             color,
-            vertices: [v1, v2, v3],
+            vertices: [vert1, vert2, vert3],
             uvs,
         }),
     ))
@@ -489,23 +473,11 @@ fn tri_cmd(i: &[u8]) -> IResult<&[u8], Command> {
 fn quad_cmd(i: &[u8]) -> IResult<&[u8], Command> {
     let (i, color) = color_id(i)?;
     let (i, _) = sp(i)?;
-    let (i, v1) = read_vec3(i)?;
-    let (i, _) = sp(i)?;
-    let (i, v2) = read_vec3(i)?;
-    let (i, _) = sp(i)?;
-    let (i, v3) = read_vec3(i)?;
-    let (i, _) = sp(i)?;
-    let (i, v4) = read_vec3(i)?;
+    let (i, (vert1, _, vert2, _, vert3, _, vert4)) = (v3, sp, v3, sp, v3, sp, v3).parse(i)?;
     let (i, _) = space0(i)?;
 
     let (i, uvs) = opt(complete(|i| {
-        let (i, uv1) = read_vec2(i)?;
-        let (i, _) = sp(i)?;
-        let (i, uv2) = read_vec2(i)?;
-        let (i, _) = sp(i)?;
-        let (i, uv3) = read_vec2(i)?;
-        let (i, _) = space0(i)?;
-        let (i, uv4) = read_vec2(i)?;
+        let (i, (uv1, _, uv2, _, uv3, _, uv4)) = (v2, sp, v2, sp, v2, sp, v2).parse(i)?;
         let (i, _) = space0(i)?;
         Ok((i, [uv1, uv2, uv3, uv4]))
     }))
@@ -515,7 +487,7 @@ fn quad_cmd(i: &[u8]) -> IResult<&[u8], Command> {
         i,
         Command::Quad(QuadCmd {
             color,
-            vertices: [v1, v2, v3, v4],
+            vertices: [vert1, vert2, vert3, vert4],
             uvs,
         }),
     ))
@@ -524,21 +496,15 @@ fn quad_cmd(i: &[u8]) -> IResult<&[u8], Command> {
 fn opt_line_cmd(i: &[u8]) -> IResult<&[u8], Command> {
     let (i, color) = color_id(i)?;
     let (i, _) = sp(i)?;
-    let (i, v1) = read_vec3(i)?;
-    let (i, _) = sp(i)?;
-    let (i, v2) = read_vec3(i)?;
-    let (i, _) = sp(i)?;
-    let (i, v3) = read_vec3(i)?;
-    let (i, _) = sp(i)?;
-    let (i, v4) = read_vec3(i)?;
+    let (i, (vert1, _, vert2, _, vert3, _, vert4)) = (v3, sp, v3, sp, v3, sp, v3).parse(i)?;
     let (i, _) = space0(i)?;
 
     Ok((
         i,
         Command::OptLine(OptLineCmd {
             color,
-            vertices: [v1, v2],
-            control_points: [v3, v4],
+            vertices: [vert1, vert2],
+            control_points: [vert3, vert4],
         }),
     ))
 }
@@ -559,9 +525,9 @@ fn pe_tex_info(i: &[u8]) -> IResult<&[u8], Command> {
         let (i, transform) = transform(i)?;
         let (i, _) = sp(i)?;
 
-        let (i, point_min) = read_vec2(i)?;
+        let (i, point_min) = v2(i)?;
         let (i, _) = sp(i)?;
-        let (i, point_max) = read_vec2(i)?;
+        let (i, point_max) = v2(i)?;
         let (i, _) = sp(i)?;
 
         Ok((
@@ -1175,22 +1141,10 @@ mod tests {
 
     #[test]
     fn test_vec3() {
-        assert_eq!(
-            read_vec3(b"0 0 0"),
-            Ok((&b""[..], Vec3::new(0.0, 0.0, 0.0)))
-        );
-        assert_eq!(
-            read_vec3(b"0 0 0 1"),
-            Ok((&b" 1"[..], Vec3::new(0.0, 0.0, 0.0)))
-        );
-        assert_eq!(
-            read_vec3(b"2 5 -7"),
-            Ok((&b""[..], Vec3::new(2.0, 5.0, -7.0)))
-        );
-        assert_eq!(
-            read_vec3(b"2.3 5 -7.4"),
-            Ok((&b""[..], Vec3::new(2.3, 5.0, -7.4)))
-        );
+        assert_eq!(v3(b"0 0 0"), Ok((&b""[..], Vec3::new(0.0, 0.0, 0.0))));
+        assert_eq!(v3(b"0 0 0 1"), Ok((&b" 1"[..], Vec3::new(0.0, 0.0, 0.0))));
+        assert_eq!(v3(b"2 5 -7"), Ok((&b""[..], Vec3::new(2.0, 5.0, -7.0))));
+        assert_eq!(v3(b"2.3 5 -7.4"), Ok((&b""[..], Vec3::new(2.3, 5.0, -7.4))));
     }
 
     #[test]
@@ -1265,34 +1219,46 @@ mod tests {
 
     #[test]
     fn test_category_cmd() {
-        let res = Command::Category(CategoryCmd {
-            category: "Figure Accessory".to_string(),
-        });
-        assert_eq!(category(b"!CATEGORY Figure Accessory"), Ok((&b""[..], res)));
+        assert_eq!(
+            category(b"!CATEGORY Figure Accessory"),
+            Ok((
+                &b""[..],
+                Command::Category(CategoryCmd {
+                    category: "Figure Accessory".to_string(),
+                })
+            ))
+        );
     }
 
     #[test]
     fn test_keywords_cmd() {
-        let res = Command::Keywords(KeywordsCmd {
-            keywords: vec![
-                "western".to_string(),
-                "wild west".to_string(),
-                "spaghetti western".to_string(),
-                "horse opera".to_string(),
-                "cowboy".to_string(),
-            ],
-        });
         assert_eq!(
             keywords(b"!KEYWORDS western, wild west, spaghetti western, horse opera, cowboy"),
-            Ok((&b""[..], res))
+            Ok((
+                &b""[..],
+                Command::Keywords(KeywordsCmd {
+                    keywords: vec![
+                        "western".to_string(),
+                        "wild west".to_string(),
+                        "spaghetti western".to_string(),
+                        "horse opera".to_string(),
+                        "cowboy".to_string(),
+                    ],
+                })
+            ))
         );
     }
 
     #[test]
     fn test_comment_cmd() {
         let comment = b"test of comment, with \"weird\" characters";
-        let res = Command::Comment(CommentCmd::new(std::str::from_utf8(comment).unwrap()));
-        assert_eq!(meta_cmd(comment), Ok((&b""[..], res)));
+        assert_eq!(
+            meta_cmd(comment),
+            Ok((
+                &b""[..],
+                Command::Comment(CommentCmd::new(std::str::from_utf8(comment).unwrap()))
+            ))
+        );
         // Match empty comment too (e.g. "0" line without anything else, or "0   " with only spaces)
         assert_eq!(
             meta_cmd(b""),
@@ -1302,19 +1268,21 @@ mod tests {
 
     #[test]
     fn test_file_ref_cmd() {
-        let res = Command::SubFileRef(SubFileRefCmd {
-            color: 16,
-            transform: Transform {
-                pos: Vec3::new(0.0, 0.0, 0.0),
-                row0: Vec3::new(1.0, 0.0, 0.0),
-                row1: Vec3::new(0.0, 1.0, 0.0),
-                row2: Vec3::new(0.0, 0.0, 1.0),
-            },
-            file: "aaaaaaddd".to_string(),
-        });
         assert_eq!(
             file_ref_cmd(b"16 0 0 0 1 0 0 0 1 0 0 0 1 aaaaaaddd"),
-            Ok((&b""[..], res))
+            Ok((
+                &b""[..],
+                Command::SubFileRef(SubFileRefCmd {
+                    color: 16,
+                    transform: Transform {
+                        pos: Vec3::new(0.0, 0.0, 0.0),
+                        row0: Vec3::new(1.0, 0.0, 0.0),
+                        row1: Vec3::new(0.0, 1.0, 0.0),
+                        row2: Vec3::new(0.0, 0.0, 1.0),
+                    },
+                    file: "aaaaaaddd".to_string(),
+                })
+            ))
         );
     }
 
@@ -1361,207 +1329,257 @@ mod tests {
 
     #[test]
     fn test_read_cmd() {
-        let res = Command::Comment(CommentCmd::new("this doesn't matter"));
-        assert_eq!(read_line(b"0 this doesn't matter"), Ok((&b""[..], res)));
+        assert_eq!(
+            read_line(b"0 this doesn't matter"),
+            Ok((
+                &b""[..],
+                Command::Comment(CommentCmd::new("this doesn't matter"))
+            ))
+        );
     }
 
     #[test]
     fn test_read_line_cmd() {
-        let res = Command::Line(LineCmd {
-            color: 16,
-            vertices: [Vec3::new(1.0, 1.0, 0.0), Vec3::new(0.9239, 1.0, 0.3827)],
-        });
         assert_eq!(
             read_line(b"2 16 1 1 0 0.9239 1 0.3827"),
-            Ok((&b""[..], res))
+            Ok((
+                &b""[..],
+                Command::Line(LineCmd {
+                    color: 16,
+                    vertices: [Vec3::new(1.0, 1.0, 0.0), Vec3::new(0.9239, 1.0, 0.3827)],
+                })
+            ))
         );
     }
 
     #[test]
     fn test_read_tri_cmd() {
-        let res = Command::Triangle(TriangleCmd {
-            color: 16,
-            vertices: [
-                Vec3::new(1.0, 1.0, 0.0),
-                Vec3::new(0.9239, 1.0, 0.3827),
-                Vec3::new(0.9239, 0.0, 0.3827),
-            ],
-            uvs: None,
-        });
         assert_eq!(
             read_line(b"3 16 1 1 0 0.9239 1 0.3827 0.9239 0 0.3827"),
-            Ok((&b""[..], res))
+            Ok((
+                &b""[..],
+                Command::Triangle(TriangleCmd {
+                    color: 16,
+                    vertices: [
+                        Vec3::new(1.0, 1.0, 0.0),
+                        Vec3::new(0.9239, 1.0, 0.3827),
+                        Vec3::new(0.9239, 0.0, 0.3827),
+                    ],
+                    uvs: None,
+                })
+            ))
         );
-        let res = Command::Triangle(TriangleCmd {
-            color: 16,
-            vertices: [
-                Vec3::new(1.0, 1.0, 0.0),
-                Vec3::new(0.9239, 1.0, 0.3827),
-                Vec3::new(0.9239, 0.0, 0.3827),
-            ],
-            uvs: None,
-        });
         assert_eq!(
             // Note: extra spaces at end
             read_line(b"3 16 1 1 0 0.9239 1 0.3827 0.9239 0 0.3827  "),
-            Ok((&b""[..], res))
+            Ok((
+                &b""[..],
+                Command::Triangle(TriangleCmd {
+                    color: 16,
+                    vertices: [
+                        Vec3::new(1.0, 1.0, 0.0),
+                        Vec3::new(0.9239, 1.0, 0.3827),
+                        Vec3::new(0.9239, 0.0, 0.3827),
+                    ],
+                    uvs: None,
+                })
+            ))
         );
     }
 
     #[test]
     fn test_read_quad_cmd() {
-        let res = Command::Quad(QuadCmd {
-            color: 16,
-            vertices: [
-                Vec3::new(1.0, 1.0, 0.0),
-                Vec3::new(0.9239, 1.0, 0.3827),
-                Vec3::new(0.9239, 0.0, 0.3827),
-                Vec3::new(1.0, 0.0, 0.0),
-            ],
-            uvs: None,
-        });
         assert_eq!(
             read_line(b"4 16 1 1 0 0.9239 1 0.3827 0.9239 0 0.3827 1 0 0"),
-            Ok((&b""[..], res))
+            Ok((
+                &b""[..],
+                Command::Quad(QuadCmd {
+                    color: 16,
+                    vertices: [
+                        Vec3::new(1.0, 1.0, 0.0),
+                        Vec3::new(0.9239, 1.0, 0.3827),
+                        Vec3::new(0.9239, 0.0, 0.3827),
+                        Vec3::new(1.0, 0.0, 0.0),
+                    ],
+                    uvs: None,
+                })
+            ))
         );
     }
 
     #[test]
     fn test_read_tri_cmd_uvs() {
-        let res = Command::Triangle(TriangleCmd {
-            color: 16,
-            vertices: [
-                Vec3::new(-1.0, 0.0, 1.0),
-                Vec3::new(-1.0, 0.0, -1.0),
-                Vec3::new(1.0, 0.0, -1.0),
-            ],
-            uvs: Some([
-                Vec2::new(0.0, 1.0),
-                Vec2::new(0.0, 0.0),
-                Vec2::new(1.0, 0.0),
-            ]),
-        });
         assert_eq!(
             read_line(b"3 16 -1 0 1 -1 0 -1 1 0 -1 0 1 0 0 1 0"),
-            Ok((&b""[..], res))
+            Ok((
+                &b""[..],
+                Command::Triangle(TriangleCmd {
+                    color: 16,
+                    vertices: [
+                        Vec3::new(-1.0, 0.0, 1.0),
+                        Vec3::new(-1.0, 0.0, -1.0),
+                        Vec3::new(1.0, 0.0, -1.0),
+                    ],
+                    uvs: Some([
+                        Vec2::new(0.0, 1.0),
+                        Vec2::new(0.0, 0.0),
+                        Vec2::new(1.0, 0.0),
+                    ]),
+                })
+            ))
         );
     }
 
     #[test]
     fn test_read_quad_cmd_uvs() {
-        let res = Command::Quad(QuadCmd {
-            color: 16,
-            vertices: [
-                Vec3::new(-1.0, 0.0, 1.0),
-                Vec3::new(-1.0, 0.0, -1.0),
-                Vec3::new(1.0, 0.0, -1.0),
-                Vec3::new(1.0, 1.0, -1.0),
-            ],
-            uvs: Some([
-                Vec2::new(0.0, 1.0),
-                Vec2::new(0.0, 0.0),
-                Vec2::new(1.0, 0.0),
-                Vec2::new(1.0, 1.0),
-            ]),
-        });
         assert_eq!(
             read_line(b"4 16 -1 0 1 -1 0 -1 1 0 -1 1 1 -1 0 1 0 0 1 0 1 1"),
-            Ok((&b""[..], res))
+            Ok((
+                &b""[..],
+                Command::Quad(QuadCmd {
+                    color: 16,
+                    vertices: [
+                        Vec3::new(-1.0, 0.0, 1.0),
+                        Vec3::new(-1.0, 0.0, -1.0),
+                        Vec3::new(1.0, 0.0, -1.0),
+                        Vec3::new(1.0, 1.0, -1.0),
+                    ],
+                    uvs: Some([
+                        Vec2::new(0.0, 1.0),
+                        Vec2::new(0.0, 0.0),
+                        Vec2::new(1.0, 0.0),
+                        Vec2::new(1.0, 1.0),
+                    ]),
+                })
+            ))
         );
     }
 
     #[test]
     fn test_read_opt_line_cmd() {
-        let res = Command::OptLine(OptLineCmd {
-            color: 16,
-            vertices: [Vec3::new(1.0, 1.0, 0.0), Vec3::new(0.9239, 1.0, 0.3827)],
-            control_points: [Vec3::new(0.9239, 0.0, 0.3827), Vec3::new(1.0, 0.0, 0.0)],
-        });
         assert_eq!(
             read_line(b"5 16 1 1 0 0.9239 1 0.3827 0.9239 0 0.3827 1 0 0"),
-            Ok((&b""[..], res))
+            Ok((
+                &b""[..],
+                Command::OptLine(OptLineCmd {
+                    color: 16,
+                    vertices: [Vec3::new(1.0, 1.0, 0.0), Vec3::new(0.9239, 1.0, 0.3827)],
+                    control_points: [Vec3::new(0.9239, 0.0, 0.3827), Vec3::new(1.0, 0.0, 0.0)],
+                })
+            ))
         );
     }
 
     #[test]
     fn test_read_line_subfileref() {
-        let res = Command::SubFileRef(SubFileRefCmd {
-            color: 16,
-            transform: Transform {
-                pos: Vec3::new(0.0, 0.0, 0.0),
-                row0: Vec3::new(1.0, 0.0, 0.0),
-                row1: Vec3::new(0.0, 1.0, 0.0),
-                row2: Vec3::new(0.0, 0.0, 1.0),
-            },
-            file: "aa/aaaaddd".to_string(),
-        });
         assert_eq!(
             read_line(b"1 16 0 0 0 1 0 0 0 1 0 0 0 1 aa/aaaaddd"),
-            Ok((&b""[..], res))
+            Ok((
+                &b""[..],
+                Command::SubFileRef(SubFileRefCmd {
+                    color: 16,
+                    transform: Transform {
+                        pos: Vec3::new(0.0, 0.0, 0.0),
+                        row0: Vec3::new(1.0, 0.0, 0.0),
+                        row1: Vec3::new(0.0, 1.0, 0.0),
+                        row2: Vec3::new(0.0, 0.0, 1.0),
+                    },
+                    file: "aa/aaaaddd".to_string(),
+                })
+            ))
         );
     }
 
     #[test]
     fn test_meta_data() {
-        let res = Command::Data(DataCmd {
-            file: "data.bin".to_string(),
-        });
-        assert_eq!(read_line(b"0 !DATA data.bin"), Ok((&b""[..], res)));
+        assert_eq!(
+            read_line(b"0 !DATA data.bin"),
+            Ok((
+                &b""[..],
+                Command::Data(DataCmd {
+                    file: "data.bin".to_string(),
+                })
+            ))
+        );
     }
 
     #[test]
     fn test_base64_data() {
-        let res = Command::Base64Data(Base64DataCmd {
-            data: b"Hello World!".to_vec(),
-        });
-        assert_eq!(read_line(b"0 !: SGVsbG8gV29ybGQh"), Ok((&b""[..], res)));
+        assert_eq!(
+            read_line(b"0 !: SGVsbG8gV29ybGQh"),
+            Ok((
+                &b""[..],
+                Command::Base64Data(Base64DataCmd {
+                    data: b"Hello World!".to_vec(),
+                })
+            ))
+        );
     }
 
     #[test]
     fn test_file_cmd() {
-        let res = Command::File(FileCmd {
-            file: "submodel".to_string(),
-        });
-        assert_eq!(meta_cmd(b"FILE submodel"), Ok((&b""[..], res)));
+        assert_eq!(
+            read_line(b"0 FILE submodel"),
+            Ok((
+                &b""[..],
+                Command::File(FileCmd {
+                    file: "submodel".to_string(),
+                })
+            ))
+        );
     }
 
     #[test]
     fn test_nofile_cmd() {
-        let res = Command::NoFile;
-        assert_eq!(meta_cmd(b"NOFILE"), Ok((&b""[..], res)));
+        assert_eq!(read_line(b"0 NOFILE"), Ok((&b""[..], Command::NoFile)));
     }
 
     #[test]
     fn test_pe_tex_path_cmd() {
-        let res = Command::PeTexPath(PeTexPathCmd { paths: vec![0, 1] });
-        assert_eq!(meta_cmd(b"PE_TEX_PATH 0 1"), Ok((&b""[..], res)));
+        assert_eq!(
+            read_line(b"0 PE_TEX_PATH 0 1"),
+            Ok((
+                &b""[..],
+                Command::PeTexPath(PeTexPathCmd { paths: vec![0, 1] })
+            ))
+        );
     }
 
     #[test]
     fn test_pe_tex_info_cmd() {
-        let res = Command::PeTexInfo(PeTexInfoCmd {
-            transform: Some(PeTexInfoTransform {
-                transform: Transform {
-                    pos: vec3(0.0, 0.8938, -0.25),
-                    row0: vec3(-1.3367, 0.0, 0.0),
-                    row1: vec3(0.0, -0.275, 0.0),
-                    row2: vec3(0.0, 0.0, -1.505),
-                },
-                point_min: vec2(-60.0001, 50.0001),
-                point_max: vec2(60.0001, -30.0001),
-            }),
-            data: b"abc".to_vec(),
-        });
-        assert_eq!(meta_cmd(b"PE_TEX_INFO 0.0000 0.8938 -0.2500 -1.3367 0.0000 0.0000 0.0000 -0.2750 0.0000 0.0000 0.0000 -1.5050 -60.0001 50.0001 60.0001 -30.0001 YWJj"), Ok((&b""[..], res)));
+        assert_eq!(
+            read_line(b"0 PE_TEX_INFO 0.0 0.8938 -0.25 -1.3367 0.0 0.0 0.0 -0.2750 0.0 0.0 0.0 -1.5050 -60.0 50.0 60.0 -30.0 YWJj"),
+            Ok((
+                &b""[..],
+                Command::PeTexInfo(PeTexInfoCmd {
+                    transform: Some(PeTexInfoTransform {
+                        transform: Transform {
+                            pos: vec3(0.0, 0.8938, -0.25),
+                            row0: vec3(-1.3367, 0.0, 0.0),
+                            row1: vec3(0.0, -0.275, 0.0),
+                            row2: vec3(0.0, 0.0, -1.505),
+                        },
+                        point_min: vec2(-60.0, 50.0),
+                        point_max: vec2(60.0, -30.0),
+                    }),
+                    data: b"abc".to_vec(),
+                })
+            ))
+        );
     }
 
     #[test]
     fn test_pe_tex_info_cmd_no_matrix() {
-        let res = Command::PeTexInfo(PeTexInfoCmd {
-            transform: None,
-            data: b"abc".to_vec(),
-        });
-        assert_eq!(meta_cmd(b"PE_TEX_INFO YWJj"), Ok((&b""[..], res)));
+        assert_eq!(
+            read_line(b"0 PE_TEX_INFO YWJj"),
+            Ok((
+                &b""[..],
+                Command::PeTexInfo(PeTexInfoCmd {
+                    transform: None,
+                    data: b"abc".to_vec(),
+                })
+            ))
+        );
     }
 
     #[test]
