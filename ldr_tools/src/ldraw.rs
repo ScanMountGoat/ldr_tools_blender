@@ -479,11 +479,43 @@ pub struct OptLineCmd {
     pub control_points: [Vec3; 2],
 }
 
+/// [Line Type 0](https://www.ldraw.org/article/218.html#lt0) META command:
+/// [BFC language extension](https://www.ldraw.org/article/415)
+#[derive(Debug, PartialEq, Clone)]
+pub enum BfcCommand {
+    /// Disable BFC commands for this file.
+    NoCertify,
+    /// Certify this file as BFC compatiple and set winding.
+    /// Winding is assumed to be [Winding::Ccw] if not set.
+    Certify(Option<Winding>),
+    /// Set the winding for this file.
+    Winding(Winding),
+    /// Disable backface culling.
+    NoClip,
+    /// Enable backface culling and set winding.
+    Clip(Option<Winding>),
+    /// Invert the winding of the next subfile command.
+    InvertNext,
+}
+
+/// The ordering of vertices in a face.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Winding {
+    /// Countr-clockwise winding
+    Ccw,
+    /// Clockwise winding
+    Cw,
+}
+
+/// [Line Type 0](https://www.ldraw.org/article/218.html#lt0) META command: PE_TEX_PATH
+/// Bricklink Studio texture extension
 #[derive(Debug, PartialEq, Clone)]
 pub struct PeTexPathCmd {
     pub paths: Vec<i32>,
 }
 
+/// [Line Type 0](https://www.ldraw.org/article/218.html#lt0) META command: PE_TEX_INFO
+/// Bricklink Studio texture extension
 #[derive(Debug, PartialEq, Clone)]
 pub struct PeTexInfoCmd {
     /// Transform for projecting vertex positions to texture coordinates.
@@ -536,9 +568,13 @@ pub enum Command {
     Quad(QuadCmd),
     /// [Line Type 5](https://www.ldraw.org/article/218.html#lt5) optional line.
     OptLine(OptLineCmd),
-    // TODO: better docs for studio texture extension.
+    /// [Line Type 0](https://www.ldraw.org/article/218.html#lt0) META command:
+    /// [BFC language extension](https://www.ldraw.org/article/415)
+    Bfc(BfcCommand),
+    /// [Line Type 0](https://www.ldraw.org/article/218.html#lt0) META command:
     /// Bricklink Studio texture extension
     PeTexPath(PeTexPathCmd),
+    /// [Line Type 0](https://www.ldraw.org/article/218.html#lt0) META command:
     /// Bricklink Studio texture extension
     PeTexInfo(PeTexInfoCmd),
 }

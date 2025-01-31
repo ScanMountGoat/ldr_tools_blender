@@ -1,4 +1,4 @@
-use crate::ldraw::Command;
+use crate::ldraw::{BfcCommand, Command, Winding};
 use glam::{Mat4, Vec2, Vec3};
 use rstar::{primitives::GeomWithData, RTree};
 
@@ -45,12 +45,6 @@ struct GeometryContext {
     is_stud: bool,
     is_slope: bool,
     studio_textures: Vec<PendingStudioTexture>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Winding {
-    Ccw,
-    Cw,
 }
 
 struct VertexMap {
@@ -289,15 +283,23 @@ fn append_geometry(
                     }
                 }
             }
-            Command::Comment(c) => {
-                // TODO: Add proper parsing.
-                for word in c.text.split_whitespace() {
-                    match word {
-                        "CCW" => current_winding = Winding::Ccw,
-                        "CW" => current_winding = Winding::Cw,
-                        "INVERTNEXT" => invert_next = true,
-                        _ => (),
+            Command::Bfc(bfc_cmd) => {
+                // Ignore clip and certify since we only need to set winding.
+                match bfc_cmd {
+                    BfcCommand::NoCertify => (),
+                    BfcCommand::Certify(winding) => {
+                        current_winding = winding.unwrap_or(Winding::Ccw);
                     }
+                    BfcCommand::Winding(winding) => {
+                        current_winding = *winding;
+                    }
+                    BfcCommand::NoClip => (),
+                    BfcCommand::Clip(winding) => {
+                        if let Some(winding) = winding {
+                            current_winding = *winding;
+                        }
+                    }
+                    BfcCommand::InvertNext => invert_next = true,
                 }
             }
             Command::Triangle(t) => {

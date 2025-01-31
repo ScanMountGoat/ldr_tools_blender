@@ -1,3 +1,6 @@
+// LDraw File Format Specification
+// https://www.ldraw.org/article/218.html
+
 use base64::{prelude::BASE64_STANDARD, Engine};
 use glam::{Vec2, Vec3};
 use nom::{
@@ -15,14 +18,11 @@ use std::str;
 use crate::ldraw::PeTexInfoTransform;
 
 use super::{
-    error::ParseError, Base64DataCmd, CategoryCmd, Color, ColorFinish, ColourCmd, Command,
-    CommentCmd, DataCmd, Error, FileCmd, GlitterMaterial, GrainSize, KeywordsCmd, LineCmd,
+    error::ParseError, Base64DataCmd, BfcCommand, CategoryCmd, Color, ColorFinish, ColourCmd,
+    Command, CommentCmd, DataCmd, Error, FileCmd, GlitterMaterial, GrainSize, KeywordsCmd, LineCmd,
     MaterialFinish, OptLineCmd, PeTexInfoCmd, PeTexPathCmd, QuadCmd, SpeckleMaterial,
-    SubFileRefCmd, Transform, TriangleCmd,
+    SubFileRefCmd, Transform, TriangleCmd, Winding,
 };
-
-// LDraw File Format Specification
-// https://www.ldraw.org/article/218.html
 
 pub fn parse_raw(ldr_content: &[u8]) -> Result<Vec<Command>, Error> {
     // "An LDraw file consists of one command per line."
@@ -374,6 +374,7 @@ fn meta_cmd(i: &[u8]) -> IResult<&[u8], Command> {
         complete(meta_nofile),
         complete(meta_data),
         complete(meta_base_64_data),
+        complete(bfc),
         complete(pe_tex_path),
         complete(pe_tex_info),
         comment,
@@ -543,7 +544,7 @@ fn opt_line_cmd(i: &[u8]) -> IResult<&[u8], Command> {
 }
 
 fn pe_tex_path(i: &[u8]) -> IResult<&[u8], Command> {
-    let (i, _) = tag_no_case(&b"PE_TEX_PATH"[..])(i)?;
+    let (i, _) = tag(&b"PE_TEX_PATH"[..])(i)?;
     let (i, _) = sp(i)?;
     let (i, paths) = separated_list1(sp, digit1_as_i32).parse(i)?;
 
@@ -551,7 +552,7 @@ fn pe_tex_path(i: &[u8]) -> IResult<&[u8], Command> {
 }
 
 fn pe_tex_info(i: &[u8]) -> IResult<&[u8], Command> {
-    let (i, _) = tag_no_case(&b"PE_TEX_INFO"[..])(i)?;
+    let (i, _) = tag(&b"PE_TEX_INFO"[..])(i)?;
     let (i, _) = sp(i)?;
 
     let (i, transform) = opt(complete(|i| {
@@ -577,6 +578,71 @@ fn pe_tex_info(i: &[u8]) -> IResult<&[u8], Command> {
     let (i, data) = read_base64(i)?;
 
     Ok((i, Command::PeTexInfo(PeTexInfoCmd { transform, data })))
+}
+
+fn bfc(i: &[u8]) -> IResult<&[u8], Command> {
+    let (i, _) = tag(&b"BFC"[..])(i)?;
+    let (i, _) = sp(i)?;
+
+    let (i, cmd) = alt((
+        bfc_nocertify,
+        bfc_certify,
+        bfc_winding,
+        bfc_noclip,
+        bfc_clip,
+        bfc_invertnext,
+    ))
+    .parse(i)?;
+
+    Ok((i, Command::Bfc(cmd)))
+}
+
+fn bfc_nocertify(i: &[u8]) -> IResult<&[u8], BfcCommand> {
+    let (i, _) = tag(&b"NOCERTIFY"[..])(i)?;
+    Ok((i, BfcCommand::NoCertify))
+}
+
+fn bfc_certify(i: &[u8]) -> IResult<&[u8], BfcCommand> {
+    let (i, _) = tag(&b"CERTIFY"[..])(i)?;
+    let (i, winding) = opt_winding(i)?;
+    Ok((i, BfcCommand::Certify(winding)))
+}
+
+fn bfc_winding(i: &[u8]) -> IResult<&[u8], BfcCommand> {
+    map(winding, BfcCommand::Winding).parse(i)
+}
+
+fn bfc_noclip(i: &[u8]) -> IResult<&[u8], BfcCommand> {
+    let (i, _) = tag(&b"NOCLIP"[..])(i)?;
+    Ok((i, BfcCommand::NoClip))
+}
+
+fn bfc_clip(i: &[u8]) -> IResult<&[u8], BfcCommand> {
+    let (i, _) = tag(&b"CLIP"[..])(i)?;
+    let (i, winding) = opt_winding(i)?;
+    Ok((i, BfcCommand::Clip(winding)))
+}
+
+fn bfc_invertnext(i: &[u8]) -> IResult<&[u8], BfcCommand> {
+    let (i, _) = tag(&b"INVERTNEXT"[..])(i)?;
+    Ok((i, BfcCommand::InvertNext))
+}
+
+fn opt_winding(i: &[u8]) -> IResult<&[u8], Option<Winding>> {
+    opt(complete(|i| {
+        let (i, _) = sp(i)?;
+        let (i, winding) = winding(i)?;
+        Ok((i, winding))
+    }))
+    .parse(i)
+}
+
+fn winding(i: &[u8]) -> IResult<&[u8], Winding> {
+    alt((
+        map(tag_no_case(&b"CW"[..]), |_| Winding::Cw),
+        map(tag_no_case(&b"CCW"[..]), |_| Winding::Ccw),
+    ))
+    .parse(i)
 }
 
 // Zero or more "spaces", as defined in LDraw standard.
@@ -1496,5 +1562,41 @@ mod tests {
             data: b"abc".to_vec(),
         });
         assert_eq!(meta_cmd(b"PE_TEX_INFO YWJj"), Ok((&b""[..], res)));
+    }
+
+    #[test]
+    fn test_bfc_cmd() {
+        let ldr_content = b"0 BFC NOCERTIFY
+        0 BFC CERTIFY
+        0 BFC CERTIFY CW
+        0 BFC CERTIFY CCW
+
+        0 BFC CW
+        0 BFC CCW
+
+        0 BFC CLIP
+        0 BFC CLIP CW
+        0 BFC CLIP CCW
+
+        0 BFC NOCLIP
+
+        0 BFC INVERTNEXT
+        ";
+        assert_eq!(
+            vec![
+                Command::Bfc(BfcCommand::NoCertify),
+                Command::Bfc(BfcCommand::Certify(None)),
+                Command::Bfc(BfcCommand::Certify(Some(Winding::Cw))),
+                Command::Bfc(BfcCommand::Certify(Some(Winding::Ccw))),
+                Command::Bfc(BfcCommand::Winding(Winding::Cw)),
+                Command::Bfc(BfcCommand::Winding(Winding::Ccw)),
+                Command::Bfc(BfcCommand::Clip(None)),
+                Command::Bfc(BfcCommand::Clip(Some(Winding::Cw))),
+                Command::Bfc(BfcCommand::Clip(Some(Winding::Ccw))),
+                Command::Bfc(BfcCommand::NoClip),
+                Command::Bfc(BfcCommand::InvertNext)
+            ],
+            parse_raw(ldr_content).unwrap()
+        );
     }
 }
