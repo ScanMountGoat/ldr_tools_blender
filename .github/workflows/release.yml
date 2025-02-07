@@ -23,7 +23,7 @@ jobs:
         cp target/release/libldr_tools_py.so ldr_tools_blender/ldr_tools_py.so
         zip -r ldr_tools_blender_linux_x64.zip ldr_tools_blender
     - name: Upload Zip
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ldr_tools_blender_linux
         path: ldr_tools_blender_linux_x64.zip
@@ -49,7 +49,7 @@ jobs:
         cp target/release/ldr_tools_py.dll ldr_tools_blender/ldr_tools_py.pyd
         Compress-Archive -path ldr_tools_blender -destinationPath ldr_tools_blender_win_x64.zip 
     - name: Upload Zip
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ldr_tools_blender_win
         path: ldr_tools_blender_win_x64.zip
@@ -94,7 +94,7 @@ jobs:
         cp target/${{matrix.target}}/release/libldr_tools_py.dylib ldr_tools_blender/ldr_tools_py.so
         zip -r ldr_tools_blender_macos_${{matrix.desc}}.zip ldr_tools_blender
     - name: Upload Zip
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ldr_tools_blender_macos_${{matrix.desc}}
         path: ldr_tools_blender_macos_${{matrix.desc}}.zip
