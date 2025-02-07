@@ -3,7 +3,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## unreleased
+## 0.4.7 - 2025-02-07
 ### Fixed
 * Fixed an issue where importing some files would not correctly process all LDraw commands.
 
