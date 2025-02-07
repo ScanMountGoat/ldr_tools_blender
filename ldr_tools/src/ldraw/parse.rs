@@ -9,7 +9,7 @@ use nom::{
     character::complete::digit1,
     combinator::{complete, map, map_res, opt},
     error::ErrorKind,
-    multi::{many0, separated_list1},
+    multi::separated_list1,
     number::complete::float,
     AsChar, IResult, Input, Parser,
 };
@@ -26,11 +26,18 @@ use super::{
 
 pub fn parse_raw(ldr_content: &[u8]) -> Result<Vec<Command>, Error> {
     // "An LDraw file consists of one command per line."
-    // TODO: What to set for the error message here?
-    many0(read_line).parse(ldr_content).map_or_else(
-        |e| Err(Error::Parse(ParseError::new_from_nom("", &e))),
-        |(_, cmds)| Ok(cmds),
-    )
+    // Some LDraw files have incorrect or incomplete commands.
+    // Always advance to the next line to allow parsing to continue.
+    ldr_content
+        .split(|b| is_cr_or_lf(*b))
+        .filter(|line| !line.iter().all(|b| is_space(*b)))
+        .map(|line| {
+            // TODO: What to set for the error message here?
+            read_line(line)
+                .map_err(|e| Error::Parse(ParseError::new_from_nom("", &e)))
+                .map(|(_, cmd)| cmd)
+        })
+        .collect()
 }
 
 fn nom_error(i: &[u8], kind: ErrorKind) -> nom::Err<nom::error::Error<&[u8]>> {
@@ -80,10 +87,10 @@ fn take_not_space(i: &[u8]) -> IResult<&[u8], &[u8]> {
 
 // Read the command ID and swallow the following space, if any.
 fn read_cmd_id_str(i: &[u8]) -> IResult<&[u8], &[u8]> {
-    //terminated(take_while1(is_digit), sp)(i) //< This does not work if there's no space (e.g. 4-4cylo.dat)
-    let (i, o) = i.split_at_position1_complete(|item| !item.is_dec_digit(), ErrorKind::Digit)?;
     let (i, _) = space0(i)?;
-    Ok((i, o))
+    let (i, id) = i.split_at_position1_complete(|item| !item.is_dec_digit(), ErrorKind::Digit)?;
+    let (i, _) = space0(i)?;
+    Ok((i, id))
 }
 
 fn category(i: &[u8]) -> IResult<&[u8], Command> {
@@ -623,12 +630,6 @@ fn sp(i: &[u8]) -> IResult<&[u8], &[u8]> {
     i.split_at_position1_complete(|item| !is_space(item), ErrorKind::Space)
 }
 
-// Zero or more "spaces", as defined in LDraw standard.
-// Valid even on empty input.
-fn space_or_eol0(i: &[u8]) -> IResult<&[u8], &[u8]> {
-    i.split_at_position_complete(|item| !is_space(item) && !is_cr_or_lf(item))
-}
-
 // "There is no line length restriction. Each command consists of optional leading
 // whitespace followed by whitespace-delimited tokens. Some commands also have trailing
 // arbitrary data which may itself include internal whitespace; such data is not tokenized,
@@ -639,7 +640,7 @@ fn space_or_eol0(i: &[u8]) -> IResult<&[u8], &[u8]> {
 // "The line type of a line is the first number on the line."
 // "If the line type of the command is invalid, the line is ignored."
 fn read_line(i: &[u8]) -> IResult<&[u8], Command> {
-    let (i, _) = space_or_eol0(i)?;
+    dbg!(String::from_utf8(i.to_vec()).unwrap());
     let (i, cmd_id) = read_cmd_id_str(i)?;
     let (i, cmd) = match cmd_id {
         b"0" => meta_cmd(i),
@@ -1296,38 +1297,6 @@ mod tests {
     }
 
     #[test]
-    fn test_space_or_eol0() {
-        assert_eq!(space_or_eol0(b""), Ok((&b""[..], &b""[..])));
-        assert_eq!(space_or_eol0(b" "), Ok((&b""[..], &b" "[..])));
-        assert_eq!(space_or_eol0(b"   "), Ok((&b""[..], &b"   "[..])));
-        assert_eq!(space_or_eol0(b"  a"), Ok((&b"a"[..], &b"  "[..])));
-        assert_eq!(space_or_eol0(b"a  "), Ok((&b"a  "[..], &b""[..])));
-        assert_eq!(space_or_eol0(b"\n"), Ok((&b""[..], &b"\n"[..])));
-        assert_eq!(space_or_eol0(b"\n\n\n"), Ok((&b""[..], &b"\n\n\n"[..])));
-        assert_eq!(space_or_eol0(b"\n\r\n"), Ok((&b""[..], &b"\n\r\n"[..])));
-        // Unfortunately <LF> alone is not handled well, but we assume this needs to be ignored too
-        assert_eq!(
-            space_or_eol0(b"\n\r\r\r\n"),
-            Ok((&b""[..], &b"\n\r\r\r\n"[..]))
-        );
-        assert_eq!(space_or_eol0(b"  \n"), Ok((&b""[..], &b"  \n"[..])));
-        assert_eq!(space_or_eol0(b"  \n   "), Ok((&b""[..], &b"  \n   "[..])));
-        assert_eq!(
-            space_or_eol0(b"  \n   \r\n"),
-            Ok((&b""[..], &b"  \n   \r\n"[..]))
-        );
-        assert_eq!(
-            space_or_eol0(b"  \n   \r\n "),
-            Ok((&b""[..], &b"  \n   \r\n "[..]))
-        );
-        assert_eq!(space_or_eol0(b"  \nsa"), Ok((&b"sa"[..], &b"  \n"[..])));
-        assert_eq!(
-            space_or_eol0(b"  \n  \r\nsa"),
-            Ok((&b"sa"[..], &b"  \n  \r\n"[..]))
-        );
-    }
-
-    #[test]
     fn test_read_cmd() {
         assert_eq!(
             read_line(b"0 this doesn't matter"),
@@ -1613,6 +1582,38 @@ mod tests {
                 Command::Bfc(BfcCommand::Clip(Some(Winding::Ccw))),
                 Command::Bfc(BfcCommand::NoClip),
                 Command::Bfc(BfcCommand::InvertNext)
+            ],
+            parse_raw(ldr_content).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_incomplete_tri_uvs() {
+        // Studio 2.0/ldraw/parts/s/2528s01.dat
+        let ldr_content = b"3 16 16.3651 -0.134918 2 18 -1 2 16.382 -4.12189 2 11.9744 -8.33964 2
+        4 16 8.01075 -14.6828 2 11.9744 -8.33964 2 11.3035 -13 2 8.99 -16.463 2
+        ";
+        assert_eq!(
+            vec![
+                Command::Triangle(TriangleCmd {
+                    color: 16,
+                    vertices: [
+                        vec3(16.3651, -0.134918, 2.0),
+                        vec3(18.0, -1.0, 2.0),
+                        vec3(16.382, -4.12189, 2.0)
+                    ],
+                    uvs: None
+                }),
+                Command::Quad(QuadCmd {
+                    color: 16,
+                    vertices: [
+                        vec3(8.01075, -14.6828, 2.0),
+                        vec3(11.9744, -8.33964, 2.0),
+                        vec3(11.3035, -13.0, 2.0),
+                        vec3(8.99, -16.463, 2.0)
+                    ],
+                    uvs: None
+                }),
             ],
             parse_raw(ldr_content).unwrap()
         );
