@@ -640,7 +640,6 @@ fn sp(i: &[u8]) -> IResult<&[u8], &[u8]> {
 // "The line type of a line is the first number on the line."
 // "If the line type of the command is invalid, the line is ignored."
 fn read_line(i: &[u8]) -> IResult<&[u8], Command> {
-    dbg!(String::from_utf8(i.to_vec()).unwrap());
     let (i, cmd_id) = read_cmd_id_str(i)?;
     let (i, cmd) = match cmd_id {
         b"0" => meta_cmd(i),
