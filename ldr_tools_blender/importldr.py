@@ -288,7 +288,6 @@ def create_colored_mesh_from_geometry(
     if geometry.has_grainy_slopes:
         # Get custom normals now that everything has been initialized.
         # This won't include any object transforms.
-        # mesh.calc_normals_split()
         loop_normals = np.zeros(len(mesh.loops) * 3)
         mesh.loops.foreach_get("normal", loop_normals)
 

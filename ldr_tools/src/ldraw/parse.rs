@@ -6,7 +6,7 @@ use glam::{Vec2, Vec3};
 use nom::{
     branch::alt,
     bytes::complete::{tag, tag_no_case, take_while1, take_while_m_n},
-    character::complete::digit1,
+    character::{complete::digit1, is_bin_digit},
     combinator::{complete, map, map_res, opt},
     error::ErrorKind,
     multi::separated_list1,
@@ -33,6 +33,7 @@ pub fn parse_raw(ldr_content: &[u8]) -> Result<Vec<Command>, Error> {
         .filter(|line| !line.iter().all(|b| is_space(*b)))
         .map(|line| {
             // TODO: What to set for the error message here?
+            // TODO: Add line number or line that failed to parse?
             read_line(line)
                 .map_err(|e| Error::Parse(ParseError::new_from_nom("", &e)))
                 .map(|(_, cmd)| cmd)
@@ -400,7 +401,15 @@ fn v3(i: &[u8]) -> IResult<&[u8], Vec3> {
 }
 
 fn color_id(i: &[u8]) -> IResult<&[u8], u32> {
-    map_res(map_res(digit1, str::from_utf8), str::parse::<u32>).parse(i)
+    // Some older files have hex colors for some reason.
+    map_res(
+        map_res(
+            take_while1(|c| is_hex_digit(c) || is_bin_digit(c) || c == b'x' || c == b'X'),
+            str::from_utf8,
+        ),
+        |s| str::parse::<u32>(s).or_else(|_| u32::from_str_radix(s.trim_start_matches("0x"), 16)),
+    )
+    .parse(i)
 }
 
 fn filename(i: &[u8]) -> IResult<&[u8], &str> {
@@ -662,9 +671,14 @@ mod tests {
 
     #[test]
     fn test_color_id() {
-        assert_eq!(color_id(b""), Err(nom_error(&b""[..], ErrorKind::Digit)));
+        assert_eq!(
+            color_id(b""),
+            Err(nom_error(&b""[..], ErrorKind::TakeWhile1))
+        );
         assert_eq!(color_id(b"1"), Ok((&b""[..], 1)));
         assert_eq!(color_id(b"16 "), Ok((&b" "[..], 16)));
+        // Studio 2.0/ldraw/parts/973ps6.dat
+        assert_eq!(color_id(b"0x2995220"), Ok((&b""[..], 0x2995220)));
     }
 
     #[test]
@@ -1614,6 +1628,25 @@ mod tests {
                     uvs: None
                 }),
             ],
+            parse_raw(ldr_content).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_quad_cmd_hex_color() {
+        // Studio 2.0/ldraw/parts/973ps6.dat
+        let ldr_content = b"4 0x2995220 2.39 2.71 -10 1.74 2.94 -10 1.51 12.04 -10 3.51 8.62 -10";
+        assert_eq!(
+            vec![Command::Quad(QuadCmd {
+                color: 0x2995220,
+                vertices: [
+                    vec3(2.39, 2.71, -10.0),
+                    vec3(1.74, 2.94, -10.0),
+                    vec3(1.51, 12.04, -10.0),
+                    vec3(3.51, 8.62, -10.0)
+                ],
+                uvs: None
+            })],
             parse_raw(ldr_content).unwrap()
         );
     }
