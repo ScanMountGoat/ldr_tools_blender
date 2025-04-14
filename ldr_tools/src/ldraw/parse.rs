@@ -32,10 +32,14 @@ pub fn parse_raw(ldr_content: &[u8]) -> Result<Vec<Command>, Error> {
         .split(|b| is_cr_or_lf(*b))
         .filter(|line| !line.iter().all(|b| is_space(*b)))
         .map(|line| {
-            // TODO: What to set for the error message here?
-            // TODO: Add line number or line that failed to parse?
             read_line(line)
-                .map_err(|e| Error::Parse(ParseError::new_from_nom("", &e)))
+                .map_err(|e| {
+                    Error::Parse(ParseError::new_from_nom(
+                        "",
+                        String::from_utf8_lossy(line).to_string(),
+                        &e,
+                    ))
+                })
                 .map(|(_, cmd)| cmd)
         })
         .collect()
@@ -512,15 +516,26 @@ fn quad_cmd(i: &[u8]) -> IResult<&[u8], Command> {
 fn opt_line_cmd(i: &[u8]) -> IResult<&[u8], Command> {
     let (i, color) = color_id(i)?;
     let (i, _) = sp(i)?;
-    let (i, (vert1, _, vert2, _, vert3, _, vert4)) = (v3, sp, v3, sp, v3, sp, v3).parse(i)?;
+    let (i, (vert1, _, vert2)) = (v3, sp, v3).parse(i)?;
     let (i, _) = space0(i)?;
+
+    // Control points aren't optional in the LDraw spec.
+    // Parse as optional to support Bricklink Studio files.
+    let (i, controls) = opt(complete(|i| {
+        let (i, (control1, _, control2)) = (v3, sp, v3).parse(i)?;
+
+        Ok((i, (control1, control2)))
+    }))
+    .parse(i)?;
+
+    let (control1, control2) = controls.unwrap_or_default();
 
     Ok((
         i,
         Command::OptLine(OptLineCmd {
             color,
             vertices: [vert1, vert2],
-            control_points: [vert3, vert4],
+            control_points: [control1, control2],
         }),
     ))
 }
@@ -1155,10 +1170,10 @@ mod tests {
 
     #[test]
     fn test_vec3() {
-        assert_eq!(v3(b"0 0 0"), Ok((&b""[..], Vec3::new(0.0, 0.0, 0.0))));
-        assert_eq!(v3(b"0 0 0 1"), Ok((&b" 1"[..], Vec3::new(0.0, 0.0, 0.0))));
-        assert_eq!(v3(b"2 5 -7"), Ok((&b""[..], Vec3::new(2.0, 5.0, -7.0))));
-        assert_eq!(v3(b"2.3 5 -7.4"), Ok((&b""[..], Vec3::new(2.3, 5.0, -7.4))));
+        assert_eq!(v3(b"0 0 0"), Ok((&b""[..], vec3(0.0, 0.0, 0.0))));
+        assert_eq!(v3(b"0 0 0 1"), Ok((&b" 1"[..], vec3(0.0, 0.0, 0.0))));
+        assert_eq!(v3(b"2 5 -7"), Ok((&b""[..], vec3(2.0, 5.0, -7.0))));
+        assert_eq!(v3(b"2.3 5 -7.4"), Ok((&b""[..], vec3(2.3, 5.0, -7.4))));
     }
 
     #[test]
@@ -1289,10 +1304,10 @@ mod tests {
                 Command::SubFileRef(SubFileRefCmd {
                     color: 16,
                     transform: Transform {
-                        pos: Vec3::new(0.0, 0.0, 0.0),
-                        row0: Vec3::new(1.0, 0.0, 0.0),
-                        row1: Vec3::new(0.0, 1.0, 0.0),
-                        row2: Vec3::new(0.0, 0.0, 1.0),
+                        pos: vec3(0.0, 0.0, 0.0),
+                        row0: vec3(1.0, 0.0, 0.0),
+                        row1: vec3(0.0, 1.0, 0.0),
+                        row2: vec3(0.0, 0.0, 1.0),
                     },
                     file: "aaaaaaddd".to_string(),
                 })
@@ -1328,7 +1343,7 @@ mod tests {
                 &b""[..],
                 Command::Line(LineCmd {
                     color: 16,
-                    vertices: [Vec3::new(1.0, 1.0, 0.0), Vec3::new(0.9239, 1.0, 0.3827)],
+                    vertices: [vec3(1.0, 1.0, 0.0), vec3(0.9239, 1.0, 0.3827)],
                 })
             ))
         );
@@ -1343,9 +1358,9 @@ mod tests {
                 Command::Triangle(TriangleCmd {
                     color: 16,
                     vertices: [
-                        Vec3::new(1.0, 1.0, 0.0),
-                        Vec3::new(0.9239, 1.0, 0.3827),
-                        Vec3::new(0.9239, 0.0, 0.3827),
+                        vec3(1.0, 1.0, 0.0),
+                        vec3(0.9239, 1.0, 0.3827),
+                        vec3(0.9239, 0.0, 0.3827),
                     ],
                     uvs: None,
                 })
@@ -1359,9 +1374,9 @@ mod tests {
                 Command::Triangle(TriangleCmd {
                     color: 16,
                     vertices: [
-                        Vec3::new(1.0, 1.0, 0.0),
-                        Vec3::new(0.9239, 1.0, 0.3827),
-                        Vec3::new(0.9239, 0.0, 0.3827),
+                        vec3(1.0, 1.0, 0.0),
+                        vec3(0.9239, 1.0, 0.3827),
+                        vec3(0.9239, 0.0, 0.3827),
                     ],
                     uvs: None,
                 })
@@ -1378,10 +1393,10 @@ mod tests {
                 Command::Quad(QuadCmd {
                     color: 16,
                     vertices: [
-                        Vec3::new(1.0, 1.0, 0.0),
-                        Vec3::new(0.9239, 1.0, 0.3827),
-                        Vec3::new(0.9239, 0.0, 0.3827),
-                        Vec3::new(1.0, 0.0, 0.0),
+                        vec3(1.0, 1.0, 0.0),
+                        vec3(0.9239, 1.0, 0.3827),
+                        vec3(0.9239, 0.0, 0.3827),
+                        vec3(1.0, 0.0, 0.0),
                     ],
                     uvs: None,
                 })
@@ -1398,15 +1413,11 @@ mod tests {
                 Command::Triangle(TriangleCmd {
                     color: 16,
                     vertices: [
-                        Vec3::new(-1.0, 0.0, 1.0),
-                        Vec3::new(-1.0, 0.0, -1.0),
-                        Vec3::new(1.0, 0.0, -1.0),
+                        vec3(-1.0, 0.0, 1.0),
+                        vec3(-1.0, 0.0, -1.0),
+                        vec3(1.0, 0.0, -1.0),
                     ],
-                    uvs: Some([
-                        Vec2::new(0.0, 1.0),
-                        Vec2::new(0.0, 0.0),
-                        Vec2::new(1.0, 0.0),
-                    ]),
+                    uvs: Some([vec2(0.0, 1.0), vec2(0.0, 0.0), vec2(1.0, 0.0),]),
                 })
             ))
         );
@@ -1421,16 +1432,16 @@ mod tests {
                 Command::Quad(QuadCmd {
                     color: 16,
                     vertices: [
-                        Vec3::new(-1.0, 0.0, 1.0),
-                        Vec3::new(-1.0, 0.0, -1.0),
-                        Vec3::new(1.0, 0.0, -1.0),
-                        Vec3::new(1.0, 1.0, -1.0),
+                        vec3(-1.0, 0.0, 1.0),
+                        vec3(-1.0, 0.0, -1.0),
+                        vec3(1.0, 0.0, -1.0),
+                        vec3(1.0, 1.0, -1.0),
                     ],
                     uvs: Some([
-                        Vec2::new(0.0, 1.0),
-                        Vec2::new(0.0, 0.0),
-                        Vec2::new(1.0, 0.0),
-                        Vec2::new(1.0, 1.0),
+                        vec2(0.0, 1.0),
+                        vec2(0.0, 0.0),
+                        vec2(1.0, 0.0),
+                        vec2(1.0, 1.0),
                     ]),
                 })
             ))
@@ -1445,8 +1456,23 @@ mod tests {
                 &b""[..],
                 Command::OptLine(OptLineCmd {
                     color: 16,
-                    vertices: [Vec3::new(1.0, 1.0, 0.0), Vec3::new(0.9239, 1.0, 0.3827)],
-                    control_points: [Vec3::new(0.9239, 0.0, 0.3827), Vec3::new(1.0, 0.0, 0.0)],
+                    vertices: [vec3(1.0, 1.0, 0.0), vec3(0.9239, 1.0, 0.3827)],
+                    control_points: [vec3(0.9239, 0.0, 0.3827), vec3(1.0, 0.0, 0.0)],
+                })
+            ))
+        );
+    }
+
+    #[test]
+    fn test_read_studio_opt_line_cmd() {
+        assert_eq!(
+            read_line(b"5 24 2.475 5.763 30.000 2.517 6.319 34.679"),
+            Ok((
+                &b""[..],
+                Command::OptLine(OptLineCmd {
+                    color: 24,
+                    vertices: [vec3(2.475, 5.763, 30.0), vec3(2.517, 6.319, 34.679)],
+                    control_points: [vec3(0.0, 0.0, 0.0), vec3(0.0, 0.0, 0.0)],
                 })
             ))
         );
@@ -1461,10 +1487,10 @@ mod tests {
                 Command::SubFileRef(SubFileRefCmd {
                     color: 16,
                     transform: Transform {
-                        pos: Vec3::new(0.0, 0.0, 0.0),
-                        row0: Vec3::new(1.0, 0.0, 0.0),
-                        row1: Vec3::new(0.0, 1.0, 0.0),
-                        row2: Vec3::new(0.0, 0.0, 1.0),
+                        pos: vec3(0.0, 0.0, 0.0),
+                        row0: vec3(1.0, 0.0, 0.0),
+                        row1: vec3(0.0, 1.0, 0.0),
+                        row2: vec3(0.0, 0.0, 1.0),
                     },
                     file: "aa/aaaaddd".to_string(),
                 })

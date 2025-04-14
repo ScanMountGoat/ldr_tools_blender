@@ -19,6 +19,9 @@ pub struct ParseError {
     /// Filename of the sub-file reference, generally relative to some canonical catalog path(s).
     pub filename: String,
 
+    /// The line of the LDraw file that failed to parse.
+    pub line: String,
+
     /// Optional underlying error raised by the internal parser.
     pub parse_error: Option<Box<dyn std::error::Error>>,
 }
@@ -35,18 +38,24 @@ pub struct ResolveError {
 
 impl ParseError {
     /// Create a [`ParseError`] that stems from an arbitrary error of an underlying parser.
-    pub fn new(filename: &str, err: impl Into<Box<dyn std::error::Error>>) -> Self {
+    pub fn new(filename: &str, line: String, err: impl Into<Box<dyn std::error::Error>>) -> Self {
         Self {
             filename: filename.to_string(),
+            line,
             parse_error: Some(err.into()),
         }
     }
 
     /// Create a [`ParseError`] that stems from a [`nom`] parsing error, capturing the [`nom::error::ErrorKind`]
     /// from the underlying parser which failed.
-    pub fn new_from_nom(filename: &str, err: &nom::Err<nom::error::Error<&[u8]>>) -> Self {
+    pub fn new_from_nom(
+        filename: &str,
+        line: String,
+        err: &nom::Err<nom::error::Error<&[u8]>>,
+    ) -> Self {
         Self {
             filename: filename.to_string(),
+            line,
             parse_error: match err {
                 nom::Err::Incomplete(_) => None,
                 nom::Err::Error(e) => {
@@ -85,14 +94,19 @@ impl fmt::Display for Error {
         match self {
             Error::Parse(ParseError {
                 filename,
+                line,
                 parse_error,
-            }) => write!(f, "parse error in file '{}': {:?}", filename, parse_error),
+            }) => write!(
+                f,
+                "parse error in file {:?} while processing {:?}: {:?}",
+                filename, line, parse_error
+            ),
             Error::Resolve(ResolveError {
                 filename,
                 resolve_error,
             }) => write!(
                 f,
-                "resolve error for filename '{}': {:?}",
+                "resolve error for filename {:?}: {:?}",
                 filename, resolve_error
             ),
         }
@@ -135,6 +149,7 @@ mod tests {
     fn get_error() -> Result<u32, Error> {
         let underlying = Error::Parse(ParseError {
             filename: "low_level.ldr".to_string(),
+            line: "abc".to_string(),
             parse_error: None,
         });
         Err(Error::Resolve(ResolveError::new(
@@ -157,7 +172,7 @@ mod tests {
             &b""[..],
             nom::error::ErrorKind::Alpha,
         ));
-        let parse_error = ParseError::new_from_nom("file", &nom_error);
+        let parse_error = ParseError::new_from_nom("file", String::new(), &nom_error);
         assert_eq!(parse_error.filename, "file");
         assert!(parse_error.parse_error.is_some());
     }
@@ -179,7 +194,7 @@ mod tests {
             _ => panic!("Unexpected error type."),
         }
 
-        let parse_error = ParseError::new("file", error);
+        let parse_error = ParseError::new("file", String::new(), error);
         let error: Error = parse_error.into();
         eprintln!("err: {}", error);
         match &error {
