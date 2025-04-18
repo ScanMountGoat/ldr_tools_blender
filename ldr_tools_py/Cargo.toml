@@ -4,12 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-pyo3 = { version = "0.23.3", features = ["extension-module", "py-clone"] }
-numpy = "0.23.0"
+pyo3 = { version = "0.24.1", features = ["extension-module", "py-clone"] }
+numpy = "0.24.0"
 ldr_tools = { path = "../ldr_tools" }
 
 [build-dependencies]
-pyo3-build-config = "0.23.3"
+pyo3-build-config = "0.24.1"
 
 [lib]
 name = "ldr_tools_py"
