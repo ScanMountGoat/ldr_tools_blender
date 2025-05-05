@@ -1,5 +1,6 @@
 use crate::ldraw::{BfcCommand, Command, Winding};
 use glam::{Mat4, Vec2, Vec3};
+use log::warn;
 use rstar::{primitives::GeomWithData, RTree};
 
 use crate::{
@@ -257,7 +258,7 @@ fn append_geometry(
 
     if active_textures.len() > 1 {
         // TODO: at least narrow it down to one that intersects with the face being operated on
-        println!("warning: multiple active textures. ignoring all but one");
+        warn!("Detected multiple active textures");
     }
 
     for cmd in &source_file.cmds {
@@ -275,7 +276,7 @@ fn append_geometry(
 
                     if tex_info.path.is_empty() {
                         if active_textures.len() > 1 {
-                            println!("warning: multiple active textures. ignoring all but one");
+                            warn!("Detected multiple active textures");
                         }
                         active_textures.push(tex_info);
                     } else {

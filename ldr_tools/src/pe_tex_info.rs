@@ -2,6 +2,7 @@
 
 use crate::LDrawGeometry;
 use glam::{Mat4, Vec2, Vec3, Vec3Swizzles};
+use log::error;
 
 #[derive(Debug, PartialEq)]
 pub struct LDrawTextureInfo {
@@ -110,7 +111,7 @@ impl PendingStudioTexture {
 
         if tex_info.textures.len() >= u8::MAX as usize {
             // Why would a single part ever have 256 or more different textures?
-            eprintln!("Texture limit exceeded!");
+            error!("Texture count {} exceeds limit", tex_info.textures.len());
             return None;
         }
 

@@ -8,6 +8,7 @@ use std::{
 use geometry::create_geometry;
 use glam::{vec4, Mat4, Vec3};
 use ldraw::{Command, FileRefResolver, ResolveError};
+use log::error;
 use rayon::prelude::*;
 use zip::ZipArchive;
 
@@ -92,7 +93,7 @@ impl FileRefResolver for DiskResolver {
             Some(contents) => Ok(contents),
             None => {
                 // TODO: Is there a better way to allow partial imports with resolve errors?
-                println!("Error resolving {filename:?}");
+                error!("Unable to resolve {filename:?}");
                 Ok(Vec::new())
             }
         }

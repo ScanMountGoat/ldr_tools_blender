@@ -8,6 +8,7 @@ from bpy_extras.io_utils import ImportHelper
 import typing
 from typing import Any, Self
 import platform
+import logging
 
 from .importldr import import_ldraw
 
@@ -252,6 +253,8 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         row.operator("additional_paths.delete_item", text="Remove Path")
 
     def execute(self, context: bpy.types.Context) -> Status:
+        init_logging()
+
         # Update from the UI values to support saving them to disk later.
         ImportOperator.preferences.ldraw_path = self.ldraw_path
         ImportOperator.preferences.instance_type = self.instance_type
@@ -306,3 +309,9 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         settings.weld_vertices = True
 
         return settings
+
+
+def init_logging():
+    # Log any errors from Rust.
+    log_fmt = "%(levelname)s %(name)s %(filename)s:%(lineno)d %(message)s"
+    logging.basicConfig(format=log_fmt, level=logging.INFO)
