@@ -51,6 +51,7 @@ mod ldr_tools_py {
 
     use std::collections::HashMap;
 
+    use log::info;
     use numpy::PyArray3;
     use numpy::{IntoPyArray, PyArray1, PyArray2, PyArrayMethods};
     use pyo3::types::PyBytes;
@@ -285,7 +286,7 @@ mod ldr_tools_py {
             .into_iter()
             .map(|(k, v)| (k, LDrawGeometry::from_geometry(py, v)))
             .collect();
-        println!("load_file: {:?}", start.elapsed());
+        info!("load_file: {:?}", start.elapsed());
 
         Ok(LDrawScene {
             root_node: scene.root_node.into(),
@@ -333,7 +334,7 @@ mod ldr_tools_py {
             })
             .collect();
 
-        println!("load_file_instanced: {:?}", start.elapsed());
+        info!("load_file_instanced: {:?}", start.elapsed());
 
         Ok(LDrawSceneInstanced {
             main_model_name: scene.main_model_name,
@@ -370,7 +371,7 @@ mod ldr_tools_py {
             .map(|(k, v)| (k, PointInstances::from_instances(py, v)))
             .collect();
 
-        println!("load_file_instanced_points: {:?}", start.elapsed());
+        info!("load_file_instanced_points: {:?}", start.elapsed());
 
         Ok(LDrawSceneInstancedPoints {
             main_model_name: scene.main_model_name,
