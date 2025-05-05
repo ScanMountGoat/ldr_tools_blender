@@ -297,7 +297,7 @@ def create_colored_mesh_from_geometry(
     return mesh
 
 
-def load_png(data: bytes, name: str = "img") -> bpy.types.Image:
+def load_png(data: bytes, name: str) -> bpy.types.Image:
     # TODO: pass image names up from the Rust side
     w, h = struct.unpack(b">LL", data[16:24])
     img = bpy.data.images.new(name, w, h)
@@ -324,7 +324,7 @@ def assign_materials(
         return
 
     if tex_info := geometry.texture_info:
-        images = [load_png(t) for t in tex_info.textures]
+        images = [load_png(t, f"img{i}") for i, t in enumerate(tex_info.textures)]
 
     if len(geometry.face_colors) > 1:
         assert len(geometry.face_colors) == len(mesh.polygons)

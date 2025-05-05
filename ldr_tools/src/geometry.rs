@@ -395,7 +395,8 @@ fn append_geometry(
                     if texture.path.first() == Some(&tex_path_index) {
                         let mut texture = texture.clone();
                         texture.path.remove(0);
-                        child_textures.push(texture);
+                        // Set the new texture as the current one.
+                        child_textures.insert(0, texture);
                     }
                 }
 
