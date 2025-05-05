@@ -45,27 +45,22 @@ pub fn project_texture<const N: usize>(
 ) -> Option<TextureMap<N>> {
     let texture_index = texture.index;
 
-    if let Some(uvs) = uvs {
-        return Some(TextureMap { texture_index, uvs });
-    }
+    // The texture is drawn on this face if there are uvs or a projection matrix.
+    let uvs = uvs.or_else(|| {
+        let tex_location = texture.location?;
 
-    // if there are neither vertex UVs on the face
-    // nor a projection matrix on the texture,
-    // then the texture is not drawn on this face
-    let tex_location = texture.location?;
+        let (matrix, box_extents) = init_texture_transform(tex_location.transform, transform);
+        let inverse = matrix.inverse();
+        let vertices = vertices.map(|v| inverse.transform_point3(v));
 
-    let (matrix, box_extents) = init_texture_transform(tex_location.transform, transform);
-    let inverse = matrix.inverse();
-    let vertices = vertices.map(|v| inverse.transform_point3(v));
+        intersect_poly_box(&vertices, box_extents).then(|| {
+            let min = tex_location.point_min;
+            let diff = tex_location.point_max - tex_location.point_min;
 
-    if !intersect_poly_box(&vertices, box_extents) {
-        return None;
-    }
+            vertices.map(|v| (v.xz() - min) / diff)
+        })
+    })?;
 
-    let min = tex_location.point_min;
-    let diff = tex_location.point_max - tex_location.point_min;
-
-    let uvs = vertices.map(|v| (v.xz() - min) / diff);
     Some(TextureMap { texture_index, uvs })
 }
 

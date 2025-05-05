@@ -511,6 +511,11 @@ pub enum Winding {
 /// Bricklink Studio texture extension
 #[derive(Debug, PartialEq, Clone)]
 pub struct PeTexPathCmd {
+    /// Indices for [SubFileRefCmd] starting from the current file to assign the current [PeTexInfoCmd].
+    ///
+    /// The paths `[0, 1]` would assign the [PeTexInfoCmd]
+    /// to `file.subfiles[0].subfiles[1]` in pseudo code.
+    /// The paths `[-1]` is a special case that assigns to the current file.  
     pub paths: Vec<i32>,
 }
 
@@ -524,6 +529,7 @@ pub struct PeTexInfoCmd {
     pub data: Vec<u8>,
 }
 
+/// Projection transform for creating texture coordinates from vertex positions.
 #[derive(Debug, PartialEq, Clone)]
 pub struct PeTexInfoTransform {
     pub transform: Transform,

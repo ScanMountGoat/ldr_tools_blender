@@ -270,6 +270,7 @@ fn append_geometry(
                 if let Some(mut tex_info) =
                     PendingStudioTexture::from_cmd(pe_tex_info, current_tex_path, geometry)
                 {
+                    // The single element [-1] refers to the current file.
                     if tex_info.path == [-1] {
                         tex_info.path.clear()
                     }
