@@ -46,6 +46,14 @@ struct GeometryContext {
     is_stud: bool,
     is_slope: bool,
     studio_textures: Vec<PendingStudioTexture>,
+    subfile_path: Vec<i32>,
+    active_texture_index: Option<usize>,
+}
+
+impl GeometryContext {
+    fn active_texture(&self) -> Option<&PendingStudioTexture> {
+        self.studio_textures.get(self.active_texture_index?)
+    }
 }
 
 struct VertexMap {
@@ -115,7 +123,9 @@ pub fn create_geometry(
         inverted: false,
         is_stud: is_stud(name),
         is_slope: is_slope_piece(name),
-        studio_textures: vec![],
+        studio_textures: Vec::new(),
+        subfile_path: Vec::new(),
+        active_texture_index: None,
     };
 
     let mut vertex_map = VertexMap::new();
@@ -246,43 +256,33 @@ fn append_geometry(
 
     let mut invert_next = false;
 
-    let mut tex_path_index = 0;
-    let mut current_tex_path: &[i32] = &[];
+    let mut subfile_index = 0;
 
-    let (mut active_textures, pending_textures) = ctx
-        .studio_textures
-        .drain(..)
-        .partition(|t| t.path.is_empty());
-
-    ctx.studio_textures = pending_textures;
-
-    if active_textures.len() > 1 {
-        // TODO: at least narrow it down to one that intersects with the face being operated on
-        warn!("Detected multiple active textures");
-    }
+    // Track the subfile paths for the next PE_TEX_INFO command.
+    let mut current_tex_path = Vec::new();
 
     for cmd in &source_file.cmds {
         match cmd {
             Command::PeTexPath(pe_tex_path) => {
-                current_tex_path = &pe_tex_path.paths;
+                // Tex paths are relative to the current file.
+                // The single element [-1] refers to the current file.
+                current_tex_path = ctx.subfile_path.clone();
+                if pe_tex_path.paths != [-1] {
+                    current_tex_path.extend_from_slice(&pe_tex_path.paths);
+                }
             }
             Command::PeTexInfo(pe_tex_info) => {
-                if let Some(mut tex_info) =
-                    PendingStudioTexture::from_cmd(pe_tex_info, current_tex_path, geometry)
+                if let Some(tex_info) =
+                    PendingStudioTexture::from_cmd(pe_tex_info, &current_tex_path, geometry)
                 {
-                    // The single element [-1] refers to the current file.
-                    if tex_info.path == [-1] {
-                        tex_info.path.clear()
-                    }
+                    ctx.studio_textures.push(tex_info);
 
-                    if tex_info.path.is_empty() {
-                        if active_textures.len() > 1 {
-                            warn!("Detected multiple active textures");
-                        }
-                        active_textures.push(tex_info);
-                    } else {
-                        ctx.studio_textures.push(tex_info);
-                    }
+                    // Check what texture will be assigned starting with this subfile.
+                    ctx.active_texture_index = ctx
+                        .studio_textures
+                        .iter()
+                        .position(|t| t.path == current_tex_path)
+                        .or(ctx.active_texture_index);
                 }
             }
             Command::Bfc(bfc_cmd) => {
@@ -315,7 +315,7 @@ fn append_geometry(
                     vertex_map,
                     color,
                     settings.weld_vertices,
-                    active_textures.first(),
+                    ctx.active_texture(),
                 );
             }
             Command::Quad(q) => {
@@ -333,7 +333,7 @@ fn append_geometry(
                         vertex_map,
                         color,
                         settings.weld_vertices,
-                        active_textures.first(),
+                        ctx.active_texture(),
                     );
                     add_triangle_face(
                         geometry,
@@ -344,7 +344,7 @@ fn append_geometry(
                         vertex_map,
                         color,
                         settings.weld_vertices,
-                        active_textures.first(),
+                        ctx.active_texture(),
                     );
                 } else {
                     add_face(
@@ -355,7 +355,7 @@ fn append_geometry(
                         invert_winding(current_winding, current_inverted),
                         vertex_map,
                         settings.weld_vertices,
-                        active_textures.first(),
+                        ctx.active_texture(),
                     );
 
                     let face_color = replace_color(q.color, ctx.current_color);
@@ -391,15 +391,15 @@ fn append_geometry(
                     replace_color(subfile_cmd.color, ctx.current_color)
                 };
 
-                let mut child_textures = active_textures.clone();
-                for texture in &ctx.studio_textures {
-                    if texture.path.first() == Some(&tex_path_index) {
-                        let mut texture = texture.clone();
-                        texture.path.remove(0);
-                        // Set the new texture as the current one.
-                        child_textures.insert(0, texture);
-                    }
-                }
+                let mut subfile_path = ctx.subfile_path.clone();
+                subfile_path.push(subfile_index);
+
+                // Check what texture will be assigned starting with this subfile.
+                let active_texture_index = ctx
+                    .studio_textures
+                    .iter()
+                    .position(|t| t.path == subfile_path)
+                    .or(ctx.active_texture_index);
 
                 // The determinant is checked in each file.
                 // It should not be included in the child's context.
@@ -413,7 +413,9 @@ fn append_geometry(
                     },
                     is_stud,
                     is_slope,
-                    studio_textures: child_textures,
+                    studio_textures: ctx.studio_textures.clone(),
+                    subfile_path,
+                    active_texture_index,
                 };
 
                 // Don't invert additional subfile reference commands.
@@ -426,7 +428,7 @@ fn append_geometry(
                     settings,
                 );
 
-                tex_path_index += 1;
+                subfile_index += 1;
             }
             _ => {}
         }
