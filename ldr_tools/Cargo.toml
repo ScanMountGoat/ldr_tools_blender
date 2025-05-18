@@ -4,13 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-glam = "0.29.2"
+glam = "0.30.3"
 rstar = "0.12.2"
 rayon = "1.7.0"
 phf =  { version = "0.11.1", features = ["macros"] }
 tracing = "0.1"
 base64 = "0.22.1"
-zip = "2.2.0"
+zip = "3.0.0"
 nom = "8.0.0"
 log = "0.4"
 
