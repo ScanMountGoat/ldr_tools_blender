@@ -154,9 +154,15 @@ pub fn create_geometry(
             &geometry.face_sizes,
             &geometry.edge_line_indices,
         );
-        // The edge indices are still valid since splitting only adds new vertices.
         geometry.vertices = split_positions;
         geometry.vertex_indices = split_indices;
+
+        // The edge indices are no longer valid since splitting can change vertices.
+        vertex_map = VertexMap::new();
+        for (i, v) in geometry.vertices.iter().enumerate() {
+            vertex_map.insert(i as u32, v.to_array());
+        }
+        geometry.edge_line_indices = edge_indices(&hard_edges, &vertex_map);
     }
 
     // Optimize the case where all face colors are the same.
