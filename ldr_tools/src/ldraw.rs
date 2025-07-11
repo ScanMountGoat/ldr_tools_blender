@@ -110,11 +110,11 @@ pub fn parse<P: AsRef<Path>, R: FileRefResolver>(
     // Recursively load files referenced by the root file.
     while let Some(file) = stack.pop() {
         let filename = &file.filename;
-        debug!("Processing sub-file: '{}'", filename);
+        debug!("Processing sub-file: '{filename}'");
         match source_map.get(filename) {
-            Some(_) => trace!("Already parsed; reusing sub-file: {}", filename),
+            Some(_) => trace!("Already parsed; reusing sub-file: {filename}"),
             None => {
-                trace!("Not yet parsed; parsing sub-file: {}", filename);
+                trace!("Not yet parsed; parsing sub-file: {filename}");
                 // Normalize file references to subfiles.
                 let subfile_ref = SubFileRef::new(filename);
                 load_subfile(subfile_ref, resolver, source_map, &mut stack)?;

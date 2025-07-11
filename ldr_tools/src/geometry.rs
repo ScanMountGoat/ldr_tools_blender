@@ -398,8 +398,6 @@ fn append_geometry(
 
                 let active_texture_index = find_active_texture_index(&ctx, &subfile_path);
 
-                // println!("{:?}, {:?}", &active_texture_index, &subfile_path);
-
                 // The determinant is checked in each file.
                 // It should not be included in the child's context.
                 let child_ctx = GeometryContext {
@@ -643,7 +641,7 @@ mod tests {
         let source_file = source_map.get(&main_model_name).unwrap();
 
         let geometry = create_geometry(
-            &source_file,
+            source_file,
             &source_map,
             "",
             7,
@@ -682,7 +680,7 @@ mod tests {
         let source_file = source_map.get(&main_model_name).unwrap();
 
         let geometry = create_geometry(
-            &source_file,
+            source_file,
             &source_map,
             "",
             16,
@@ -714,7 +712,7 @@ mod tests {
         let source_file = source_map.get(&main_model_name).unwrap();
 
         let geometry = create_geometry(
-            &source_file,
+            source_file,
             &source_map,
             "",
             16,
@@ -757,7 +755,7 @@ mod tests {
         let source_file = source_map.get(&main_model_name).unwrap();
 
         let geometry = create_geometry(
-            &source_file,
+            source_file,
             &source_map,
             "",
             16,

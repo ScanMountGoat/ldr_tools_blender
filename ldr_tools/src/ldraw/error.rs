@@ -98,16 +98,14 @@ impl fmt::Display for Error {
                 parse_error,
             }) => write!(
                 f,
-                "parse error in file {:?} while processing {:?}: {:?}",
-                filename, line, parse_error
+                "parse error in file {filename:?} while processing {line:?}: {parse_error:?}"
             ),
             Error::Resolve(ResolveError {
                 filename,
                 resolve_error,
             }) => write!(
                 f,
-                "resolve error for filename {:?}: {:?}",
-                filename, resolve_error
+                "resolve error for filename {filename:?}: {resolve_error:?}"
             ),
         }
     }
@@ -160,9 +158,8 @@ mod tests {
 
     #[test]
     fn test_error() {
-        match get_error() {
-            Err(e) => eprintln!("Error: {}", e),
-            _ => {}
+        if let Err(e) = get_error() {
+            eprintln!("Error: {e}")
         };
     }
 
@@ -188,7 +185,7 @@ mod tests {
     fn test_from() {
         let resolve_error = ResolveError::new_raw("file");
         let error: Error = resolve_error.into();
-        eprintln!("err: {}", error);
+        eprintln!("err: {error}");
         match &error {
             Error::Resolve(resolve_error) => assert_eq!(resolve_error.filename, "file"),
             _ => panic!("Unexpected error type."),
@@ -196,7 +193,7 @@ mod tests {
 
         let parse_error = ParseError::new("file", String::new(), error);
         let error: Error = parse_error.into();
-        eprintln!("err: {}", error);
+        eprintln!("err: {error}");
         match &error {
             Error::Parse(parse_error) => assert_eq!(parse_error.filename, "file"),
             _ => panic!("Unexpected error type."),
