@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## unreleased
+### Fixed
+* Fixed an issue where the incorrect texture would be assigned to a face in some cases.
+
 ## 0.4.9 - 2025-05-05
 ### Fixed
 * Fixed an issue where Studio models with multiple assigned textures would only load the first texture.

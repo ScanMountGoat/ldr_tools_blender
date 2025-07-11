@@ -284,11 +284,7 @@ fn append_geometry(
                     ctx.studio_textures.push(tex_info);
 
                     // Check what texture will be assigned starting with this subfile.
-                    ctx.active_texture_index = ctx
-                        .studio_textures
-                        .iter()
-                        .position(|t| t.path == current_tex_path)
-                        .or(ctx.active_texture_index);
+                    ctx.active_texture_index = find_active_texture_index(&ctx, &current_tex_path);
                 }
             }
             Command::Bfc(bfc_cmd) => {
@@ -400,12 +396,9 @@ fn append_geometry(
                 let mut subfile_path = ctx.subfile_path.clone();
                 subfile_path.push(subfile_index);
 
-                // Check what texture will be assigned starting with this subfile.
-                let active_texture_index = ctx
-                    .studio_textures
-                    .iter()
-                    .position(|t| t.path == subfile_path)
-                    .or(ctx.active_texture_index);
+                let active_texture_index = find_active_texture_index(&ctx, &subfile_path);
+
+                // println!("{:?}, {:?}", &active_texture_index, &subfile_path);
 
                 // The determinant is checked in each file.
                 // It should not be included in the child's context.
@@ -439,6 +432,27 @@ fn append_geometry(
             _ => {}
         }
     }
+}
+
+fn find_active_texture_index(ctx: &GeometryContext, subfile_path: &[i32]) -> Option<usize> {
+    // Check what texture will be assigned starting with this subfile.
+    let mut matching_textures: Vec<_> = ctx
+        .studio_textures
+        .iter()
+        .enumerate()
+        .filter_map(|(i, t)| {
+            if subfile_path.starts_with(&t.path) {
+                Some((i, &t.path))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Find the most specific texture path that this path matches.
+    // For example, PE_TEX_PATH 0 0 0 2 should take precedence over PE_TEX_PATH 0.
+    matching_textures.sort_by_key(|(_, path)| path.len());
+    matching_textures.last().map(|(i, _)| *i)
 }
 
 fn replace_studs(subfile_cmd: &crate::ldraw::SubFileRefCmd, stud_type: StudType) -> &str {
