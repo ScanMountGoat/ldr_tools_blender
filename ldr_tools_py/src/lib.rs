@@ -56,6 +56,12 @@ mod ldr_tools_py {
     use numpy::{IntoPyArray, PyArray1, PyArray2, PyArrayMethods};
     use pyo3::types::PyBytes;
 
+    #[pymodule_init]
+    fn init(_m: &Bound<'_, PyModule>) -> PyResult<()> {
+        pyo3_log::init();
+        Ok(())
+    }
+
     #[pymodule_export]
     use super::StudType;
 

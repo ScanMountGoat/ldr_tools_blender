@@ -7,6 +7,7 @@ edition = "2021"
 pyo3 = { version = "0.25.0", features = ["extension-module", "py-clone"] }
 numpy = "0.25.0"
 ldr_tools = { path = "../ldr_tools" }
+pyo3-log = "0.12.1"
 log = "0.4"
 
 [build-dependencies]
