@@ -17,3 +17,4 @@ log = "0.4"
 [dev-dependencies]
 indoc = "2"
 approx = "0.5.1"
+pretty_assertions = "1.4.1"

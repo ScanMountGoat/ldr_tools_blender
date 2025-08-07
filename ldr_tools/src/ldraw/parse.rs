@@ -336,7 +336,7 @@ fn comment(i: &[u8]) -> IResult<&[u8], Command> {
 fn meta_file(i: &[u8]) -> IResult<&[u8], Command> {
     let (i, _) = tag(&b"FILE"[..])(i)?;
     let (i, _) = sp(i)?;
-    let (i, file) = map_res(take_not_cr_or_lf, str::from_utf8).parse(i)?;
+    let (i, file) = filename(i)?;
 
     Ok((
         i,
@@ -683,6 +683,7 @@ mod tests {
 
     use glam::{vec2, vec3};
     use nom::error::ErrorKind;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn test_color_id() {
@@ -1532,6 +1533,19 @@ mod tests {
                 &b""[..],
                 Command::File(FileCmd {
                     file: "submodel".to_string(),
+                })
+            ))
+        );
+    }
+
+    #[test]
+    fn test_file_cmd_trailing_whitespace() {
+        assert_eq!(
+            read_line(b"0 FILE 1489 - car crane.ldr "),
+            Ok((
+                &b""[..],
+                Command::File(FileCmd {
+                    file: "1489 - car crane.ldr".to_string(),
                 })
             ))
         );

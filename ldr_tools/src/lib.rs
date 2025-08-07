@@ -31,6 +31,7 @@ mod normal;
 mod pe_tex_info;
 mod slope;
 
+#[derive(Debug, PartialEq)]
 pub struct LDrawNode {
     pub name: String,
     pub transform: Mat4,
@@ -142,17 +143,20 @@ impl IoFileResolver {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct LDrawScene {
     pub root_node: LDrawNode,
     pub geometry_cache: HashMap<String, LDrawGeometry>,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct LDrawSceneInstanced {
     pub main_model_name: String,
     pub geometry_world_transforms: HashMap<(String, ColorCode), Vec<Mat4>>,
     pub geometry_cache: HashMap<String, LDrawGeometry>,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct LDrawSceneInstancedPoints {
     pub main_model_name: String,
     /// Decomposed instance transforms for unique part and color.

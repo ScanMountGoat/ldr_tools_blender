@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## unreleased
 ### Fixed
 * Fixed an issue where log messages would not appear in the Blender console.
+* Fixed an issue where subfiles would not load correctly in some cases.
 
 ## 0.4.10 - 2025-07-11
 ### Fixed
