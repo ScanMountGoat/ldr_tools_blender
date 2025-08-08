@@ -253,7 +253,7 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         row.operator("additional_paths.delete_item", text="Remove Path")
 
     def execute(self, context: bpy.types.Context) -> Status:
-        init_logging()
+        init_logging(self)
 
         # Update from the UI values to support saving them to disk later.
         ImportOperator.preferences.ldraw_path = self.ldraw_path
@@ -311,7 +311,25 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         return settings
 
 
-def init_logging():
+def init_logging(operator: bpy.types.Operator):
     # Log any errors from Rust.
     log_fmt = "%(levelname)s %(name)s %(filename)s:%(lineno)d %(message)s"
     logging.basicConfig(format=log_fmt, level=logging.INFO)
+
+    # Report errors to Blender's info log.
+    handler = OperatorHandler(operator)
+    handler.setFormatter(logging.Formatter(log_fmt))
+    logging.getLogger().addHandler(handler)
+
+
+class OperatorHandler(logging.Handler):
+    def __init__(self, operator):
+        logging.Handler.__init__(self)
+        self.operator = operator
+
+    def emit(self, record):
+        message = self.format(record)
+        if record.levelno == logging.WARNING:
+            self.operator.report({"WARNING"}, message)
+        if record.levelno == logging.ERROR:
+            self.operator.report({"ERROR"}, message)

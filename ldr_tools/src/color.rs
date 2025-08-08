@@ -9,7 +9,7 @@ pub struct LDrawColor {
 
 pub fn load_color_table(ldraw_path: &str) -> HashMap<u32, LDrawColor> {
     let config_path = Path::new(ldraw_path).join("LDConfig.ldr");
-    let cmds = crate::ldraw::parse_raw(&std::fs::read(config_path).unwrap()).unwrap();
+    let cmds = crate::ldraw::parse_raw(&std::fs::read(config_path).unwrap());
 
     cmds.into_iter()
         .filter_map(|cmd| match cmd {

@@ -3,6 +3,7 @@
 
 use base64::{prelude::BASE64_STANDARD, Engine};
 use glam::{Vec2, Vec3};
+use log::error;
 use nom::{
     branch::alt,
     bytes::complete::{tag, tag_no_case, take_while1, take_while_m_n},
@@ -18,35 +19,42 @@ use std::str;
 use crate::ldraw::PeTexInfoTransform;
 
 use super::{
-    error::ParseError, Base64DataCmd, BfcCommand, CategoryCmd, Color, ColorFinish, ColourCmd,
-    Command, CommentCmd, DataCmd, Error, FileCmd, GlitterMaterial, GrainSize, KeywordsCmd, LineCmd,
-    MaterialFinish, OptLineCmd, PeTexInfoCmd, PeTexPathCmd, QuadCmd, SpeckleMaterial,
-    SubFileRefCmd, Transform, TriangleCmd, Winding,
+    Base64DataCmd, BfcCommand, CategoryCmd, Color, ColorFinish, ColourCmd, Command, CommentCmd,
+    DataCmd, FileCmd, GlitterMaterial, GrainSize, KeywordsCmd, LineCmd, MaterialFinish, OptLineCmd,
+    PeTexInfoCmd, PeTexPathCmd, QuadCmd, SpeckleMaterial, SubFileRefCmd, Transform, TriangleCmd,
+    Winding,
 };
 
-pub fn parse_raw(ldr_content: &[u8]) -> Result<Vec<Command>, Error> {
+pub fn parse_raw(ldr_content: &[u8]) -> Vec<Command> {
+    // Remove the UTF-8 byte-order mark (BOM) if present.
+    let ldr_content = strip_bom(ldr_content);
+
     // "An LDraw file consists of one command per line."
     // Some LDraw files have incorrect or incomplete commands.
     // Always advance to the next line to allow parsing to continue.
     ldr_content
         .split(|b| is_cr_or_lf(*b))
         .filter(|line| !line.iter().all(|b| is_space(*b)))
-        .map(|line| {
+        .filter_map(|line| {
             read_line(line)
-                .map_err(|e| {
-                    Error::Parse(ParseError::new_from_nom(
-                        "",
-                        String::from_utf8_lossy(line).to_string(),
-                        &e,
-                    ))
+                .inspect_err(|e| {
+                    error!(
+                        "Error parsing {:?}, {e}",
+                        String::from_utf8_lossy(line).to_string()
+                    );
                 })
                 .map(|(_, cmd)| cmd)
+                .ok()
         })
         .collect()
 }
 
 fn nom_error(i: &[u8], kind: ErrorKind) -> nom::Err<nom::error::Error<&[u8]>> {
     nom::Err::Error(nom::error::Error::new(i, kind))
+}
+
+fn strip_bom(i: &[u8]) -> &[u8] {
+    i.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(i)
 }
 
 // "Whitespace is defined as one or more spaces (#32), tabs (#9), or combination thereof."
@@ -1636,7 +1644,7 @@ mod tests {
                 Command::Bfc(BfcCommand::NoClip),
                 Command::Bfc(BfcCommand::InvertNext)
             ],
-            parse_raw(ldr_content).unwrap()
+            parse_raw(ldr_content)
         );
     }
 
@@ -1668,7 +1676,7 @@ mod tests {
                     uvs: None
                 }),
             ],
-            parse_raw(ldr_content).unwrap()
+            parse_raw(ldr_content)
         );
     }
 
@@ -1687,7 +1695,19 @@ mod tests {
                 ],
                 uvs: None
             })],
-            parse_raw(ldr_content).unwrap()
+            parse_raw(ldr_content)
+        );
+    }
+
+    #[test]
+    fn test_utf_bom() {
+        // LDraw OMR 4558-1 Metroliner
+        let ldr_content = b"\xEF\xBB\xBF0 FILE 4558 - main.ldr";
+        assert_eq!(
+            vec![Command::File(FileCmd {
+                file: "4558 - main.ldr".to_string()
+            })],
+            parse_raw(ldr_content)
         );
     }
 }

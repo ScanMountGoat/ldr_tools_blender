@@ -33,8 +33,10 @@ impl Color {
 /// Sub-file references (Line Type 1) are not resolved, and returned as [`Command::SubFileRef`].
 ///
 /// The input LDR content must comply to the LDraw standard. In particular this means:
-/// - UTF-8 encoded, without Byte Order Mark (BOM)
+/// - UTF-8 encoded
 /// - Both DOS/Windows `<CR><LF>` and Unix `<LF>` line termination accepted
+///
+/// Any lines that fail to parse will be skipped and log any parsing errors.
 ///
 /// ```rust
 /// use ldr_tools::ldraw::{parse_raw, Command, CommentCmd, LineCmd, Vec3};
@@ -47,9 +49,9 @@ impl Color {
 ///     Vec3{ x: 1.0, y: 1.0, z: 1.0 }
 ///   ]
 /// });
-/// assert_eq!(parse_raw(b"0 this is a comment\n2 16 0 0 0 1 1 1").unwrap(), vec![cmd0, cmd1]);
+/// assert_eq!(parse_raw(b"0 this is a comment\n2 16 0 0 0 1 1 1"), vec![cmd0, cmd1]);
 /// ```
-pub fn parse_raw(ldr_content: &[u8]) -> Result<Vec<Command>, Error> {
+pub fn parse_raw(ldr_content: &[u8]) -> Vec<Command> {
     parse::parse_raw(ldr_content)
 }
 
@@ -63,7 +65,7 @@ fn load_and_parse_single_file<P: AsRef<Path>, R: FileRefResolver>(
     resolver: &R,
 ) -> Result<SourceFile, Error> {
     let raw_content = resolver.resolve(filename)?;
-    let cmds = parse::parse_raw(&raw_content)?;
+    let cmds = parse::parse_raw(&raw_content);
     Ok(SourceFile { cmds })
 }
 
@@ -766,7 +768,7 @@ mod tests {
         0 !: BtMZTNfKZzyDiT3hCFy06IIFp3QH/CBMh66aBy4AAAAASUVORK5CYII=
         ";
 
-        let commands = parse_raw(ldr_contents).unwrap();
+        let commands = parse_raw(ldr_contents);
         assert_eq!(
             vec![
                             Command::File(FileCmd {
@@ -990,7 +992,7 @@ mod tests {
             vertices: [vec3(0.0, 0.0, 0.0), vec3(1.0, 1.0, 1.0)],
         });
         assert_eq!(
-            parse_raw(b"0 this is a comment\n2 16 0 0 0 1 1 1").unwrap(),
+            parse_raw(b"0 this is a comment\n2 16 0 0 0 1 1 1"),
             vec![cmd0, cmd1]
         );
 
@@ -1006,8 +1008,7 @@ mod tests {
             file: "aa/aaaaddd".to_string(),
         });
         assert_eq!(
-            parse_raw(b"\n0 this doesn't matter\n\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 aa/aaaaddd")
-                .unwrap(),
+            parse_raw(b"\n0 this doesn't matter\n\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 aa/aaaaddd"),
             vec![cmd0, cmd1]
         );
 
@@ -1025,8 +1026,7 @@ mod tests {
         assert_eq!(
             parse_raw(
                 b"\r\n0 this doesn't \"matter\"\r\n\r\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 aa/aaaaddd\n"
-            )
-            .unwrap(),
+            ),
             vec![cmd0, cmd1]
         );
 
@@ -1053,8 +1053,7 @@ mod tests {
         assert_eq!(
             parse_raw(
                 b"1 16 0 0 0 1 0 0 0 1 0 0 0 1 aa/aaaaddd\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 aa/aaaaddd"
-            )
-            .unwrap(),
+            ),
             vec![cmd0, cmd1]
         );
     }

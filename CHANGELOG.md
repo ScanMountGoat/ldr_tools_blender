@@ -4,9 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## unreleased
+### Changed
+* Changed parsing behavior to skip invalid lines and instead log errors to the console and Blender's info log.
+
 ### Fixed
 * Fixed an issue where log messages would not appear in the Blender console.
 * Fixed an issue where subfiles would not load correctly in some cases.
+* Fixed an issue where files with a UTF-8 byte-order mark (BOM) would not load.
 
 ## 0.4.10 - 2025-07-11
 ### Fixed
