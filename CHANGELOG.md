@@ -3,7 +3,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## unreleased
+## 0.4.11 - 2025-08-08
 ### Changed
 * Changed parsing behavior to skip invalid lines and instead log errors to the console and Blender's info log.
 
