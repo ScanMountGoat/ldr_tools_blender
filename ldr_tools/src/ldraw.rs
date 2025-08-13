@@ -1,16 +1,15 @@
 //! LDraw file format and parser.
 
 // The LDraw representation and parser are based on work done for [weldr](https://github.com/djeedai/weldr).
+use log::{debug, trace};
 use std::{collections::HashMap, path::Path, str};
 
+pub use error::{Error, ResolveError};
 pub use glam::{Mat4, Vec2, Vec3, Vec4};
+pub use parse::parse_commands;
 
 pub mod error;
-
 mod parse;
-
-pub use error::{Error, ResolveError};
-use log::{debug, trace};
 
 /// RGB color in sRGB color space.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,46 +26,9 @@ impl Color {
     }
 }
 
-/// Parse raw LDR content without sub-file resolution.
-///
-/// Parse the given LDR data passed in `ldr_content` and return the list of parsed commands.
-/// Sub-file references (Line Type 1) are not resolved, and returned as [`Command::SubFileRef`].
-///
-/// The input LDR content must comply to the LDraw standard. In particular this means:
-/// - UTF-8 encoded
-/// - Both DOS/Windows `<CR><LF>` and Unix `<LF>` line termination accepted
-///
-/// Any lines that fail to parse will be skipped and log any parsing errors.
-///
-/// ```rust
-/// use ldr_tools::ldraw::{parse_raw, Command, CommentCmd, LineCmd, Vec3};
-///
-/// let cmd0 = Command::Comment(CommentCmd::new("this is a comment"));
-/// let cmd1 = Command::Line(LineCmd{
-///   color: 16,
-///   vertices: [
-///     Vec3{ x: 0.0, y: 0.0, z: 0.0 },
-///     Vec3{ x: 1.0, y: 1.0, z: 1.0 }
-///   ]
-/// });
-/// assert_eq!(parse_raw(b"0 this is a comment\n2 16 0 0 0 1 1 1"), vec![cmd0, cmd1]);
-/// ```
-pub fn parse_raw(ldr_content: &[u8]) -> Vec<Command> {
-    parse::parse_raw(ldr_content)
-}
-
 struct FileRef {
     /// Filename of unresolved source file.
     filename: String,
-}
-
-fn load_and_parse_single_file<P: AsRef<Path>, R: FileRefResolver>(
-    filename: P,
-    resolver: &R,
-) -> Result<SourceFile, Error> {
-    let raw_content = resolver.resolve(filename)?;
-    let cmds = parse::parse_raw(&raw_content);
-    Ok(SourceFile { cmds })
 }
 
 /// Parse a single file and its sub-file references recursively.
@@ -134,7 +96,11 @@ fn load_file<P: AsRef<Path>, R: FileRefResolver>(
     source_map: &mut SourceMap,
     stack: &mut Vec<FileRef>,
 ) -> Result<String, Error> {
-    let source_file = load_and_parse_single_file(path, resolver)?;
+    let raw_content = resolver.resolve(path)?;
+    let source_file = SourceFile {
+        cmds: parse_commands(&raw_content),
+    };
+
     source_map.queue_subfiles(&source_file, stack);
     Ok(source_map.insert(filename, source_file))
 }
@@ -732,7 +698,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_raw_mpd() {
+    fn test_parse_commands_mpd() {
         // Test various language extensions.
         // Example taken from https://www.ldraw.org/article/47.html
         let ldr_contents = b"0 FILE main.ldr
@@ -768,231 +734,231 @@ mod tests {
         0 !: BtMZTNfKZzyDiT3hCFy06IIFp3QH/CBMh66aBy4AAAAASUVORK5CYII=
         ";
 
-        let commands = parse_raw(ldr_contents);
+        let commands = parse_commands(ldr_contents);
         assert_eq!(
             vec![
-                            Command::File(FileCmd {
-                                file: "main.ldr".to_string()
-                            }),
-                            Command::SubFileRef(SubFileRefCmd {
-                                color: 7,
-                                transform: Transform {
-                                    pos: vec3(0.0, 0.0, 0.0),
-                                    row0: vec3(1.0, 0.0, 0.0),
-                                    row1: vec3(0.0, 1.0, 0.0),
-                                    row2: vec3(0.0, 0.0, 1.0)
-                                },
-                                file: "819.dat".to_string()
-                            }),
-                            Command::SubFileRef(SubFileRefCmd {
-                                color: 4,
-                                transform: Transform {
-                                    pos: vec3(80.0, -8.0, 70.0),
-                                    row0: vec3(1.0, 0.0, 0.0),
-                                    row1: vec3(0.0, 1.0, 0.0),
-                                    row2: vec3(0.0, 0.0, 1.0)
-                                },
-                                file: "house.ldr".to_string()
-                            }),
-                            Command::SubFileRef(SubFileRefCmd {
-                                color: 4,
-                                transform: Transform {
-                                    pos: vec3(-70.0, -8.0, 20.0),
-                                    row0: vec3(0.0, 0.0, -1.0),
-                                    row1: vec3(0.0, 1.0, 0.0),
-                                    row2: vec3(1.0, 0.0, 0.0)
-                                },
-                                file: "house.ldr".to_string()
-                            }),
-                            Command::SubFileRef(SubFileRefCmd {
-                                color: 4,
-                                transform: Transform {
-                                    pos: vec3(50.0, -8.0, -20.0),
-                                    row0: vec3(0.0, 0.0, -1.0),
-                                    row1: vec3(0.0, 1.0, 0.0),
-                                    row2: vec3(1.0, 0.0, 0.0)
-                                },
-                                file: "house.ldr".to_string()
-                            }),
-                            Command::SubFileRef(SubFileRefCmd {
-                                color: 4,
-                                transform: Transform {
-                                    pos: vec3(0.0, -8.0, -30.0),
-                                    row0: vec3(1.0, 0.0, 0.0),
-                                    row1: vec3(0.0, 1.0, 0.0),
-                                    row2: vec3(0.0, 0.0, 1.0)
-                                },
-                                file: "house.ldr".to_string()
-                            }),
-                            Command::SubFileRef(SubFileRefCmd {
-                                color: 4,
-                                transform: Transform {
-                                    pos: vec3(-20.0, -8.0, 70.0),
-                                    row0: vec3(1.0, 0.0, 0.0),
-                                    row1: vec3(0.0, 1.0, 0.0),
-                                    row2: vec3(0.0, 0.0, 1.0)
-                                },
-                                file: "house.ldr".to_string()
-                            }),
-                            Command::File(FileCmd {
-                                file: "house.ldr".to_string()
-                            }),
-                            Command::SubFileRef(SubFileRefCmd {
-                                color: 16,
-                                transform: Transform {
-                                    pos: vec3(0.0, 0.0, 0.0),
-                                    row0: vec3(1.0, 0.0, 0.0),
-                                    row1: vec3(0.0, 1.0, 0.0),
-                                    row2: vec3(0.0, 0.0, 1.0)
-                                },
-                                file: "3023.dat".to_string()
-                            }),
-                            Command::SubFileRef(SubFileRefCmd {
-                                color: 16,
-                                transform: Transform {
-                                    pos: vec3(0.0, -24.0, 0.0),
-                                    row0: vec3(1.0, 0.0, 0.0),
-                                    row1: vec3(0.0, 1.0, 0.0),
-                                    row2: vec3(0.0, 0.0, 1.0)
-                                },
-                                file: "3065.dat".to_string()
-                            }),
-                            Command::SubFileRef(SubFileRefCmd {
-                                color: 16,
-                                transform: Transform {
-                                    pos: vec3(0.0, -48.0, 0.0),
-                                    row0: vec3(1.0, 0.0, 0.0),
-                                    row1: vec3(0.0, 1.0, 0.0),
-                                    row2: vec3(0.0, 0.0, 1.0)
-                                },
-                                file: "3065.dat".to_string()
-                            }),
-                            Command::SubFileRef(SubFileRefCmd {
-                                color: 16,
-                                transform: Transform {
-                                    pos: vec3(0.0, -72.0, 0.0),
-                                    row0: vec3(0.0, 0.0, -1.0),
-                                    row1: vec3(0.0, 1.0, 0.0),
-                                    row2: vec3(1.0, 0.0, 0.0)
-                                },
-                                file: "3044b.dat".to_string()
-                            }),
-                            Command::SubFileRef(SubFileRefCmd {
-                                color: 4,
-                                transform: Transform {
-                                    pos: vec3(0.0, -22.0, -10.0),
-                                    row0: vec3(1.0, 0.0, 0.0),
-                                    row1: vec3(0.0, 0.0, -1.0),
-                                    row2: vec3(0.0, 1.0, 0.0)
-                                },
-                                file: "sticker.ldr".to_string()
-                            }),
-                            Command::File(FileCmd {
-                                file: "sticker.ldr".to_string()
-                            }),
-                            Command::Comment(CommentCmd {
-                                text: "UNOFFICIAL PART".to_string()
-                            }),
-                            Command::Bfc(BfcCommand::Certify(Some(Winding::Ccw))),
-                            Command::SubFileRef(SubFileRefCmd {
-                                color: 16,
-                                transform: Transform {
-                                    pos: vec3(0.0, -0.25, 0.0),
-                                    row0: vec3(20.0, 0.0, 0.0),
-                                    row1: vec3(0.0, 0.25, 0.0),
-                                    row2: vec3(0.0, 0.0, 30.0)
-                                },
-                                file: "box5.dat".to_string()
-                            }),
-                            Command::Comment(
-                                CommentCmd {
-                                    text: "!TEXMAP START PLANAR   -20 -0.25 30   20 -0.25 30   -20 -0.25 -30   sticker.png".to_string()
-                                },
-                            ),
-                            Command::Quad(QuadCmd {
-                                color: 16,
-                                vertices: [
-                                    vec3(-20.0, -0.25, 30.0),
-                                    vec3(-20.0, -0.25, -30.0),
-                                    vec3(20.0, -0.25, -30.0),
-                                    vec3(20.0, -0.25, 30.0)
-                                ],
-                                uvs: None
-                            }),
-                            Command::Comment(CommentCmd {
-                                text: "!TEXMAP END".to_string()
-                            }),
-                            Command::Data(DataCmd {
-                                file: "sticker.png".to_string()
-                            }),
-                            Command::Base64Data(Base64DataCmd {
-                                data: vec![
-                                    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 80,
-                                    0, 0, 0, 120, 8, 2, 0, 0, 0, 234, 140, 226, 161, 0, 0, 0, 1, 115, 82, 71,
-                                    66, 0, 174, 206, 28, 233, 0, 0, 0, 4, 103, 65, 77, 65, 0, 0, 177
-                                ]
-                            }),
-                            Command::Base64Data(Base64DataCmd {
-                                data: vec![
-                                    143, 11, 252, 97, 5, 0, 0, 0, 9, 112, 72, 89, 115, 0, 0, 14, 195, 0, 0, 14,
-                                    195, 1, 199, 111, 168, 100, 0, 0, 1, 20, 73, 68, 65, 84, 120, 94, 237, 219,
-                                    189, 13, 194, 48, 20, 0, 97, 147, 149, 160, 64, 180, 172, 64, 205, 20, 140,
-                                    193, 20
-                                ]
-                            }),
-                            Command::Base64Data(Base64DataCmd {
-                                data: vec![
-                                    212, 20, 44, 64, 139, 40, 96, 11, 122, 54, 64, 24, 197, 5, 127, 37, 14,
-                                    214, 189, 251, 138, 144, 84, 209, 233, 73, 142, 20, 156, 209, 245, 178, 75,
-                                    145, 116, 229, 55, 12, 131, 233, 12, 166, 51, 152, 238, 229, 57, 124, 155,
-                                    174, 202, 25, 75, 119, 92, 151, 51
-                                ]
-                            }),
-                            Command::Base64Data(Base64DataCmd {
-                                data: vec![
-                                    39, 252, 152, 240, 118, 127, 232, 47, 1, 22, 243, 89, 62, 134, 158, 176,
-                                    193, 116, 6, 211, 25, 76, 103, 48, 157, 193, 116, 6, 211, 25, 76, 103, 48,
-                                    157, 193, 116, 6, 211, 25, 76, 103, 48, 157, 255, 45, 209, 185, 139, 135,
-                                    206, 96, 58, 131, 233, 12, 166, 51
-                                ]
-                            }),
-                            Command::Base64Data(Base64DataCmd {
-                                data: vec![
-                                    152, 206, 96, 58, 131, 233, 12, 166, 51, 152, 206, 96, 186, 112, 193, 127,
-                                    123, 77, 251, 252, 234, 52, 171, 119, 235, 183, 27, 57, 225, 148, 78, 203,
-                                    113, 127, 89, 201, 100, 115, 206, 199, 175, 19, 254, 237, 215, 7, 159, 251,
-                                    255, 51, 23, 45, 58, 131, 233, 12, 166
-                                ]
-                            }),
-                            Command::Base64Data(Base64DataCmd {
-                                data: vec![
-                                    51, 152, 206, 96, 58, 131, 233, 12, 166, 51, 152, 206, 96, 58, 131, 233,
-                                    12, 166, 51, 152, 206, 96, 58, 131, 233, 12, 166, 51, 152, 206, 96, 186,
-                                    112, 193, 109, 237, 241, 168, 193, 93, 60, 109, 76, 120, 48, 46, 90, 116,
-                                    6, 211, 25, 76, 103, 48, 157, 193, 116
-                                ]
-                            }),
-                            Command::Base64Data(Base64DataCmd {
-                                data: vec![
-                                    6, 211, 25, 76, 215, 202, 103, 60, 131, 137, 61, 225, 8, 92, 180, 232, 130,
-                                    5, 167, 116, 7, 252, 32, 76, 135, 174, 154, 7, 46, 0, 0, 0, 0, 73, 69, 78,
-                                    68, 174, 66, 96, 130
-                                ]
-                            })
-                        ],
+                Command::File(FileCmd {
+                    file: "main.ldr".to_string()
+                }),
+                Command::SubFileRef(SubFileRefCmd {
+                    color: 7,
+                    transform: Transform {
+                        pos: vec3(0.0, 0.0, 0.0),
+                        row0: vec3(1.0, 0.0, 0.0),
+                        row1: vec3(0.0, 1.0, 0.0),
+                        row2: vec3(0.0, 0.0, 1.0)
+                    },
+                    file: "819.dat".to_string()
+                }),
+                Command::SubFileRef(SubFileRefCmd {
+                    color: 4,
+                    transform: Transform {
+                        pos: vec3(80.0, -8.0, 70.0),
+                        row0: vec3(1.0, 0.0, 0.0),
+                        row1: vec3(0.0, 1.0, 0.0),
+                        row2: vec3(0.0, 0.0, 1.0)
+                    },
+                    file: "house.ldr".to_string()
+                }),
+                Command::SubFileRef(SubFileRefCmd {
+                    color: 4,
+                    transform: Transform {
+                        pos: vec3(-70.0, -8.0, 20.0),
+                        row0: vec3(0.0, 0.0, -1.0),
+                        row1: vec3(0.0, 1.0, 0.0),
+                        row2: vec3(1.0, 0.0, 0.0)
+                    },
+                    file: "house.ldr".to_string()
+                }),
+                Command::SubFileRef(SubFileRefCmd {
+                    color: 4,
+                    transform: Transform {
+                        pos: vec3(50.0, -8.0, -20.0),
+                        row0: vec3(0.0, 0.0, -1.0),
+                        row1: vec3(0.0, 1.0, 0.0),
+                        row2: vec3(1.0, 0.0, 0.0)
+                    },
+                    file: "house.ldr".to_string()
+                }),
+                Command::SubFileRef(SubFileRefCmd {
+                    color: 4,
+                    transform: Transform {
+                        pos: vec3(0.0, -8.0, -30.0),
+                        row0: vec3(1.0, 0.0, 0.0),
+                        row1: vec3(0.0, 1.0, 0.0),
+                        row2: vec3(0.0, 0.0, 1.0)
+                    },
+                    file: "house.ldr".to_string()
+                }),
+                Command::SubFileRef(SubFileRefCmd {
+                    color: 4,
+                    transform: Transform {
+                        pos: vec3(-20.0, -8.0, 70.0),
+                        row0: vec3(1.0, 0.0, 0.0),
+                        row1: vec3(0.0, 1.0, 0.0),
+                        row2: vec3(0.0, 0.0, 1.0)
+                    },
+                    file: "house.ldr".to_string()
+                }),
+                Command::File(FileCmd {
+                    file: "house.ldr".to_string()
+                }),
+                Command::SubFileRef(SubFileRefCmd {
+                    color: 16,
+                    transform: Transform {
+                        pos: vec3(0.0, 0.0, 0.0),
+                        row0: vec3(1.0, 0.0, 0.0),
+                        row1: vec3(0.0, 1.0, 0.0),
+                        row2: vec3(0.0, 0.0, 1.0)
+                    },
+                    file: "3023.dat".to_string()
+                }),
+                Command::SubFileRef(SubFileRefCmd {
+                    color: 16,
+                    transform: Transform {
+                        pos: vec3(0.0, -24.0, 0.0),
+                        row0: vec3(1.0, 0.0, 0.0),
+                        row1: vec3(0.0, 1.0, 0.0),
+                        row2: vec3(0.0, 0.0, 1.0)
+                    },
+                    file: "3065.dat".to_string()
+                }),
+                Command::SubFileRef(SubFileRefCmd {
+                    color: 16,
+                    transform: Transform {
+                        pos: vec3(0.0, -48.0, 0.0),
+                        row0: vec3(1.0, 0.0, 0.0),
+                        row1: vec3(0.0, 1.0, 0.0),
+                        row2: vec3(0.0, 0.0, 1.0)
+                    },
+                    file: "3065.dat".to_string()
+                }),
+                Command::SubFileRef(SubFileRefCmd {
+                    color: 16,
+                    transform: Transform {
+                        pos: vec3(0.0, -72.0, 0.0),
+                        row0: vec3(0.0, 0.0, -1.0),
+                        row1: vec3(0.0, 1.0, 0.0),
+                        row2: vec3(1.0, 0.0, 0.0)
+                    },
+                    file: "3044b.dat".to_string()
+                }),
+                Command::SubFileRef(SubFileRefCmd {
+                    color: 4,
+                    transform: Transform {
+                        pos: vec3(0.0, -22.0, -10.0),
+                        row0: vec3(1.0, 0.0, 0.0),
+                        row1: vec3(0.0, 0.0, -1.0),
+                        row2: vec3(0.0, 1.0, 0.0)
+                    },
+                    file: "sticker.ldr".to_string()
+                }),
+                Command::File(FileCmd {
+                    file: "sticker.ldr".to_string()
+                }),
+                Command::Comment(CommentCmd {
+                    text: "UNOFFICIAL PART".to_string()
+                }),
+                Command::Bfc(BfcCommand::Certify(Some(Winding::Ccw))),
+                Command::SubFileRef(SubFileRefCmd {
+                    color: 16,
+                    transform: Transform {
+                        pos: vec3(0.0, -0.25, 0.0),
+                        row0: vec3(20.0, 0.0, 0.0),
+                        row1: vec3(0.0, 0.25, 0.0),
+                        row2: vec3(0.0, 0.0, 30.0)
+                    },
+                    file: "box5.dat".to_string()
+                }),
+                Command::Comment(
+                    CommentCmd {
+                        text: "!TEXMAP START PLANAR   -20 -0.25 30   20 -0.25 30   -20 -0.25 -30   sticker.png".to_string()
+                    },
+                ),
+                Command::Quad(QuadCmd {
+                    color: 16,
+                    vertices: [
+                        vec3(-20.0, -0.25, 30.0),
+                        vec3(-20.0, -0.25, -30.0),
+                        vec3(20.0, -0.25, -30.0),
+                        vec3(20.0, -0.25, 30.0)
+                    ],
+                    uvs: None
+                }),
+                Command::Comment(CommentCmd {
+                    text: "!TEXMAP END".to_string()
+                }),
+                Command::Data(DataCmd {
+                    file: "sticker.png".to_string()
+                }),
+                Command::Base64Data(Base64DataCmd {
+                    data: vec![
+                        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 80,
+                        0, 0, 0, 120, 8, 2, 0, 0, 0, 234, 140, 226, 161, 0, 0, 0, 1, 115, 82, 71,
+                        66, 0, 174, 206, 28, 233, 0, 0, 0, 4, 103, 65, 77, 65, 0, 0, 177
+                    ]
+                }),
+                Command::Base64Data(Base64DataCmd {
+                    data: vec![
+                        143, 11, 252, 97, 5, 0, 0, 0, 9, 112, 72, 89, 115, 0, 0, 14, 195, 0, 0, 14,
+                        195, 1, 199, 111, 168, 100, 0, 0, 1, 20, 73, 68, 65, 84, 120, 94, 237, 219,
+                        189, 13, 194, 48, 20, 0, 97, 147, 149, 160, 64, 180, 172, 64, 205, 20, 140,
+                        193, 20
+                    ]
+                }),
+                Command::Base64Data(Base64DataCmd {
+                    data: vec![
+                        212, 20, 44, 64, 139, 40, 96, 11, 122, 54, 64, 24, 197, 5, 127, 37, 14,
+                        214, 189, 251, 138, 144, 84, 209, 233, 73, 142, 20, 156, 209, 245, 178, 75,
+                        145, 116, 229, 55, 12, 131, 233, 12, 166, 51, 152, 238, 229, 57, 124, 155,
+                        174, 202, 25, 75, 119, 92, 151, 51
+                    ]
+                }),
+                Command::Base64Data(Base64DataCmd {
+                    data: vec![
+                        39, 252, 152, 240, 118, 127, 232, 47, 1, 22, 243, 89, 62, 134, 158, 176,
+                        193, 116, 6, 211, 25, 76, 103, 48, 157, 193, 116, 6, 211, 25, 76, 103, 48,
+                        157, 193, 116, 6, 211, 25, 76, 103, 48, 157, 255, 45, 209, 185, 139, 135,
+                        206, 96, 58, 131, 233, 12, 166, 51
+                    ]
+                }),
+                Command::Base64Data(Base64DataCmd {
+                    data: vec![
+                        152, 206, 96, 58, 131, 233, 12, 166, 51, 152, 206, 96, 186, 112, 193, 127,
+                        123, 77, 251, 252, 234, 52, 171, 119, 235, 183, 27, 57, 225, 148, 78, 203,
+                        113, 127, 89, 201, 100, 115, 206, 199, 175, 19, 254, 237, 215, 7, 159, 251,
+                        255, 51, 23, 45, 58, 131, 233, 12, 166
+                    ]
+                }),
+                Command::Base64Data(Base64DataCmd {
+                    data: vec![
+                        51, 152, 206, 96, 58, 131, 233, 12, 166, 51, 152, 206, 96, 58, 131, 233,
+                        12, 166, 51, 152, 206, 96, 58, 131, 233, 12, 166, 51, 152, 206, 96, 186,
+                        112, 193, 109, 237, 241, 168, 193, 93, 60, 109, 76, 120, 48, 46, 90, 116,
+                        6, 211, 25, 76, 103, 48, 157, 193, 116
+                    ]
+                }),
+                Command::Base64Data(Base64DataCmd {
+                    data: vec![
+                        6, 211, 25, 76, 215, 202, 103, 60, 131, 137, 61, 225, 8, 92, 180, 232, 130,
+                        5, 167, 116, 7, 252, 32, 76, 135, 174, 154, 7, 46, 0, 0, 0, 0, 73, 69, 78,
+                        68, 174, 66, 96, 130
+                    ]
+                })
+            ],
             commands
         );
     }
 
     #[test]
-    fn test_parse_raw() {
+    fn test_parse_commands() {
         let cmd0 = Command::Comment(CommentCmd::new("this is a comment"));
         let cmd1 = Command::Line(LineCmd {
             color: 16,
             vertices: [vec3(0.0, 0.0, 0.0), vec3(1.0, 1.0, 1.0)],
         });
         assert_eq!(
-            parse_raw(b"0 this is a comment\n2 16 0 0 0 1 1 1"),
+            parse_commands(b"0 this is a comment\n2 16 0 0 0 1 1 1"),
             vec![cmd0, cmd1]
         );
 
@@ -1008,7 +974,7 @@ mod tests {
             file: "aa/aaaaddd".to_string(),
         });
         assert_eq!(
-            parse_raw(b"\n0 this doesn't matter\n\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 aa/aaaaddd"),
+            parse_commands(b"\n0 this doesn't matter\n\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 aa/aaaaddd"),
             vec![cmd0, cmd1]
         );
 
@@ -1024,7 +990,7 @@ mod tests {
             file: "aa/aaaaddd".to_string(),
         });
         assert_eq!(
-            parse_raw(
+            parse_commands(
                 b"\r\n0 this doesn't \"matter\"\r\n\r\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 aa/aaaaddd\n"
             ),
             vec![cmd0, cmd1]
@@ -1051,7 +1017,7 @@ mod tests {
             file: "aa/aaaaddd".to_string(),
         });
         assert_eq!(
-            parse_raw(
+            parse_commands(
                 b"1 16 0 0 0 1 0 0 0 1 0 0 0 1 aa/aaaaddd\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 aa/aaaaddd"
             ),
             vec![cmd0, cmd1]

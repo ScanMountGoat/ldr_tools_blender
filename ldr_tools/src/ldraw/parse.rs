@@ -25,7 +25,31 @@ use super::{
     Winding,
 };
 
-pub fn parse_raw(ldr_content: &[u8]) -> Vec<Command> {
+/// Parse raw LDR content without sub-file resolution.
+///
+/// Parse the given LDR data passed in `ldr_content` and return the list of parsed commands.
+/// Sub-file references (Line Type 1) are not resolved, and returned as [`Command::SubFileRef`].
+///
+/// The input LDR content must comply to the LDraw standard. In particular this means:
+/// - UTF-8 encoded
+/// - Both DOS/Windows `<CR><LF>` and Unix `<LF>` line termination accepted
+///
+/// Any lines that fail to parse will be skipped and log any parsing errors.
+///
+/// ```rust
+/// use ldr_tools::ldraw::{parse_commands, Command, CommentCmd, LineCmd, Vec3};
+///
+/// let cmd0 = Command::Comment(CommentCmd::new("this is a comment"));
+/// let cmd1 = Command::Line(LineCmd{
+///   color: 16,
+///   vertices: [
+///     Vec3{ x: 0.0, y: 0.0, z: 0.0 },
+///     Vec3{ x: 1.0, y: 1.0, z: 1.0 }
+///   ]
+/// });
+/// assert_eq!(parse_commands(b"0 this is a comment\n2 16 0 0 0 1 1 1"), vec![cmd0, cmd1]);
+/// ```
+pub fn parse_commands(ldr_content: &[u8]) -> Vec<Command> {
     // Remove the UTF-8 byte-order mark (BOM) if present.
     let ldr_content = strip_bom(ldr_content);
 
@@ -1644,7 +1668,7 @@ mod tests {
                 Command::Bfc(BfcCommand::NoClip),
                 Command::Bfc(BfcCommand::InvertNext)
             ],
-            parse_raw(ldr_content)
+            parse_commands(ldr_content)
         );
     }
 
@@ -1676,7 +1700,7 @@ mod tests {
                     uvs: None
                 }),
             ],
-            parse_raw(ldr_content)
+            parse_commands(ldr_content)
         );
     }
 
@@ -1695,7 +1719,7 @@ mod tests {
                 ],
                 uvs: None
             })],
-            parse_raw(ldr_content)
+            parse_commands(ldr_content)
         );
     }
 
@@ -1707,7 +1731,7 @@ mod tests {
             vec![Command::File(FileCmd {
                 file: "4558 - main.ldr".to_string()
             })],
-            parse_raw(ldr_content)
+            parse_commands(ldr_content)
         );
     }
 }
