@@ -4,11 +4,9 @@
 use log::{debug, trace};
 use std::{collections::HashMap, path::Path, str};
 
-pub use error::{Error, ResolveError};
 pub use glam::{Mat4, Vec2, Vec3, Vec4};
 pub use parse::parse_commands;
 
-pub mod error;
 mod parse;
 
 /// RGB color in sRGB color space.
@@ -39,20 +37,20 @@ struct FileRef {
 /// up populating the given `source_map`, which can be pre-populated manually or from a
 /// previous call with already loaded and parsed files.
 /// ```rust
-/// use ldr_tools::ldraw::{ FileRefResolver, parse, ResolveError, SourceMap };
+/// use ldr_tools::ldraw::{FileRefResolver, parse, SourceMap};
 ///
 /// struct MyCustomResolver;
 ///
 /// impl FileRefResolver for MyCustomResolver {
-///   fn resolve<P: AsRef<std::path::Path>>(&self, filename: P) -> Result<Vec<u8>, ResolveError> {
-///     Ok(vec![]) // replace with custom impl
+///   fn resolve<P: AsRef<std::path::Path>>(&self, filename: P) -> Vec<u8> {
+///     Vec::new() // replace with custom impl
 ///   }
 /// }
 ///
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///   let resolver = MyCustomResolver{};
 ///   let mut source_map = SourceMap::new();
-///   let main_model_name = parse("root.ldr", &resolver, &mut source_map)?;
+///   let main_model_name = parse("root.ldr", &resolver, &mut source_map);
 ///   let root_file = source_map.get(&main_model_name).unwrap();
 ///   Ok(())
 /// }
@@ -61,7 +59,7 @@ pub fn parse<P: AsRef<Path>, R: FileRefResolver>(
     path: P,
     resolver: &R,
     source_map: &mut SourceMap,
-) -> Result<String, Error> {
+) -> String {
     // Use a stack to avoid function recursion in load_file.
     let mut stack: Vec<FileRef> = Vec::new();
 
@@ -69,7 +67,7 @@ pub fn parse<P: AsRef<Path>, R: FileRefResolver>(
     // The provided path should refer to a file from the resolver.
     // Use the path directly without any normalization.
     let filename = path.as_ref().to_string_lossy().to_string();
-    let actual_root = load_file(path, &filename, resolver, source_map, &mut stack)?;
+    let actual_root = load_file(path, &filename, resolver, source_map, &mut stack);
 
     // Recursively load files referenced by the root file.
     while let Some(file) = stack.pop() {
@@ -81,12 +79,12 @@ pub fn parse<P: AsRef<Path>, R: FileRefResolver>(
                 trace!("Not yet parsed; parsing sub-file: {filename}");
                 // Normalize file references to subfiles.
                 let subfile_ref = SubFileRef::new(filename);
-                load_subfile(subfile_ref, resolver, source_map, &mut stack)?;
+                load_subfile(subfile_ref, resolver, source_map, &mut stack);
             }
         }
     }
 
-    Ok(actual_root)
+    actual_root
 }
 
 fn load_file<P: AsRef<Path>, R: FileRefResolver>(
@@ -95,14 +93,14 @@ fn load_file<P: AsRef<Path>, R: FileRefResolver>(
     resolver: &R,
     source_map: &mut SourceMap,
     stack: &mut Vec<FileRef>,
-) -> Result<String, Error> {
-    let raw_content = resolver.resolve(path)?;
+) -> String {
+    let raw_content = resolver.resolve(path);
     let source_file = SourceFile {
         cmds: parse_commands(&raw_content),
     };
 
     source_map.queue_subfiles(&source_file, stack);
-    Ok(source_map.insert(filename, source_file))
+    source_map.insert(filename, source_file)
 }
 
 fn load_subfile<R: FileRefResolver>(
@@ -110,7 +108,7 @@ fn load_subfile<R: FileRefResolver>(
     resolver: &R,
     source_map: &mut SourceMap,
     stack: &mut Vec<FileRef>,
-) -> Result<String, Error> {
+) -> String {
     load_file(&filename.0, &filename.0, resolver, source_map, stack)
 }
 
@@ -571,7 +569,7 @@ pub trait FileRefResolver {
     /// Unix style `\n` or Windows style `\r\n`.
     ///
     /// See [`parse()`] for usage.
-    fn resolve<P: AsRef<Path>>(&self, filename: P) -> Result<Vec<u8>, ResolveError>;
+    fn resolve<P: AsRef<Path>>(&self, filename: P) -> Vec<u8>;
 }
 
 impl Transform {

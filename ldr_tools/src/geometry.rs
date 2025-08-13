@@ -592,18 +592,9 @@ mod tests {
     }
 
     impl crate::ldraw::FileRefResolver for DummyResolver {
-        fn resolve<P: AsRef<std::path::Path>>(
-            &self,
-            filename: P,
-        ) -> Result<Vec<u8>, crate::ldraw::ResolveError> {
+        fn resolve<P: AsRef<std::path::Path>>(&self, filename: P) -> Vec<u8> {
             let filename = filename.as_ref().to_str().unwrap();
-            self.files
-                .get(filename)
-                .cloned()
-                .ok_or(crate::ldraw::ResolveError {
-                    filename: filename.to_owned(),
-                    resolve_error: None,
-                })
+            self.files.get(filename).cloned().unwrap_or_default()
         }
     }
 
@@ -637,7 +628,7 @@ mod tests {
         let mut resolver = DummyResolver::new();
         resolver.files.insert("root", document.as_bytes().to_vec());
 
-        let main_model_name = crate::ldraw::parse("root", &resolver, &mut source_map).unwrap();
+        let main_model_name = crate::ldraw::parse("root", &resolver, &mut source_map);
         let source_file = source_map.get(&main_model_name).unwrap();
 
         let geometry = create_geometry(
@@ -676,7 +667,7 @@ mod tests {
         let mut resolver = DummyResolver::new();
         resolver.files.insert("root", document.as_bytes().to_vec());
 
-        let main_model_name = crate::ldraw::parse("root", &resolver, &mut source_map).unwrap();
+        let main_model_name = crate::ldraw::parse("root", &resolver, &mut source_map);
         let source_file = source_map.get(&main_model_name).unwrap();
 
         let geometry = create_geometry(
@@ -708,7 +699,7 @@ mod tests {
         let mut resolver = DummyResolver::new();
         resolver.files.insert("root", document.as_bytes().to_vec());
 
-        let main_model_name = crate::ldraw::parse("root", &resolver, &mut source_map).unwrap();
+        let main_model_name = crate::ldraw::parse("root", &resolver, &mut source_map);
         let source_file = source_map.get(&main_model_name).unwrap();
 
         let geometry = create_geometry(
@@ -751,7 +742,7 @@ mod tests {
         let mut resolver = DummyResolver::new();
         resolver.files.insert("root", document.as_bytes().to_vec());
 
-        let main_model_name = crate::ldraw::parse("root", &resolver, &mut source_map).unwrap();
+        let main_model_name = crate::ldraw::parse("root", &resolver, &mut source_map);
         let source_file = source_map.get(&main_model_name).unwrap();
 
         let geometry = create_geometry(

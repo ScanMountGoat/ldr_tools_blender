@@ -7,7 +7,7 @@ use std::{
 
 use geometry::create_geometry;
 use glam::{vec4, Mat4, Vec3};
-use ldraw::{Command, FileRefResolver, ResolveError};
+use ldraw::{Command, FileRefResolver};
 use log::error;
 use rayon::prelude::*;
 use zip::ZipArchive;
@@ -81,7 +81,7 @@ impl DiskResolver {
 }
 
 impl FileRefResolver for DiskResolver {
-    fn resolve<P: AsRef<Path>>(&self, filename: P) -> Result<Vec<u8>, ResolveError> {
+    fn resolve<P: AsRef<Path>>(&self, filename: P) -> Vec<u8> {
         let filename = filename.as_ref();
 
         // Find the first folder that contains the given file.
@@ -91,11 +91,11 @@ impl FileRefResolver for DiskResolver {
             .find_map(|prefix| std::fs::read(prefix.join(filename)).ok());
 
         match contents {
-            Some(contents) => Ok(contents),
+            Some(contents) => contents,
             None => {
                 // TODO: Is there a better way to allow partial imports with resolve errors?
                 error!("Unable to resolve {filename:?}");
-                Ok(Vec::new())
+                Vec::new()
             }
         }
     }
@@ -108,9 +108,9 @@ struct IoFileResolver {
 }
 
 impl FileRefResolver for IoFileResolver {
-    fn resolve<P: AsRef<Path>>(&self, filename: P) -> Result<Vec<u8>, ResolveError> {
+    fn resolve<P: AsRef<Path>>(&self, filename: P) -> Vec<u8> {
         if filename.as_ref() == Path::new(&self.io_path) {
-            Ok(self.model_ldr.clone())
+            self.model_ldr.clone()
         } else {
             self.resolver.resolve(filename)
         }
@@ -118,7 +118,7 @@ impl FileRefResolver for IoFileResolver {
 }
 
 impl IoFileResolver {
-    fn new(io_path: String, resolver: DiskResolver) -> Result<Self, Box<dyn std::error::Error>> {
+    fn new(io_path: String, resolver: DiskResolver) -> Result<Self, zip::result::ZipError> {
         let zip_file = File::open(&io_path)?;
         let mut archive = ZipArchive::new(BufReader::new(zip_file))?;
         let mut ldr_file = archive.by_name("model.ldr")?;
@@ -300,10 +300,11 @@ fn parse_file(
     let is_io = Path::new(path).extension() == Some("io".as_ref());
 
     let main_model_name = if is_io {
+        // TODO: Avoid unwrap?
         let io_resolver = IoFileResolver::new(path.to_owned(), resolver).unwrap();
-        ldraw::parse(path, &io_resolver, &mut source_map).unwrap()
+        ldraw::parse(path, &io_resolver, &mut source_map)
     } else {
-        ldraw::parse(path, &resolver, &mut source_map).unwrap()
+        ldraw::parse(path, &resolver, &mut source_map)
     };
 
     (source_map, main_model_name)
@@ -317,8 +318,8 @@ fn ensure_studs(
     // The replaced studs likely won't be referenced by existing files.
     // Make sure the selected stud type is in the source map.
     if settings.stud_type == StudType::Logo4 {
-        ldraw::parse("stud-logo4.dat", resolver, source_map).unwrap();
-        ldraw::parse("stud2-logo4.dat", resolver, source_map).unwrap();
+        ldraw::parse("stud-logo4.dat", resolver, source_map);
+        ldraw::parse("stud2-logo4.dat", resolver, source_map);
     }
 }
 
