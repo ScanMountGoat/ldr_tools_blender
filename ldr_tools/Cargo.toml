@@ -7,10 +7,10 @@ edition = "2021"
 glam = "0.30.3"
 rstar = "0.12.2"
 rayon = "1.7.0"
-phf =  { version = "0.11.1", features = ["macros"] }
+phf =  { version = "0.13.1", features = ["macros"] }
 tracing = "0.1"
 base64 = "0.22.1"
-zip = "3.0.0"
+zip = "5.1.1"
 nom = "8.0.0"
 log = "0.4"
 
