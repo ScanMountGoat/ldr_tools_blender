@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 pyo3 = { version = "0.26.0", features = ["extension-module", "py-clone"] }
+map_py = { git = "https://github.com/ScanMountGoat/map_py", rev = "b8a6e68" }
 numpy = "0.26.0"
 ldr_tools = { path = "../ldr_tools" }
 pyo3-log = "0.13.0"

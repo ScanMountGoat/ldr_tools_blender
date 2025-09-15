@@ -1,4 +1,3 @@
-use numpy::{IntoPyArray, PyArray2, PyArrayMethods};
 use pyo3::prelude::*;
 
 macro_rules! python_enum {
@@ -23,6 +22,18 @@ macro_rules! python_enum {
                 match value {
                     $(<$py_ty>::$i => Self::$i),*
                 }
+            }
+        }
+
+        impl ::map_py::MapPy<$rust_ty> for $py_ty {
+            fn map_py(self, _py: Python) -> PyResult<$rust_ty> {
+                Ok(self.into())
+            }
+        }
+
+        impl ::map_py::MapPy<$py_ty> for $rust_ty {
+            fn map_py(self, _py: Python) -> PyResult<$py_ty> {
+                Ok(self.into())
             }
         }
     };
@@ -52,9 +63,8 @@ mod ldr_tools_py {
     use std::collections::HashMap;
 
     use log::info;
-    use numpy::PyArray3;
-    use numpy::{IntoPyArray, PyArray1, PyArray2, PyArrayMethods};
-    use pyo3::types::PyBytes;
+    use map_py::{MapPy, TypedList};
+    use numpy::{IntoPyArray, PyArray1, PyArray2, PyArray3, PyArrayMethods};
 
     #[pymodule_init]
     fn init(_m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -69,25 +79,14 @@ mod ldr_tools_py {
     use super::PrimitiveResolution;
 
     #[pyclass(get_all)]
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, MapPy)]
+    #[map(ldr_tools::LDrawNode)]
     pub struct LDrawNode {
         name: String,
-        transform: [[f32; 4]; 4],
+        transform: Py<PyArray2<f32>>,
         geometry_name: Option<String>,
         current_color: u32,
-        children: Vec<LDrawNode>,
-    }
-
-    impl From<ldr_tools::LDrawNode> for LDrawNode {
-        fn from(node: ldr_tools::LDrawNode) -> Self {
-            Self {
-                name: node.name,
-                transform: node.transform.to_cols_array_2d(),
-                geometry_name: node.geometry_name,
-                current_color: node.current_color,
-                children: node.children.into_iter().map(|c| c.into()).collect(),
-            }
-        }
+        children: TypedList<LDrawNode>,
     }
 
     #[pyclass(get_all)]
@@ -115,7 +114,8 @@ mod ldr_tools_py {
 
     // Use numpy arrays for reduced overhead.
     #[pyclass(get_all)]
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, MapPy)]
+    #[map(ldr_tools::LDrawGeometry)]
     pub struct LDrawGeometry {
         vertices: Py<PyArray2<f32>>,
         vertex_indices: Py<PyArray1<u32>>,
@@ -128,70 +128,18 @@ mod ldr_tools_py {
         texture_info: Option<LDrawTextureInfo>,
     }
 
-    impl LDrawGeometry {
-        fn from_geometry(py: Python, geometry: ldr_tools::LDrawGeometry) -> Self {
-            let sharp_edge_count = geometry.edge_line_indices.len();
-
-            // This flatten will be optimized in Release mode.
-            // This avoids needing unsafe code.
-            Self {
-                vertices: pyarray_vec3(py, geometry.vertices),
-                vertex_indices: geometry.vertex_indices.into_pyarray(py).into(),
-                face_start_indices: geometry.face_start_indices.into_pyarray(py).into(),
-                face_sizes: geometry.face_sizes.into_pyarray(py).into(),
-                face_colors: geometry.face_colors.into_pyarray(py).into(),
-                is_face_stud: geometry.is_face_stud,
-                edge_line_indices: geometry
-                    .edge_line_indices
-                    .into_iter()
-                    .flatten()
-                    .collect::<Vec<u32>>()
-                    .into_pyarray(py)
-                    .reshape((sharp_edge_count, 2))
-                    .unwrap()
-                    .into(),
-                has_grainy_slopes: geometry.has_grainy_slopes,
-                texture_info: geometry
-                    .texture_info
-                    .map(|ti| LDrawTextureInfo::from_texture_info(py, ti)),
-            }
-        }
-    }
-
     #[pyclass(get_all)]
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, MapPy)]
+    #[map(ldr_tools::LDrawTextureInfo)]
     pub struct LDrawTextureInfo {
-        textures: Vec<Py<PyBytes>>,
+        textures: TypedList<Vec<u8>>,
         indices: Py<PyArray1<u8>>,
         uvs: Py<PyArray2<f32>>,
     }
 
-    impl LDrawTextureInfo {
-        fn from_texture_info(py: Python, tex_info: ldr_tools::LDrawTextureInfo) -> Self {
-            let uv_count = tex_info.uvs.len();
-
-            Self {
-                textures: tex_info
-                    .textures
-                    .into_iter()
-                    .map(|bytes| PyBytes::new(py, &bytes).into())
-                    .collect(),
-                indices: tex_info.indices.into_pyarray(py).into(),
-                uvs: tex_info
-                    .uvs
-                    .into_iter()
-                    .flat_map(|uv| uv.to_array())
-                    .collect::<Vec<f32>>()
-                    .into_pyarray(py)
-                    .reshape((uv_count, 2))
-                    .unwrap()
-                    .into(),
-            }
-        }
-    }
-
     #[pyclass(get_all)]
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, MapPy)]
+    #[map(ldr_tools::LDrawColor)]
     pub struct LDrawColor {
         name: String,
         finish_name: String,
@@ -199,19 +147,9 @@ mod ldr_tools_py {
         speckle_rgba_linear: Option<[f32; 4]>,
     }
 
-    impl From<ldr_tools::LDrawColor> for LDrawColor {
-        fn from(c: ldr_tools::LDrawColor) -> Self {
-            Self {
-                name: c.name,
-                rgba_linear: c.rgba_linear,
-                finish_name: c.finish_name,
-                speckle_rgba_linear: c.speckle_rgba_linear,
-            }
-        }
-    }
-
     #[pyclass(get_all, set_all)]
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, MapPy)]
+    #[map(ldr_tools::GeometrySettings)]
     pub struct GeometrySettings {
         triangulate: bool,
         add_gap_between_parts: bool,
@@ -224,55 +162,19 @@ mod ldr_tools_py {
     #[pymethods]
     impl GeometrySettings {
         #[new]
-        fn new() -> Self {
-            ldr_tools::GeometrySettings::default().into()
-        }
-    }
-
-    impl From<ldr_tools::GeometrySettings> for GeometrySettings {
-        fn from(value: ldr_tools::GeometrySettings) -> Self {
-            Self {
-                triangulate: value.triangulate,
-                add_gap_between_parts: value.add_gap_between_parts,
-                stud_type: value.stud_type.into(),
-                weld_vertices: value.weld_vertices,
-                primitive_resolution: value.primitive_resolution.into(),
-                scene_scale: value.scene_scale,
-            }
-        }
-    }
-
-    impl From<&GeometrySettings> for ldr_tools::GeometrySettings {
-        fn from(value: &GeometrySettings) -> Self {
-            Self {
-                triangulate: value.triangulate,
-                add_gap_between_parts: value.add_gap_between_parts,
-                stud_type: value.stud_type.into(),
-                weld_vertices: value.weld_vertices,
-                primitive_resolution: value.primitive_resolution.into(),
-                scene_scale: value.scene_scale,
-            }
+        fn new(py: Python) -> PyResult<Self> {
+            ldr_tools::GeometrySettings::default().map_py(py)
         }
     }
 
     #[pyclass(get_all, set_all)]
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, MapPy)]
+    #[map(ldr_tools::PointInstances)]
     pub struct PointInstances {
         translations: Py<PyArray2<f32>>,
         rotations_axis: Py<PyArray2<f32>>,
         rotations_angle: Py<PyArray1<f32>>,
         scales: Py<PyArray2<f32>>,
-    }
-
-    impl PointInstances {
-        fn from_instances(py: Python, instances: ldr_tools::PointInstances) -> Self {
-            Self {
-                translations: pyarray_vec3(py, instances.translations),
-                rotations_axis: pyarray_vec3(py, instances.rotations_axis),
-                rotations_angle: instances.rotations_angle.into_pyarray(py).into(),
-                scales: pyarray_vec3(py, instances.scales),
-            }
-        }
     }
 
     #[pyfunction]
@@ -281,21 +183,22 @@ mod ldr_tools_py {
         path: String,
         ldraw_path: String,
         additional_paths: Vec<String>,
-        settings: &GeometrySettings,
+        settings: GeometrySettings,
     ) -> PyResult<LDrawScene> {
         // TODO: This timing code doesn't need to be here.
         let start = std::time::Instant::now();
-        let scene = ldr_tools::load_file(&path, &ldraw_path, &additional_paths, &settings.into());
+        let scene =
+            ldr_tools::load_file(&path, &ldraw_path, &additional_paths, &settings.map_py(py)?);
 
         let geometry_cache = scene
             .geometry_cache
             .into_iter()
-            .map(|(k, v)| (k, LDrawGeometry::from_geometry(py, v)))
-            .collect();
+            .map(|(k, v)| Ok((k, v.map_py(py)?)))
+            .collect::<PyResult<_>>()?;
         info!("load_file: {:?}", start.elapsed());
 
         Ok(LDrawScene {
-            root_node: scene.root_node.into(),
+            root_node: scene.root_node.map_py(py)?,
             geometry_cache,
         })
     }
@@ -306,17 +209,21 @@ mod ldr_tools_py {
         path: String,
         ldraw_path: String,
         additional_paths: Vec<String>,
-        settings: &GeometrySettings,
+        settings: GeometrySettings,
     ) -> PyResult<LDrawSceneInstanced> {
         let start = std::time::Instant::now();
-        let scene =
-            ldr_tools::load_file_instanced(&path, &ldraw_path, &additional_paths, &settings.into());
+        let scene = ldr_tools::load_file_instanced(
+            &path,
+            &ldraw_path,
+            &additional_paths,
+            &settings.map_py(py)?,
+        );
 
         let geometry_cache = scene
             .geometry_cache
             .into_iter()
-            .map(|(k, v)| (k, LDrawGeometry::from_geometry(py, v)))
-            .collect();
+            .map(|(k, v)| Ok((k, v.map_py(py)?)))
+            .collect::<PyResult<_>>()?;
 
         let geometry_world_transforms = scene
             .geometry_world_transforms
@@ -355,27 +262,27 @@ mod ldr_tools_py {
         path: String,
         ldraw_path: String,
         additional_paths: Vec<String>,
-        settings: &GeometrySettings,
+        settings: GeometrySettings,
     ) -> PyResult<LDrawSceneInstancedPoints> {
         let start = std::time::Instant::now();
         let scene = ldr_tools::load_file_instanced_points(
             &path,
             &ldraw_path,
             &additional_paths,
-            &settings.into(),
+            &settings.map_py(py)?,
         );
 
         let geometry_cache = scene
             .geometry_cache
             .into_iter()
-            .map(|(k, v)| (k, LDrawGeometry::from_geometry(py, v)))
-            .collect();
+            .map(|(k, v)| Ok((k, v.map_py(py)?)))
+            .collect::<PyResult<_>>()?;
 
         let geometry_point_instances = scene
             .geometry_point_instances
             .into_iter()
-            .map(|(k, v)| (k, PointInstances::from_instances(py, v)))
-            .collect();
+            .map(|(k, v)| Ok((k, v.map_py(py)?)))
+            .collect::<PyResult<_>>()?;
 
         info!("load_file_instanced_points: {:?}", start.elapsed());
 
@@ -387,24 +294,10 @@ mod ldr_tools_py {
     }
 
     #[pyfunction]
-    fn load_color_table(ldraw_path: &str) -> PyResult<HashMap<u32, LDrawColor>> {
-        Ok(ldr_tools::load_color_table(ldraw_path)
+    fn load_color_table(py: Python, ldraw_path: &str) -> PyResult<HashMap<u32, LDrawColor>> {
+        ldr_tools::load_color_table(ldraw_path)
             .into_iter()
-            .map(|(k, v)| (k, v.into()))
-            .collect())
+            .map(|(k, v)| Ok((k, v.map_py(py)?)))
+            .collect()
     }
-}
-
-fn pyarray_vec3(py: Python, values: Vec<ldr_tools::glam::Vec3>) -> Py<PyArray2<f32>> {
-    // This flatten will be optimized in Release mode.
-    // This avoids needing unsafe code.
-    let count = values.len();
-    values
-        .into_iter()
-        .flat_map(|v| [v.x, v.y, v.z])
-        .collect::<Vec<f32>>()
-        .into_pyarray(py)
-        .reshape((count, 3))
-        .unwrap()
-        .into()
 }

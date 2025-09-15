@@ -105,7 +105,7 @@ def add_nodes(
         obj = bpy.data.objects.new(node.name, None)
 
     # Each node is transformed relative to its parent.
-    obj.matrix_local = mathutils.Matrix(node.transform).transposed()
+    obj.matrix_local = mathutils.Matrix(node.transform)
     bpy.context.collection.objects.link(obj)
 
     for child in node.children:
