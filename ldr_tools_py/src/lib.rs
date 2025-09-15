@@ -64,7 +64,7 @@ mod ldr_tools_py {
 
     use log::info;
     use map_py::{MapPy, TypedList};
-    use numpy::{IntoPyArray, PyArray1, PyArray2, PyArray3, PyArrayMethods};
+    use numpy::{PyArray1, PyArray2, PyArray3};
 
     #[pymodule_init]
     fn init(_m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -229,23 +229,10 @@ mod ldr_tools_py {
             .geometry_world_transforms
             .into_iter()
             .map(|(k, v)| {
-                // Create a single numpy array of transforms for each geometry.
-                // This means Python code can avoid overhead from for loops.
-                // This flatten will be optimized in Release mode.
-                // This avoids needing unsafe code.
-                let transform_count = v.len();
-                let transforms = v
-                    .into_iter()
-                    .flat_map(|v| v.to_cols_array())
-                    .collect::<Vec<f32>>()
-                    .into_pyarray(py)
-                    .reshape((transform_count, 4, 4))
-                    .unwrap()
-                    .into();
-
-                (k, transforms)
+                let transforms = v.map_py(py)?;
+                Ok((k, transforms))
             })
-            .collect();
+            .collect::<PyResult<_>>()?;
 
         info!("load_file_instanced: {:?}", start.elapsed());
 
