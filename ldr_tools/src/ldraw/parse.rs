@@ -1,18 +1,18 @@
 // LDraw File Format Specification
 // https://www.ldraw.org/article/218.html
 
-use base64::{prelude::BASE64_STANDARD, Engine};
+use base64::{Engine, prelude::BASE64_STANDARD};
 use glam::{Vec2, Vec3};
 use log::error;
 use nom::{
+    AsChar, IResult, Input, Parser,
     branch::alt,
-    bytes::complete::{tag, tag_no_case, take_while1, take_while_m_n},
+    bytes::complete::{tag, tag_no_case, take_while_m_n, take_while1},
     character::{complete::digit1, is_bin_digit},
     combinator::{complete, map, map_res, opt},
     error::ErrorKind,
     multi::separated_list1,
     number::complete::float,
-    AsChar, IResult, Input, Parser,
 };
 use std::str;
 

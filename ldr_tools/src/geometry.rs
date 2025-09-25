@@ -1,14 +1,14 @@
 use crate::ldraw::{BfcCommand, Command, Winding};
 use glam::{Mat4, Vec2, Vec3};
 use log::warn;
-use rstar::{primitives::GeomWithData, RTree};
+use rstar::{RTree, primitives::GeomWithData};
 
 use crate::{
+    ColorCode, GeometrySettings, StudType,
     edge_split::split_edges,
-    pe_tex_info::{project_texture, LDrawTextureInfo, PendingStudioTexture},
+    pe_tex_info::{LDrawTextureInfo, PendingStudioTexture, project_texture},
     replace_color,
     slope::is_slope_piece,
-    ColorCode, GeometrySettings, StudType,
 };
 
 // TODO: Document the data layout for these fields.

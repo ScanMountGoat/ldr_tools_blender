@@ -6,13 +6,13 @@ use std::{
 };
 
 use geometry::create_geometry;
-use glam::{vec4, Mat4, Vec3};
+use glam::{Mat4, Vec3, vec4};
 use ldraw::{Command, FileRefResolver};
 use log::error;
 use rayon::prelude::*;
 use zip::ZipArchive;
 
-pub use color::{load_color_table, LDrawColor};
+pub use color::{LDrawColor, load_color_table};
 pub use geometry::LDrawGeometry;
 pub use glam;
 pub use ldraw::Color;
