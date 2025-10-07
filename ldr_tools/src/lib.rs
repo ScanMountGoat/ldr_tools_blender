@@ -102,18 +102,17 @@ impl FileRefResolver for DiskResolver {
 }
 
 struct IoFileResolver {
-    io_path: String,
-    model_ldr: Vec<u8>,
+    io_files: HashMap<String, Vec<u8>>,
     resolver: DiskResolver,
 }
 
 impl FileRefResolver for IoFileResolver {
     fn resolve<P: AsRef<Path>>(&self, filename: P) -> Vec<u8> {
-        if filename.as_ref() == Path::new(&self.io_path) {
-            self.model_ldr.clone()
-        } else {
-            self.resolver.resolve(filename)
-        }
+        filename
+            .as_ref()
+            .to_str()
+            .and_then(|name| self.io_files.get(name).cloned())
+            .unwrap_or_else(|| self.resolver.resolve(filename))
     }
 }
 
@@ -121,26 +120,50 @@ impl IoFileResolver {
     fn new(io_path: String, resolver: DiskResolver) -> Result<Self, zip::result::ZipError> {
         let zip_file = File::open(&io_path)?;
         let mut archive = ZipArchive::new(BufReader::new(zip_file))?;
-        let mut ldr_file = archive.by_name("model.ldr")?;
 
-        let mut buffer = Vec::with_capacity(ldr_file.size() as usize);
+        // The "CustomParts" folder serves as an additional LDRAW library.
+        let mut io_files = HashMap::new();
+        let file_names: Vec<_> = archive.file_names().map(|n| n.to_string()).collect();
+        for file_name in file_names {
+            // TODO: Is it necessary to preserve the folder structure?
+            // TODO: Use the proper resolution version of each part?
+            let name = Path::new(&file_name)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string();
+            if name.ends_with(".ldr") || name.ends_with(".dat") {
+                let contents = read_zip_file_contents(&mut archive, file_name)?;
 
-        // skip a BOM, if present
-        ldr_file.by_ref().take(3).read_to_end(&mut buffer)?;
-        if buffer == "\u{FEFF}".as_bytes() {
-            buffer.clear();
+                if name == "model.ldr" {
+                    // Resolving the .io file itself should resolve the main model file.
+                    io_files.insert(io_path.clone(), contents.clone());
+                }
+                io_files.insert(name, contents);
+            }
         }
 
-        ldr_file.read_to_end(&mut buffer)?;
-
-        // TODO: read custom parts from the file?
-
-        Ok(Self {
-            io_path,
-            model_ldr: buffer,
-            resolver,
-        })
+        Ok(Self { io_files, resolver })
     }
+}
+
+fn read_zip_file_contents(
+    archive: &mut ZipArchive<BufReader<File>>,
+    file_name: String,
+) -> Result<Vec<u8>, zip::result::ZipError> {
+    let mut file = archive.by_name(&file_name).unwrap();
+
+    let mut contents = Vec::with_capacity(file.size() as usize);
+
+    // Remove the BOM if present.
+    file.by_ref().take(3).read_to_end(&mut contents)?;
+    if contents == "\u{FEFF}".as_bytes() {
+        contents.clear();
+    }
+
+    file.read_to_end(&mut contents)?;
+
+    Ok(contents)
 }
 
 #[derive(Debug, PartialEq)]

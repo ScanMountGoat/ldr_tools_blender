@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## unreleased
+### Fixed
+* Fixed an issue where Studio models would not load additional parts contained in the .io file.
+
 ## 0.4.11 - 2025-08-08
 ### Changed
 * Changed parsing behavior to skip invalid lines and instead log errors to the console and Blender's info log.
