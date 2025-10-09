@@ -253,7 +253,7 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         row.operator("additional_paths.delete_item", text="Remove Path")
 
     def execute(self, context: bpy.types.Context) -> Status:
-        init_logging(self)
+        handler = enable_logging(self)
 
         # Update from the UI values to support saving them to disk later.
         ImportOperator.preferences.ldraw_path = self.ldraw_path
@@ -278,6 +278,10 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         )
         end = time.time()
         print(f"Import: {end - start}")
+
+        # Remove any references to the current operator.
+        # This prevents exceptions when importing again.
+        logging.getLogger().removeHandler(handler)
 
         # Save preferences to disk for loading next time.
         ImportOperator.preferences.save()
@@ -311,7 +315,7 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
         return settings
 
 
-def init_logging(operator: bpy.types.Operator):
+def enable_logging(operator: bpy.types.Operator) -> OperatorHandler:
     # Log any errors from Rust.
     log_fmt = "%(levelname)s %(name)s %(filename)s:%(lineno)d %(message)s"
     logging.basicConfig(format=log_fmt, level=logging.INFO)
@@ -320,6 +324,7 @@ def init_logging(operator: bpy.types.Operator):
     handler = OperatorHandler(operator)
     handler.setFormatter(logging.Formatter(log_fmt))
     logging.getLogger().addHandler(handler)
+    return handler
 
 
 class OperatorHandler(logging.Handler):
