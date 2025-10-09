@@ -64,12 +64,7 @@ impl DiskResolver {
             catalog_path.join("UnOfficial").join("parts"),
             catalog_path.join("UnOfficial").join("parts").join("s"),
         ];
-        // Insert at the front since earlier elements take priority.
-        match resolution {
-            PrimitiveResolution::Low => base_paths.insert(0, catalog_path.join("p").join("8")),
-            PrimitiveResolution::Normal => (),
-            PrimitiveResolution::High => base_paths.insert(0, catalog_path.join("p").join("48")),
-        }
+        add_p_resolution_paths(resolution, &catalog_path, &mut base_paths);
 
         // Users may want to specify additional folders for parts.
         for path in additional_paths {
@@ -102,22 +97,27 @@ impl FileRefResolver for DiskResolver {
 }
 
 struct IoFileResolver {
-    io_files: HashMap<String, Vec<u8>>,
+    io_files: HashMap<PathBuf, Vec<u8>>,
+    io_base_paths: Vec<PathBuf>,
     resolver: DiskResolver,
 }
 
 impl FileRefResolver for IoFileResolver {
     fn resolve<P: AsRef<Path>>(&self, filename: P) -> Vec<u8> {
-        filename
-            .as_ref()
-            .to_str()
-            .and_then(|name| self.io_files.get(name).cloned())
+        // The parts library in the .io file itself should take priority.
+        self.io_base_paths
+            .iter()
+            .find_map(|prefix| self.io_files.get(&prefix.join(filename.as_ref())).cloned())
             .unwrap_or_else(|| self.resolver.resolve(filename))
     }
 }
 
 impl IoFileResolver {
-    fn new(io_path: String, resolver: DiskResolver) -> Result<Self, zip::result::ZipError> {
+    fn new(
+        io_path: String,
+        resolver: DiskResolver,
+        resolution: PrimitiveResolution,
+    ) -> Result<Self, zip::result::ZipError> {
         let zip_file = File::open(&io_path)?;
         let mut archive = ZipArchive::new(BufReader::new(zip_file))?;
 
@@ -125,25 +125,60 @@ impl IoFileResolver {
         let mut io_files = HashMap::new();
         let file_names: Vec<_> = archive.file_names().map(|n| n.to_string()).collect();
         for file_name in file_names {
-            // TODO: Is it necessary to preserve the folder structure?
-            // TODO: Use the proper resolution version of each part?
-            let name = Path::new(&file_name)
-                .file_name()
-                .unwrap()
-                .to_string_lossy()
-                .to_string();
-            if name.ends_with(".ldr") || name.ends_with(".dat") {
-                let contents = read_zip_file_contents(&mut archive, file_name)?;
+            if file_name.ends_with(".ldr") || file_name.ends_with(".dat") {
+                let contents = read_zip_file_contents(&mut archive, file_name.clone())?;
 
-                if name == "model.ldr" {
+                if file_name == "model.ldr" {
                     // Resolving the .io file itself should resolve the main model file.
-                    io_files.insert(io_path.clone(), contents.clone());
+                    io_files.insert(PathBuf::from(&io_path), contents.clone());
                 }
-                io_files.insert(name, contents);
+                io_files.insert(PathBuf::from(file_name), contents);
             }
         }
 
-        Ok(Self { io_files, resolver })
+        let catalog_path = Path::new("CustomParts");
+        let mut io_base_paths = vec![
+            catalog_path.to_path_buf(),
+            catalog_path.join("p"),
+            catalog_path.join("parts"),
+            catalog_path.join("parts").join("s"),
+            catalog_path.join("UnOfficial").join("p"),
+            catalog_path.join("UnOfficial").join("parts"),
+            catalog_path.join("UnOfficial").join("parts").join("s"),
+        ];
+        add_p_resolution_paths(resolution, catalog_path, &mut io_base_paths);
+
+        Ok(Self {
+            io_files,
+            io_base_paths,
+            resolver,
+        })
+    }
+}
+
+fn add_p_resolution_paths(
+    resolution: PrimitiveResolution,
+    catalog_path: &Path,
+    io_base_paths: &mut Vec<PathBuf>,
+) {
+    match resolution {
+        PrimitiveResolution::Low => {
+            // Insert at the front since earlier elements take priority.
+            // Keep the other resolution as a fallback.
+            io_base_paths.insert(0, catalog_path.join("p").join("8"));
+            io_base_paths.insert(0, catalog_path.join("p").join("48"));
+        }
+        PrimitiveResolution::Normal => {
+            // Add to the end to use the normal resolution first.
+            io_base_paths.push(catalog_path.join("p").join("48"));
+            io_base_paths.push(catalog_path.join("p").join("8"));
+        }
+        PrimitiveResolution::High => {
+            // Insert at the front since earlier elements take priority.
+            // Keep the other resolution as a fallback.
+            io_base_paths.insert(0, catalog_path.join("p").join("48"));
+            io_base_paths.insert(0, catalog_path.join("p").join("8"));
+        }
     }
 }
 
@@ -324,7 +359,8 @@ fn parse_file(
 
     let main_model_name = if is_io {
         // TODO: Avoid unwrap?
-        let io_resolver = IoFileResolver::new(path.to_owned(), resolver).unwrap();
+        let io_resolver =
+            IoFileResolver::new(path.to_owned(), resolver, settings.primitive_resolution).unwrap();
         ldraw::parse(path, &io_resolver, &mut source_map)
     } else {
         ldraw::parse(path, &resolver, &mut source_map)

@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## unreleased
 ### Fixed
 * Fixed an issue where Studio models would not load additional parts contained in the .io file.
+* Fixed an issue where models would not load parts with a different primitive resolution than the import settings.
 
 ## 0.4.11 - 2025-08-08
 ### Changed
