@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## unreleased
 ### Changed
 * Improved import times when using "Linked Duplicates" as the instance type.
+* Changed importing to use Studio's CustomColorDefinition.txt if present instead of the LDConfig.ldr. The txt file contains more colors and better matches the look of models in Studio itself. An LDraw library path without Studio files will continue to use the LDConfig.ldr as before.
 
 ### Fixed
 * Fixed an issue where Studio models would not load additional parts contained in the .io file.

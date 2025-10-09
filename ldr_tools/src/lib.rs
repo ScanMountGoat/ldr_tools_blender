@@ -12,7 +12,7 @@ use log::error;
 use rayon::prelude::*;
 use zip::ZipArchive;
 
-pub use color::{LDrawColor, load_color_table};
+pub use color::{LDrawColor, load_color_table, load_ldraw_color_table, load_studio_color_table};
 pub use geometry::LDrawGeometry;
 pub use glam;
 pub use ldraw::Color;
