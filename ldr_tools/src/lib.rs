@@ -63,6 +63,7 @@ impl DiskResolver {
             catalog_path.join("UnOfficial").join("p"),
             catalog_path.join("UnOfficial").join("parts"),
             catalog_path.join("UnOfficial").join("parts").join("s"),
+            catalog_path.join("LEGO"),
         ];
         add_p_resolution_paths(resolution, &catalog_path, &mut base_paths);
 
