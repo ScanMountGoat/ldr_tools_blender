@@ -44,13 +44,16 @@ def import_ldraw(
     # TODO: Add an option to make the lowest point have a height of 0 using obj.dimensions?
     if instance_type == "GeometryNodes":
         import_instanced(
-            filepath, ldraw_path, additional_paths, color_by_code, settings
+            operator, filepath, ldraw_path, additional_paths, color_by_code, settings
         )
     elif instance_type == "LinkedDuplicates":
-        import_objects(filepath, ldraw_path, additional_paths, color_by_code, settings)
+        import_objects(
+            operator, filepath, ldraw_path, additional_paths, color_by_code, settings
+        )
 
 
 def import_objects(
+    operator: bpy.types.Operator,
     filepath: str,
     ldraw_path: str,
     additional_paths: list[str],
@@ -68,7 +71,11 @@ def import_objects(
     scene = ldr_tools_py.load_file(filepath, ldraw_path, additional_paths, settings)
 
     root_obj = add_nodes(
-        scene.root_node, scene.geometry_cache, blender_mesh_cache, color_by_code
+        operator,
+        scene.root_node,
+        scene.geometry_cache,
+        blender_mesh_cache,
+        color_by_code,
     )
     # Account for Blender having a different coordinate system.
     root_obj.rotation_euler = mathutils.Euler((math.radians(-90.0), 0.0, 0.0), "XYZ")
@@ -76,6 +83,7 @@ def import_objects(
 
 
 def add_nodes(
+    operator: bpy.types.Operator,
     node: LDrawNode,
     geometry_cache: dict[str, LDrawGeometry],
     blender_mesh_cache: dict[tuple[str, int], Mesh],
@@ -92,7 +100,7 @@ def add_nodes(
         blender_mesh = blender_mesh_cache.get(mesh_key)
         if blender_mesh is None:
             mesh = create_colored_mesh_from_geometry(
-                node.name, node.current_color, color_by_code, geometry
+                operator, node.name, node.current_color, color_by_code, geometry
             )
 
             blender_mesh_cache[mesh_key] = mesh
@@ -109,13 +117,16 @@ def add_nodes(
     bpy.context.collection.objects.link(obj)
 
     for child in node.children:
-        child_obj = add_nodes(child, geometry_cache, blender_mesh_cache, color_by_code)
+        child_obj = add_nodes(
+            operator, child, geometry_cache, blender_mesh_cache, color_by_code
+        )
         child_obj.parent = obj
 
     return obj
 
 
 def import_instanced(
+    operator: bpy.types.Operator,
     filepath: str,
     ldraw_path: str,
     additional_paths: list[str],
@@ -136,7 +147,9 @@ def import_instanced(
     for name, color in scene.geometry_point_instances:
         geometry = scene.geometry_cache[name]
 
-        mesh = create_colored_mesh_from_geometry(name, color, color_by_code, geometry)
+        mesh = create_colored_mesh_from_geometry(
+            operator, name, color, color_by_code, geometry
+        )
 
         blender_mesh_cache[(name, color)] = mesh
 
@@ -273,11 +286,15 @@ def create_instancer_mesh(name: str, instances: ldr_tools_py.PointInstances) -> 
 
 
 def create_colored_mesh_from_geometry(
-    name: str, color: int, color_by_code: dict[int, LDrawColor], geometry: LDrawGeometry
+    operator: bpy.types.Operator,
+    name: str,
+    color: int,
+    color_by_code: dict[int, LDrawColor],
+    geometry: LDrawGeometry,
 ) -> Mesh:
     mesh = create_mesh_from_geometry(name, geometry)
 
-    assign_materials(mesh, color, color_by_code, geometry)
+    assign_materials(operator, mesh, color, color_by_code, geometry)
 
     # TODO: Why does this need to be done here to avoid messing up face colors?
     # TODO: Can blender adjust faces in these calls?
@@ -308,6 +325,7 @@ def load_png(data: bytes, name: str) -> bpy.types.Image:
 
 
 def assign_materials(
+    operator: bpy.types.Operator,
     mesh: Mesh,
     current_color: int,
     color_by_code: dict[int, LDrawColor],
@@ -319,7 +337,9 @@ def assign_materials(
         color = current_color if face_color == 16 else face_color
 
         # Cache materials by name.
-        material = get_material(color_by_code, color, geometry.has_grainy_slopes)
+        material = get_material(
+            operator, color_by_code, color, geometry.has_grainy_slopes
+        )
         mesh.materials.append(material)
         return
 
@@ -342,7 +362,9 @@ def assign_materials(
             if image_index != 0xFF:
                 image = images[image_index]
 
-        material = get_material(color_by_code, color, geometry.has_grainy_slopes, image)
+        material = get_material(
+            operator, color_by_code, color, geometry.has_grainy_slopes, image
+        )
         if mesh.materials.get(material.name) is None:
             mesh.materials.append(material)
 

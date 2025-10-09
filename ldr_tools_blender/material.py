@@ -44,6 +44,7 @@ from bpy.types import (
 
 
 def get_material(
+    operator: bpy.types.Operator,
     color_by_code: dict[int, LDrawColor],
     code: int,
     is_slope: bool,
@@ -66,7 +67,10 @@ def get_material(
     if material is not None:
         return material
 
-    # TODO: Report warnings if a part contains an invalid color code.
+    # Report this error only once.
+    if ldraw_color is None:
+        operator.report({"ERROR"}, f"Unsupported color code {code}")
+
     material = bpy.data.materials.new(name)
     material.use_nodes = True
 
