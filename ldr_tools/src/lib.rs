@@ -395,7 +395,8 @@ fn load_node<'a>(
     let mut children = Vec::new();
     let mut geometry_name = None;
 
-    if is_part(source_file, filename) || has_geometry(source_file) {
+    let is_part = is_part(source_file, filename);
+    if is_part {
         // Create geometry if the node is a part.
         // Use the special color code to reuse identical parts in different colors.
         geometry_descriptors
@@ -419,7 +420,10 @@ fn load_node<'a>(
             });
 
         geometry_name = Some(filename.to_lowercase());
-    } else {
+    }
+
+    // Recursion is already handled for parts.
+    if !is_part {
         for cmd in &source_file.cmds {
             if let Command::SubFileRef(sfr_cmd) = cmd {
                 if let Some(subfile) = source_map.get(&sfr_cmd.file) {

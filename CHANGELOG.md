@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## unreleased
+### Changed
+* Improved import times when using "Linked Duplicates" as the instance type.
+
 ### Fixed
 * Fixed an issue where Studio models would not load additional parts contained in the .io file.
 * Fixed an issue where models would not load parts with a different primitive resolution than the import settings.
