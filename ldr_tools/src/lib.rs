@@ -84,7 +84,14 @@ impl FileRefResolver for DiskResolver {
         let contents = self
             .base_paths
             .iter()
-            .find_map(|prefix| std::fs::read(prefix.join(filename)).ok());
+            .find_map(|prefix| std::fs::read(prefix.join(filename)).ok())
+            .or_else(|| {
+                // Try without the folder like "part.dat" instead of "48/part.dat".
+                let filename = filename.file_name()?;
+                self.base_paths
+                    .iter()
+                    .find_map(|prefix| std::fs::read(prefix.join(filename)).ok())
+            });
 
         match contents {
             Some(contents) => contents,
