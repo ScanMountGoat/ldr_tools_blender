@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 * Fixed an issue where Studio models would not load additional parts contained in the .io file.
 * Fixed an issue where models would not load parts with a different primitive resolution than the import settings.
 * Fixed an issue where importing a model with errors would fail if a previous model imported with errors.
+* Fixed an issue where textures would be cut off in some cases due to incorrectly generated UV coordinates.
 
 ## 0.4.11 - 2025-08-08
 ### Changed

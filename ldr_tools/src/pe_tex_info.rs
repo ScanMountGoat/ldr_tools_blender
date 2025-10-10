@@ -1,7 +1,6 @@
 // Reverse engineered from C# DLLs for the Unity app for Bricklink Studio.
-
 use crate::LDrawGeometry;
-use glam::{Mat4, Vec2, Vec3, Vec3Swizzles};
+use glam::{Mat4, Vec2, Vec3, Vec3Swizzles, vec2, vec3};
 use log::error;
 
 #[derive(Debug, PartialEq)]
@@ -25,43 +24,6 @@ impl LDrawTextureInfo {
             uvs: vec![Vec2::ZERO; num_vertices],
         }
     }
-}
-
-fn init_texture_transform(texture_matrix: Mat4, part_matrix: Mat4) -> (Mat4, Vec3) {
-    let (scale, rot, tr) = (part_matrix * texture_matrix).to_scale_rotation_translation();
-    let mut mirroring = scale.signum();
-    mirroring.z *= -1.0;
-    let box_extents = scale.abs() / 2.0;
-    let rhs = Mat4::from_scale_rotation_translation(mirroring, rot, tr);
-    let matrix = part_matrix.inverse() * rhs;
-    (matrix, box_extents)
-}
-
-pub fn project_texture<const N: usize>(
-    texture: &PendingStudioTexture,
-    transform: Mat4,
-    vertices: [Vec3; N],
-    uvs: Option<[Vec2; N]>,
-) -> Option<TextureMap<N>> {
-    let texture_index = texture.index;
-
-    // The texture is drawn on this face if there are uvs or a projection matrix.
-    let uvs = uvs.or_else(|| {
-        let tex_location = texture.location?;
-
-        let (matrix, box_extents) = init_texture_transform(tex_location.transform, transform);
-        let inverse = matrix.inverse();
-        let vertices = vertices.map(|v| inverse.transform_point3(v));
-
-        intersect_poly_box(&vertices, box_extents).then(|| {
-            let min = tex_location.point_min;
-            let diff = tex_location.point_max - tex_location.point_min;
-
-            vertices.map(|v| (v.xz() - min) / diff)
-        })
-    })?;
-
-    Some(TextureMap { texture_index, uvs })
 }
 
 #[derive(Clone)]
@@ -121,6 +83,47 @@ impl PendingStudioTexture {
     }
 }
 
+pub fn project_texture<const N: usize>(
+    texture: &PendingStudioTexture,
+    transform: Mat4,
+    vertices: [Vec3; N],
+    uvs: Option<[Vec2; N]>,
+) -> Option<TextureMap<N>> {
+    let texture_index = texture.index;
+
+    // The texture is drawn on this face if there are uvs or a projection matrix.
+    let uvs = uvs.or_else(|| {
+        let tex_location = texture.location?;
+
+        let (matrix, box_extents) = init_texture_transform(tex_location.transform, transform);
+        let inverse = matrix.inverse();
+        let vertices = vertices.map(|v| inverse.transform_point3(v));
+
+        // Studio uses two passes to collect vertices that should have UVs.
+        // LDrawTextureInfo.CollectVerticesInBoxExtents checks the box intersection.
+        // LDrawTextureInfo.CollectConnectVertices checks the face normal.
+        (intersect_poly_box(&vertices, box_extents) || check_face_normal(&vertices)).then(|| {
+            // LDrawTextureInfo.GetUV in Studio's Assembly-CSharp.dll
+            let min = tex_location.point_min;
+            let diff = tex_location.point_max - tex_location.point_min;
+            // TODO: Why is the vertical flip necessary?
+            vertices.map(|v| (v.xz() * vec2(1.0, -1.0) - min) / diff)
+        })
+    })?;
+
+    Some(TextureMap { texture_index, uvs })
+}
+
+// LDrawTextureInfo.InitMatrixWithTargetPartMatrix in Studio's Assembly-CSharp.dll
+fn init_texture_transform(texture_matrix: Mat4, part_matrix: Mat4) -> (Mat4, Vec3) {
+    let (scale, rot, tr) = (part_matrix * texture_matrix).to_scale_rotation_translation();
+    let mirroring = scale.signum();
+    let box_extents = scale.abs() * 0.5;
+    let rhs = Mat4::from_scale_rotation_translation(mirroring, rot, tr);
+    let matrix = part_matrix.inverse() * rhs;
+    (matrix, box_extents)
+}
+
 fn intersect_poly_box(polygon: &[Vec3], r: Vec3) -> bool {
     match *polygon {
         [a, b, c] => intersect_tri_box([a, b, c], r),
@@ -129,11 +132,10 @@ fn intersect_poly_box(polygon: &[Vec3], r: Vec3) -> bool {
     }
 }
 
+// LDrawTextureInfo.IsIntersecting in Studio's Assembly-CSharp.dll
 fn intersect_tri_box(triangle: [Vec3; 3], box_extents: Vec3) -> bool {
-    let edges = {
-        let [a, b, c] = triangle;
-        [b - a, c - b, a - c]
-    };
+    let [a, b, c] = triangle;
+    let edges = { [b - a, c - b, a - c] };
 
     let normal = edges[0].cross(edges[1]);
 
@@ -172,4 +174,13 @@ fn min_max(values: &[f32]) -> (f32, f32) {
         max = max.max(n);
     }
     (min, max)
+}
+
+// LDrawTextureInfo.CheckFaceNormalWithTextureNormal in Studio's Assembly-CSharp.dll
+fn check_face_normal(poly: &[Vec3]) -> bool {
+    let texture_normal = vec3(0.0, -1.0, 0.0); // Hardcoded to Vector3.Down
+    // Assume tris or quads and share the normal calculation code.
+    // The winding is already applied to the vertices, so we don't need to invert.
+    let normal = (poly[1] - poly[0]).cross(poly[2] - poly[1]);
+    normal.normalize().dot(texture_normal) > 0.0001
 }
