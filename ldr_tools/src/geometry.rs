@@ -592,9 +592,9 @@ mod tests {
     }
 
     impl crate::ldraw::FileRefResolver for DummyResolver {
-        fn resolve<P: AsRef<std::path::Path>>(&self, filename: P) -> Vec<u8> {
+        fn resolve<P: AsRef<std::path::Path>>(&self, filename: P) -> Option<Vec<u8>> {
             let filename = filename.as_ref().to_str().unwrap();
-            self.files.get(filename).cloned().unwrap_or_default()
+            self.files.get(filename).cloned()
         }
     }
 

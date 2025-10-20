@@ -1,7 +1,7 @@
 //! LDraw file format and parser.
 
 // The LDraw representation and parser are based on work done for [weldr](https://github.com/djeedai/weldr).
-use log::{debug, trace};
+use log::{debug, error, trace};
 use std::{collections::HashMap, path::Path, str};
 
 pub use glam::{Mat4, Vec2, Vec3, Vec4};
@@ -94,7 +94,11 @@ fn load_file<P: AsRef<Path>, R: FileRefResolver>(
     source_map: &mut SourceMap,
     stack: &mut Vec<FileRef>,
 ) -> String {
-    let raw_content = resolver.resolve(path);
+    let raw_content = resolver.resolve(path).unwrap_or_else(|| {
+        // TODO: Is there a better way to allow partial imports with resolve errors?
+        error!("Unable to resolve {filename:?}");
+        Vec::new()
+    });
     let source_file = SourceFile {
         cmds: parse_commands(&raw_content),
     };
@@ -569,7 +573,7 @@ pub trait FileRefResolver {
     /// Unix style `\n` or Windows style `\r\n`.
     ///
     /// See [`parse()`] for usage.
-    fn resolve<P: AsRef<Path>>(&self, filename: P) -> Vec<u8>;
+    fn resolve<P: AsRef<Path>>(&self, filename: P) -> Option<Vec<u8>>;
 }
 
 impl Transform {

@@ -8,7 +8,6 @@ use std::{
 use geometry::create_geometry;
 use glam::{Mat4, Vec3, vec4};
 use ldraw::{Command, FileRefResolver};
-use log::error;
 use rayon::prelude::*;
 use zip::ZipArchive;
 
@@ -77,12 +76,11 @@ impl DiskResolver {
 }
 
 impl FileRefResolver for DiskResolver {
-    fn resolve<P: AsRef<Path>>(&self, filename: P) -> Vec<u8> {
+    fn resolve<P: AsRef<Path>>(&self, filename: P) -> Option<Vec<u8>> {
         let filename = filename.as_ref();
 
         // Find the first folder that contains the given file.
-        let contents = self
-            .base_paths
+        self.base_paths
             .iter()
             .find_map(|prefix| std::fs::read(prefix.join(filename)).ok())
             .or_else(|| {
@@ -91,16 +89,7 @@ impl FileRefResolver for DiskResolver {
                 self.base_paths
                     .iter()
                     .find_map(|prefix| std::fs::read(prefix.join(filename)).ok())
-            });
-
-        match contents {
-            Some(contents) => contents,
-            None => {
-                // TODO: Is there a better way to allow partial imports with resolve errors?
-                error!("Unable to resolve {filename:?}");
-                Vec::new()
-            }
-        }
+            })
     }
 }
 
@@ -111,12 +100,12 @@ struct IoFileResolver {
 }
 
 impl FileRefResolver for IoFileResolver {
-    fn resolve<P: AsRef<Path>>(&self, filename: P) -> Vec<u8> {
+    fn resolve<P: AsRef<Path>>(&self, filename: P) -> Option<Vec<u8>> {
         // The parts library in the .io file itself should take priority.
         self.io_base_paths
             .iter()
             .find_map(|prefix| self.io_files.get(&prefix.join(filename.as_ref())).cloned())
-            .unwrap_or_else(|| self.resolver.resolve(filename))
+            .or_else(|| self.resolver.resolve(filename.as_ref()))
     }
 }
 
@@ -167,25 +156,21 @@ impl IoFileResolver {
 fn add_p_resolution_paths(
     resolution: PrimitiveResolution,
     catalog_path: &Path,
-    io_base_paths: &mut Vec<PathBuf>,
+    base_paths: &mut Vec<PathBuf>,
 ) {
     match resolution {
         PrimitiveResolution::Low => {
             // Insert at the front since earlier elements take priority.
-            // Keep the other resolution as a fallback.
-            io_base_paths.insert(0, catalog_path.join("p").join("8"));
-            io_base_paths.insert(0, catalog_path.join("p").join("48"));
+            // TODO: Keep the other resolution as a fallback?
+            base_paths.insert(0, catalog_path.join("p").join("8"));
         }
         PrimitiveResolution::Normal => {
-            // Add to the end to use the normal resolution first.
-            io_base_paths.push(catalog_path.join("p").join("48"));
-            io_base_paths.push(catalog_path.join("p").join("8"));
+            // TODO: Keep the other resolutions as a fallback?
         }
         PrimitiveResolution::High => {
             // Insert at the front since earlier elements take priority.
-            // Keep the other resolution as a fallback.
-            io_base_paths.insert(0, catalog_path.join("p").join("48"));
-            io_base_paths.insert(0, catalog_path.join("p").join("8"));
+            // TODO: Keep the other resolution as a fallback?
+            base_paths.insert(0, catalog_path.join("p").join("48"));
         }
     }
 }
