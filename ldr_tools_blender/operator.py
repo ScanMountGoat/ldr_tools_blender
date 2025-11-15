@@ -230,6 +230,18 @@ class ImportOperator(bpy.types.Operator, ImportHelper):
             default=preferences.scene_scale,
         )
 
+    def invoke(self, context, event):
+        # Initialize the UI with updated values saved to disk.
+        ImportOperator.preferences = Preferences.load()
+        self.ldraw_path = ImportOperator.preferences.ldraw_path
+        self.instance_type = ImportOperator.preferences.instance_type
+        self.stud_type = ImportOperator.preferences.stud_type
+        self.primitive_resolution = ImportOperator.preferences.primitive_resolution
+        self.add_gap_between_parts = ImportOperator.preferences.add_gap_between_parts
+        self.scene_scale = ImportOperator.preferences.scene_scale
+
+        return super().invoke(context, event)
+
     def draw(self, context: bpy.types.Context) -> None:
         layout = self.layout
         layout.use_property_split = True
