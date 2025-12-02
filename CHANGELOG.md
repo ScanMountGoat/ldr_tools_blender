@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## unreleased
+### Changed
+* Changed the default primitive resolution to "High" to reduce the number of import errors.
+
 ### Fixed
 * Fixed an issue where the import menu would load outdated settings values in some cases.
 

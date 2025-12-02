@@ -74,7 +74,7 @@ class Preferences:
         self.ldraw_path = find_ldraw_library()
         self.instance_type = "LinkedDuplicates"
         self.stud_type = "Logo4"
-        self.primitive_resolution = "Normal"
+        self.primitive_resolution = "High"
         self.additional_paths: list[str] = []
         self.add_gap_between_parts = True
         # default matches hardcoded behavior of previous versions
