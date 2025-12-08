@@ -42,8 +42,8 @@ struct FileRef {
 /// struct MyCustomResolver;
 ///
 /// impl FileRefResolver for MyCustomResolver {
-///   fn resolve<P: AsRef<std::path::Path>>(&self, filename: P) -> Vec<u8> {
-///     Vec::new() // replace with custom impl
+///   fn resolve<P: AsRef<std::path::Path>>(&self, filename: P) -> Option<Vec<u8>> {
+///     Some(Vec::new()) // replace with custom impl
 ///   }
 /// }
 ///

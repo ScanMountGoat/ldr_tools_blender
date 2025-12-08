@@ -1,7 +1,8 @@
+use std::collections::HashMap;
+
 use crate::ldraw::{BfcCommand, Command, Winding};
 use glam::{Mat4, Vec2, Vec3};
 use log::warn;
-use rstar::{RTree, primitives::GeomWithData};
 
 use crate::{
     ColorCode, GeometrySettings, StudType,
@@ -56,38 +57,56 @@ impl GeometryContext {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct VertexKey([u32; 3]);
+
+impl VertexKey {
+    fn new(v: Vec3) -> Self {
+        // LDraw geometry isn't indexed due to the recursive nature of the file format.
+        // Models can have many vertices after generating all the studs.
+        // Distance calculations slow down even tree data structures with O(log n) nearest neighbor queries.
+        // Rounding the vertex coordinates for comparisons approximates a distance based query.
+        // This hack works well in practice for the rounding errors introduced by subfile transforms.
+        // Choose enough decimal places in LDraw units to not mess up vertices for patterned parts.
+        Self(v.to_array().map(|f| {
+            let x = round(f, 3);
+
+            // Make sure that -0.0 is equal to 0.0.
+            if x == 0.0 {
+                0.0f32.to_bits()
+            } else {
+                x.to_bits()
+            }
+        }))
+    }
+}
+
+fn round(x: f32, decimals: u32) -> f32 {
+    let y = 10i32.pow(decimals) as f32;
+    (x * y).round() / y
+}
 struct VertexMap {
-    rtree: RTree<rstar::primitives::GeomWithData<[f32; 3], u32>>,
+    map: HashMap<VertexKey, u32>,
 }
 
 impl VertexMap {
     fn new() -> Self {
         Self {
-            rtree: RTree::new(),
+            map: HashMap::new(),
         }
     }
 
-    fn get_nearest(&self, v: [f32; 3]) -> Option<u32> {
-        // TODO: Why do edges require higher tolerances?
-        self.rtree.nearest_neighbor(&v).map(|p| p.data)
+    fn get(&self, v: Vec3) -> Option<u32> {
+        self.map.get(&VertexKey::new(v)).copied()
     }
 
-    fn get(&self, v: [f32; 3]) -> Option<u32> {
-        // Return the value already in the map or None.
-        // Dimensions in LDUs tend to be large, so use a large threshold.
-        let epsilon = 0.01;
-        self.rtree
-            .locate_within_distance(v, epsilon * epsilon)
-            .next()
-            .map(|p| p.data)
-    }
-
-    fn insert(&mut self, i: u32, v: [f32; 3]) -> Option<u32> {
-        match self.get(v) {
-            Some(index) => Some(index),
+    fn insert(&mut self, i: u32, v: Vec3) -> Option<u32> {
+        let key = VertexKey::new(v);
+        match self.map.get(&key) {
+            Some(index) => Some(*index),
             None => {
                 // This vertex isn't in the map yet, so add it.
-                self.rtree.insert(GeomWithData::new(v, i));
+                self.map.insert(key, i);
                 None
             }
         }
@@ -160,7 +179,7 @@ pub fn create_geometry(
         // The edge indices are no longer valid since splitting can change vertices.
         vertex_map = VertexMap::new();
         for (i, v) in geometry.vertices.iter().enumerate() {
-            vertex_map.insert(i as u32, v.to_array());
+            vertex_map.insert(i as u32, *v);
         }
         geometry.edge_line_indices = edge_indices(&hard_edges, &vertex_map);
     }
@@ -227,8 +246,8 @@ fn edge_indices(edges: &[[Vec3; 2]], vertex_map: &VertexMap) -> Vec<[u32; 2]> {
     let mut edge_indices = Vec::new();
     for [v0, v1] in edges.iter() {
         // TODO: Why is get_nearest not enough to find some indices?
-        let i0 = vertex_map.get_nearest(v0.to_array());
-        let i1 = vertex_map.get_nearest(v1.to_array());
+        let i0 = vertex_map.get(*v0);
+        let i1 = vertex_map.get(*v1);
         if let (Some(i0), Some(i1)) = (i0, i1) {
             edge_indices.push([i0, i1]);
         }
@@ -563,7 +582,7 @@ fn insert_vertex(
     if !weld_vertices {
         geometry.vertices.push(new_vertex);
         new_index
-    } else if let Some(index) = vertex_map.insert(new_index, new_vertex.to_array()) {
+    } else if let Some(index) = vertex_map.insert(new_index, new_vertex) {
         index
     } else {
         geometry.vertices.push(new_vertex);
@@ -577,6 +596,7 @@ mod tests {
 
     use super::*;
 
+    use glam::vec3;
     use indoc::indoc;
 
     struct DummyResolver {
@@ -767,4 +787,19 @@ mod tests {
     // TODO: Test create geometry with and without welding and triangulate options
 
     // TODO: Add tests for BFC certified superfiles.
+
+    #[test]
+    fn round_vertices() {
+        assert_eq!(
+            VertexKey::new(vec3(1.0, 2.0, 3.0)),
+            VertexKey::new(vec3(1.0, 2.0, 3.0))
+        );
+        assert_eq!(
+            VertexKey::new(vec3(-0.0001, 2.0024, 2.9999)),
+            VertexKey::new(vec3(0.0001, 2.0021, 3.0))
+        );
+        assert!(
+            VertexKey::new(vec3(0.002, 2.003, 2.999)) != VertexKey::new(vec3(0.001, 2.0021, 3.01))
+        );
+    }
 }
