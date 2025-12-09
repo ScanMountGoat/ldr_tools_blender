@@ -164,8 +164,8 @@ pub fn create_geometry(
 
     geometry.edge_line_indices = edge_indices(&hard_edges, &vertex_map);
 
-    // TODO: make this optional.
-    if settings.weld_vertices && !geometry.edge_line_indices.is_empty() {
+    // Splitting only works if vertices are fully welded.
+    if settings.weld_vertices {
         let (split_positions, split_indices) = split_edges(
             &geometry.vertices,
             &geometry.vertex_indices,

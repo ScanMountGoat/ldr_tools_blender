@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 * Changed the vertex welding algorithm to reduce import times.
 
+### Fixed
+* Fixed an issue where parts would import with incorrectly smoothed normals in some cases.
+
 ## 0.4.13 - 2025-12-02
 ### Changed
 * Changed the default primitive resolution to "High" to reduce the number of import errors.
