@@ -778,8 +778,22 @@ mod tests {
             },
         );
 
+        // Some vertices are repeated from the face normal threshold for edge splitting.
         assert_eq!(
-            vec![0, 1, 2, 3, 4, 5, 2, 1, 0, 5, 4, 3],
+            vec![
+                vec3(-1.0, 0.0, 0.0,),
+                vec3(0.0, -1.0, 0.0,),
+                vec3(0.0, 0.0, -1.0,),
+                vec3(0.0, 0.0, 1.0,),
+                vec3(0.0, 1.0, 0.0,),
+                vec3(1.0, 0.0, 0.0,),
+                vec3(0.0, -1.0, 0.0,),
+                vec3(0.0, 1.0, 0.0,),
+            ],
+            geometry.vertices
+        );
+        assert_eq!(
+            vec![0, 1, 2, 3, 4, 5, 2, 6, 0, 5, 7, 3],
             geometry.vertex_indices
         );
         assert_eq!(vec![3, 3, 3, 3], geometry.face_sizes);
