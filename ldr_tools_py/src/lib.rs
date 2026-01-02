@@ -1,3 +1,4 @@
+use ldr_tools::ldraw::SubFileRef;
 use pyo3::prelude::*;
 
 macro_rules! python_enum {
@@ -84,6 +85,7 @@ mod ldr_tools_py {
     pub struct LDrawNode {
         name: String,
         transform: Py<PyArray2<f32>>,
+        #[map(from(map_string_from_ref), into(map_string_into_ref))]
         geometry_name: Option<String>,
         current_color: u32,
         children: TypedList<LDrawNode>,
@@ -193,7 +195,7 @@ mod ldr_tools_py {
         let geometry_cache = scene
             .geometry_cache
             .into_iter()
-            .map(|(k, v)| Ok((k, v.map_py(py)?)))
+            .map(|(k, v)| Ok((k.name, v.map_py(py)?)))
             .collect::<PyResult<_>>()?;
         info!("load_file: {:?}", start.elapsed());
 
@@ -222,7 +224,7 @@ mod ldr_tools_py {
         let geometry_cache = scene
             .geometry_cache
             .into_iter()
-            .map(|(k, v)| Ok((k, v.map_py(py)?)))
+            .map(|(k, v)| Ok((k.name, v.map_py(py)?)))
             .collect::<PyResult<_>>()?;
 
         let geometry_world_transforms = scene
@@ -230,7 +232,7 @@ mod ldr_tools_py {
             .into_iter()
             .map(|(k, v)| {
                 let transforms = v.map_py(py)?;
-                Ok((k, transforms))
+                Ok(((k.0.name, k.1), transforms))
             })
             .collect::<PyResult<_>>()?;
 
@@ -262,13 +264,13 @@ mod ldr_tools_py {
         let geometry_cache = scene
             .geometry_cache
             .into_iter()
-            .map(|(k, v)| Ok((k, v.map_py(py)?)))
+            .map(|(k, v)| Ok((k.name, v.map_py(py)?)))
             .collect::<PyResult<_>>()?;
 
         let geometry_point_instances = scene
             .geometry_point_instances
             .into_iter()
-            .map(|(k, v)| Ok((k, v.map_py(py)?)))
+            .map(|(k, v)| Ok(((k.0.name, k.1), v.map_py(py)?)))
             .collect::<PyResult<_>>()?;
 
         info!("load_file_instanced_points: {:?}", start.elapsed());
@@ -286,5 +288,13 @@ mod ldr_tools_py {
             .into_iter()
             .map(|(k, v)| Ok((k, v.map_py(py)?)))
             .collect()
+    }
+
+    fn map_string_from_ref(value: Option<SubFileRef>, _py: Python) -> PyResult<Option<String>> {
+        Ok(value.map(|v| v.name))
+    }
+
+    fn map_string_into_ref(value: Option<String>, _py: Python) -> PyResult<Option<SubFileRef>> {
+        Ok(value.map(|v| SubFileRef::new(&v)))
     }
 }

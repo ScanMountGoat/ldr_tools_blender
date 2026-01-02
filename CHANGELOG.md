@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## unreleased
+### Changed
+* Changed importing to preserve the case of names of files and submodels instead of converting to all lowercase.
+
 ## 0.4.14 - 2025-12-09
 ### Changed
 * Changed the vertex welding algorithm to reduce import times.

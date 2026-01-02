@@ -17,6 +17,8 @@ pub use glam;
 pub use ldraw::Color;
 pub use pe_tex_info::LDrawTextureInfo;
 
+use crate::ldraw::SubFileRef;
+
 pub type ColorCode = u32;
 
 // Special color code that "inherits" the existing color.
@@ -36,7 +38,7 @@ pub struct LDrawNode {
     pub transform: Mat4,
     /// The name of the geometry in [geometry_cache](struct.LDrawScene.html#structfield.geometry_cache)
     /// or `None` for internal nodes.
-    pub geometry_name: Option<String>, // TODO: Better way to share geometry?
+    pub geometry_name: Option<SubFileRef>, // TODO: Better way to share geometry?
     /// The current color set for this node.
     /// Overrides colors in the geometry if present.
     pub current_color: ColorCode,
@@ -197,22 +199,22 @@ fn read_zip_file_contents(
 #[derive(Debug, PartialEq)]
 pub struct LDrawScene {
     pub root_node: LDrawNode,
-    pub geometry_cache: HashMap<String, LDrawGeometry>,
+    pub geometry_cache: HashMap<SubFileRef, LDrawGeometry>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct LDrawSceneInstanced {
     pub main_model_name: String,
-    pub geometry_world_transforms: HashMap<(String, ColorCode), Vec<Mat4>>,
-    pub geometry_cache: HashMap<String, LDrawGeometry>,
+    pub geometry_world_transforms: HashMap<(SubFileRef, ColorCode), Vec<Mat4>>,
+    pub geometry_cache: HashMap<SubFileRef, LDrawGeometry>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct LDrawSceneInstancedPoints {
     pub main_model_name: String,
     /// Decomposed instance transforms for unique part and color.
-    pub geometry_point_instances: HashMap<(String, ColorCode), PointInstances>,
-    pub geometry_cache: HashMap<String, LDrawGeometry>,
+    pub geometry_point_instances: HashMap<(SubFileRef, ColorCode), PointInstances>,
+    pub geometry_cache: HashMap<SubFileRef, LDrawGeometry>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -306,7 +308,8 @@ pub fn load_file(
     settings: &GeometrySettings,
 ) -> LDrawScene {
     let (source_map, main_model_name) = parse_file(path, ldraw_path, additional_paths, settings);
-    let source_file = source_map.get(&main_model_name).unwrap();
+    // TODO: Also get the "original" non normalized name from the source map?
+    let (_, source_file) = source_map.get(&main_model_name).unwrap();
 
     // Collect the scene hierarchy and geometry descriptors.
     let mut geometry_descriptors = HashMap::new();
@@ -380,45 +383,47 @@ fn load_node<'a>(
     filename: &str,
     transform: &Mat4,
     source_map: &'a ldraw::SourceMap,
-    geometry_descriptors: &mut HashMap<String, GeometryInitDescriptor<'a>>,
+    geometry_descriptors: &mut HashMap<SubFileRef, GeometryInitDescriptor<'a>>,
     current_color: ColorCode,
     settings: &GeometrySettings,
 ) -> LDrawNode {
     let mut children = Vec::new();
     let mut geometry_name = None;
 
+    let file_ref = SubFileRef::new(filename);
+
     let is_part = is_part(source_file, filename);
     if is_part {
         // Create geometry if the node is a part.
         // Use the special color code to reuse identical parts in different colors.
         geometry_descriptors
-            .entry(filename.to_lowercase())
+            .entry(file_ref.clone())
             .or_insert_with(|| GeometryInitDescriptor {
                 source_file,
                 current_color: CURRENT_COLOR,
                 recursive: true,
             });
 
-        geometry_name = Some(filename.to_lowercase());
+        geometry_name = Some(file_ref);
     } else if has_geometry(source_file) {
         // Just add geometry for this node.
         // Use the current color at this node since this geometry might not be referenced elsewhere.
         geometry_descriptors
-            .entry(filename.to_lowercase())
+            .entry(file_ref.clone())
             .or_insert_with(|| GeometryInitDescriptor {
                 source_file,
                 current_color,
                 recursive: false,
             });
 
-        geometry_name = Some(filename.to_lowercase());
+        geometry_name = Some(file_ref);
     }
 
     // Recursion is already handled for parts.
     if !is_part {
         for cmd in &source_file.cmds {
             if let Command::SubFileRef(sfr_cmd) = cmd {
-                if let Some(subfile) = source_map.get(&sfr_cmd.file) {
+                if let Some((subfile_name, subfile)) = source_map.get(&sfr_cmd.file) {
                     // Don't apply node transforms to preserve the scene hierarchy.
                     // Applications should handle combining the transforms.
                     let child_transform = sfr_cmd.transform.to_matrix();
@@ -426,9 +431,12 @@ fn load_node<'a>(
                     // Handle replacing colors.
                     let child_color = replace_color(sfr_cmd.color, current_color);
 
+                    // Use the original name since subfile ref commands can be all lowercase.
+                    let subfile_name = &subfile_name.name;
+
                     let child_node = load_node(
                         subfile,
-                        &sfr_cmd.file,
+                        subfile_name,
                         &child_transform,
                         source_map,
                         geometry_descriptors,
@@ -454,10 +462,10 @@ fn load_node<'a>(
 
 #[tracing::instrument]
 fn create_geometry_cache(
-    geometry_descriptors: HashMap<String, GeometryInitDescriptor>,
+    geometry_descriptors: HashMap<SubFileRef, GeometryInitDescriptor>,
     source_map: &ldraw::SourceMap,
     settings: &GeometrySettings,
-) -> HashMap<String, LDrawGeometry> {
+) -> HashMap<SubFileRef, LDrawGeometry> {
     // Create the actual geometry in parallel to improve performance.
     // TODO: The workload is incredibly uneven across threads.
     geometry_descriptors
@@ -557,7 +565,7 @@ pub fn load_file_instanced(
     settings: &GeometrySettings,
 ) -> LDrawSceneInstanced {
     let (source_map, main_model_name) = parse_file(path, ldraw_path, additional_paths, settings);
-    let source_file = source_map.get(&main_model_name).unwrap();
+    let (_, source_file) = source_map.get(&main_model_name).unwrap();
 
     // Find the world transforms for each geometry.
     // This allows applications to more easily use instancing.
@@ -589,18 +597,20 @@ fn load_node_instanced<'a>(
     filename: &str,
     world_transform: &Mat4,
     source_map: &'a ldraw::SourceMap,
-    geometry_descriptors: &mut HashMap<String, GeometryInitDescriptor<'a>>,
-    geometry_world_transforms: &mut HashMap<(String, ColorCode), Vec<Mat4>>,
+    geometry_descriptors: &mut HashMap<SubFileRef, GeometryInitDescriptor<'a>>,
+    geometry_world_transforms: &mut HashMap<(SubFileRef, ColorCode), Vec<Mat4>>,
     current_color: ColorCode,
     settings: &GeometrySettings,
 ) {
+    let file_ref = SubFileRef::new(filename);
+
     // TODO: Find a way to avoid repetition.
     let is_part = is_part(source_file, filename);
     if is_part {
         // Create geometry if the node is a part.
         // Use the special color code to reuse identical parts in different colors.
         geometry_descriptors
-            .entry(filename.to_lowercase())
+            .entry(file_ref.clone())
             .or_insert_with(|| GeometryInitDescriptor {
                 source_file,
                 current_color: CURRENT_COLOR,
@@ -610,14 +620,14 @@ fn load_node_instanced<'a>(
         // Add another instance of the current geometry.
         // Also key by the color in case a part appears in multiple colors.
         geometry_world_transforms
-            .entry((filename.to_lowercase(), current_color))
+            .entry((file_ref, current_color))
             .or_default()
             .push(scaled_transform(world_transform, settings.scene_scale));
     } else if has_geometry(source_file) {
         // Just add geometry for this node.
         // Use the current color at this node since this geometry might not be referenced elsewhere.
         geometry_descriptors
-            .entry(filename.to_lowercase())
+            .entry(file_ref.clone())
             .or_insert_with(|| GeometryInitDescriptor {
                 source_file,
                 current_color,
@@ -627,7 +637,7 @@ fn load_node_instanced<'a>(
         // Add another instance of the current geometry.
         // Also key by the color in case a part appears in multiple colors.
         geometry_world_transforms
-            .entry((filename.to_lowercase(), current_color))
+            .entry((file_ref, current_color))
             .or_default()
             .push(scaled_transform(world_transform, settings.scene_scale));
     }
@@ -636,16 +646,19 @@ fn load_node_instanced<'a>(
     if !is_part {
         for cmd in &source_file.cmds {
             if let Command::SubFileRef(sfr_cmd) = cmd {
-                if let Some(subfile) = source_map.get(&sfr_cmd.file) {
+                if let Some((subfile_name, subfile)) = source_map.get(&sfr_cmd.file) {
                     // Accumulate transforms.
                     let child_transform = *world_transform * sfr_cmd.transform.to_matrix();
 
                     // Handle replacing colors.
                     let child_color = replace_color(sfr_cmd.color, current_color);
 
+                    // Use the original name since subfile ref commands can be all lowercase.
+                    let subfile_name = &subfile_name.name;
+
                     load_node_instanced(
                         subfile,
-                        &sfr_cmd.file,
+                        subfile_name,
                         &child_transform,
                         source_map,
                         geometry_descriptors,

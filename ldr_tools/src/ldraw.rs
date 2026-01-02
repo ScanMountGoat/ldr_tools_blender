@@ -67,7 +67,13 @@ pub fn parse<P: AsRef<Path>, R: FileRefResolver>(
     // The provided path should refer to a file from the resolver.
     // Use the path directly without any normalization.
     let filename = path.as_ref().to_string_lossy().to_string();
-    let actual_root = load_file(path, &filename, resolver, source_map, &mut stack);
+    let actual_root = load_file(
+        path,
+        SubFileRef::new(&filename),
+        resolver,
+        source_map,
+        &mut stack,
+    );
 
     // Recursively load files referenced by the root file.
     while let Some(file) = stack.pop() {
@@ -89,7 +95,7 @@ pub fn parse<P: AsRef<Path>, R: FileRefResolver>(
 
 fn load_file<P: AsRef<Path>, R: FileRefResolver>(
     path: P,
-    filename: &str,
+    filename: SubFileRef,
     resolver: &R,
     source_map: &mut SourceMap,
     stack: &mut Vec<FileRef>,
@@ -113,7 +119,8 @@ fn load_subfile<R: FileRefResolver>(
     source_map: &mut SourceMap,
     stack: &mut Vec<FileRef>,
 ) -> String {
-    load_file(&filename.0, &filename.0, resolver, source_map, stack)
+    let name = filename.clone();
+    load_file(&filename.name, name, resolver, source_map, stack)
 }
 
 /// [Line Type 0](https://www.ldraw.org/article/218.html#lt0) META command:
@@ -260,12 +267,33 @@ pub struct SourceFile {
     pub cmds: Vec<Command>,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
-struct SubFileRef(String);
+// Cache name normalization to improve performance.
+#[derive(Debug, Clone)]
+pub struct SubFileRef {
+    pub name: String,
+    pub normalized_name: String,
+}
 
 impl SubFileRef {
-    fn new(s: &str) -> Self {
-        Self(normalize_subfile_reference(s))
+    pub fn new(s: &str) -> Self {
+        Self {
+            name: s.to_string(),
+            normalized_name: normalize_subfile_reference(s),
+        }
+    }
+}
+
+impl PartialEq for SubFileRef {
+    fn eq(&self, other: &Self) -> bool {
+        self.normalized_name == other.normalized_name
+    }
+}
+
+impl Eq for SubFileRef {}
+
+impl std::hash::Hash for SubFileRef {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.normalized_name.hash(state);
     }
 }
 
@@ -293,31 +321,25 @@ impl SourceMap {
     }
 
     /// Returns a reference to the source file corresponding to `filename`.
-    pub fn get(&self, filename: &str) -> Option<&SourceFile> {
+    pub fn get(&self, filename: &str) -> Option<(&SubFileRef, &SourceFile)> {
         // TODO: handle normalization and case sensitivity.
-        self.source_files.get(&SubFileRef::new(filename))
-    }
-
-    /// Returns a mutable reference to the source file corresponding to `filename`.
-    pub fn get_mut(&mut self, filename: &str) -> Option<&mut SourceFile> {
-        self.source_files.get_mut(&SubFileRef::new(filename))
+        self.source_files.get_key_value(&SubFileRef::new(filename))
     }
 
     /// Inserts a new source file into the collection.
     /// Returns a copy of the filename of `source_file`
     /// or the filename of the main file for multi-part documents (MPD).
-    pub fn insert(&mut self, filename: &str, source_file: SourceFile) -> String {
+    pub fn insert(&mut self, filename: SubFileRef, source_file: SourceFile) -> String {
         // The MPD extension allows .ldr or .mpd files to contain multiple files.
         // Add each of these so that they can be resolved by subfile commands later.
         let files = split_mpd_file(&source_file.cmds);
 
         // Some files are referenced in their entirety even if they have multiple models.
-        self.source_files
-            .insert(SubFileRef::new(filename), source_file);
+        self.source_files.insert(filename.clone(), source_file);
 
         // TODO: More cleanly handle the fact that not all files have 0 FILE commands.
         if files.is_empty() {
-            filename.to_string()
+            filename.name
         } else {
             // The first block is the "main model" of the file.
             let main_model_name = files[0].0.clone();
@@ -1029,13 +1051,19 @@ mod tests {
     #[test]
     fn test_source_map_normalization() {
         let mut source_map = SourceMap::new();
-        source_map.insert("p\\part.dat", SourceFile { cmds: Vec::new() });
+        source_map.insert(
+            SubFileRef::new("p\\part.dat"),
+            SourceFile { cmds: Vec::new() },
+        );
         assert!(source_map.get("p/part.DAT").is_some());
 
-        source_map.insert("TEST.LDR", SourceFile { cmds: Vec::new() });
+        source_map.insert(SubFileRef::new("TEST.LDR"), SourceFile { cmds: Vec::new() });
         assert!(source_map.get("test.LDR").is_some());
 
-        source_map.insert("a//b\\\\c//d.dat", SourceFile { cmds: Vec::new() });
+        source_map.insert(
+            SubFileRef::new("a//b\\\\c//d.dat"),
+            SourceFile { cmds: Vec::new() },
+        );
         assert!(source_map.get("a/b/c/d.dat").is_some());
     }
 }

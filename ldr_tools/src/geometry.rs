@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ldraw::{BfcCommand, Command, Winding};
+use crate::ldraw::{BfcCommand, Command, SubFileRef, Winding};
 use glam::{Mat4, Vec2, Vec3};
 use log::warn;
 
@@ -117,7 +117,7 @@ impl VertexMap {
 pub fn create_geometry(
     source_file: &crate::ldraw::SourceFile,
     source_map: &crate::ldraw::SourceMap,
-    name: &str,
+    name: &SubFileRef,
     current_color: ColorCode,
     recursive: bool,
     settings: &GeometrySettings,
@@ -130,7 +130,7 @@ pub fn create_geometry(
         face_colors: Vec::new(),
         is_face_stud: Vec::new(),
         edge_line_indices: Vec::new(),
-        has_grainy_slopes: is_slope_piece(name),
+        has_grainy_slopes: is_slope_piece(&name.name),
         texture_info: None,
     };
 
@@ -140,8 +140,8 @@ pub fn create_geometry(
         current_color,
         transform: Mat4::IDENTITY,
         inverted: false,
-        is_stud: is_stud(name),
-        is_slope: is_slope_piece(name),
+        is_stud: is_stud(&name.name),
+        is_slope: is_slope_piece(&name.name),
         studio_textures: Vec::new(),
         subfile_path: Vec::new(),
         active_texture_index: None,
@@ -393,9 +393,10 @@ fn append_geometry(
                     continue;
                 }
                 let subfilename = replace_studs(subfile_cmd, settings.stud_type);
-                let Some(subfile) = source_map.get(subfilename) else {
+                let Some((subfilename, subfile)) = source_map.get(subfilename) else {
                     continue;
                 };
+                let subfilename = &subfilename.normalized_name;
 
                 // Subfiles of slopes or studs are still slopes or studs.
                 let is_stud = ctx.is_stud || is_stud(subfilename);
@@ -649,12 +650,12 @@ mod tests {
         resolver.files.insert("root", document.as_bytes().to_vec());
 
         let main_model_name = crate::ldraw::parse("root", &resolver, &mut source_map);
-        let source_file = source_map.get(&main_model_name).unwrap();
+        let (_name, source_file) = source_map.get(&main_model_name).unwrap();
 
         let geometry = create_geometry(
             source_file,
             &source_map,
-            "",
+            &SubFileRef::new(""),
             7,
             true,
             &GeometrySettings {
@@ -688,12 +689,12 @@ mod tests {
         resolver.files.insert("root", document.as_bytes().to_vec());
 
         let main_model_name = crate::ldraw::parse("root", &resolver, &mut source_map);
-        let source_file = source_map.get(&main_model_name).unwrap();
+        let (_name, source_file) = source_map.get(&main_model_name).unwrap();
 
         let geometry = create_geometry(
             source_file,
             &source_map,
-            "",
+            &SubFileRef::new(""),
             16,
             true,
             &GeometrySettings {
@@ -720,12 +721,12 @@ mod tests {
         resolver.files.insert("root", document.as_bytes().to_vec());
 
         let main_model_name = crate::ldraw::parse("root", &resolver, &mut source_map);
-        let source_file = source_map.get(&main_model_name).unwrap();
+        let (_name, source_file) = source_map.get(&main_model_name).unwrap();
 
         let geometry = create_geometry(
             source_file,
             &source_map,
-            "",
+            &SubFileRef::new(""),
             16,
             true,
             &GeometrySettings {
@@ -763,12 +764,12 @@ mod tests {
         resolver.files.insert("root", document.as_bytes().to_vec());
 
         let main_model_name = crate::ldraw::parse("root", &resolver, &mut source_map);
-        let source_file = source_map.get(&main_model_name).unwrap();
+        let (_name, source_file) = source_map.get(&main_model_name).unwrap();
 
         let geometry = create_geometry(
             source_file,
             &source_map,
-            "",
+            &SubFileRef::new(""),
             16,
             true,
             &GeometrySettings {
