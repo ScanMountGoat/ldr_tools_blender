@@ -187,10 +187,10 @@ pub fn create_geometry(
     // Optimize the case where all face colors are the same.
     // This reduces overhead when processing data in Python.
     // A single color can be applied per object rather than per face.
-    if let Some(color) = geometry.face_colors.first() {
-        if geometry.face_colors.iter().all(|c| c == color) {
-            geometry.face_colors = vec![*color];
-        }
+    if let Some(color) = geometry.face_colors.first()
+        && geometry.face_colors.iter().all(|c| c == color)
+    {
+        geometry.face_colors = vec![*color];
     }
 
     let min = geometry

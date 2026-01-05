@@ -99,10 +99,10 @@ fn add_sharp_edges(
             let v1_faces = &adjacent_faces[v1 as usize];
 
             let mut faces = v0_faces.intersection(v1_faces).copied();
-            if let (Some(f0), Some(f1)) = (faces.next(), faces.next()) {
-                if normals[f0].angle_between(normals[f1]) >= angle_threshold {
-                    edges_to_split.push([v0, v1]);
-                }
+            if let (Some(f0), Some(f1)) = (faces.next(), faces.next())
+                && normals[f0].angle_between(normals[f1]) >= angle_threshold
+            {
+                edges_to_split.push([v0, v1]);
             }
         }
     }

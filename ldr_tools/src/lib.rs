@@ -224,11 +224,12 @@ pub struct PointInstances {
     pub scales: Vec<Vec3>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
 pub enum StudType {
     /// Removes all visible and internal studs.
     Disabled,
     /// The default stud model and quality.
+    #[default]
     Normal,
     /// A higher quality modeled logo suitable for realistic rendering.
     Logo4,
@@ -236,26 +237,15 @@ pub enum StudType {
     HighContrast,
 }
 
-impl Default for StudType {
-    fn default() -> Self {
-        Self::Normal
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
 pub enum PrimitiveResolution {
     /// Primitives in the `p/8` folder.
     Low,
     /// The standard primitive resolution
+    #[default]
     Normal,
     /// Primitives in the `p/48` folder.
     High,
-}
-
-impl Default for PrimitiveResolution {
-    fn default() -> Self {
-        Self::Normal
-    }
 }
 
 // TODO: Come up with a better name.
@@ -420,29 +410,29 @@ fn load_node<'a>(
     // Recursion is already handled for parts.
     if !is_part {
         for cmd in &source_file.cmds {
-            if let Command::SubFileRef(sfr_cmd) = cmd {
-                if let Some((subfile_name, subfile)) = source_map.get(&sfr_cmd.file) {
-                    // Don't apply node transforms to preserve the scene hierarchy.
-                    // Applications should handle combining the transforms.
-                    let child_transform = sfr_cmd.transform.to_matrix();
+            if let Command::SubFileRef(sfr_cmd) = cmd
+                && let Some((subfile_name, subfile)) = source_map.get(&sfr_cmd.file)
+            {
+                // Don't apply node transforms to preserve the scene hierarchy.
+                // Applications should handle combining the transforms.
+                let child_transform = sfr_cmd.transform.to_matrix();
 
-                    // Handle replacing colors.
-                    let child_color = replace_color(sfr_cmd.color, current_color);
+                // Handle replacing colors.
+                let child_color = replace_color(sfr_cmd.color, current_color);
 
-                    // Use the original name since subfile ref commands can be all lowercase.
-                    let subfile_name = &subfile_name.name;
+                // Use the original name since subfile ref commands can be all lowercase.
+                let subfile_name = &subfile_name.name;
 
-                    let child_node = load_node(
-                        subfile,
-                        subfile_name,
-                        &child_transform,
-                        source_map,
-                        geometry_descriptors,
-                        child_color,
-                        settings,
-                    );
-                    children.push(child_node);
-                }
+                let child_node = load_node(
+                    subfile,
+                    subfile_name,
+                    &child_transform,
+                    source_map,
+                    geometry_descriptors,
+                    child_color,
+                    settings,
+                );
+                children.push(child_node);
             }
         }
     }
@@ -643,28 +633,28 @@ fn load_node_instanced<'a>(
     // Recursion is already handled for parts.
     if !is_part {
         for cmd in &source_file.cmds {
-            if let Command::SubFileRef(sfr_cmd) = cmd {
-                if let Some((subfile_name, subfile)) = source_map.get(&sfr_cmd.file) {
-                    // Accumulate transforms.
-                    let child_transform = *world_transform * sfr_cmd.transform.to_matrix();
+            if let Command::SubFileRef(sfr_cmd) = cmd
+                && let Some((subfile_name, subfile)) = source_map.get(&sfr_cmd.file)
+            {
+                // Accumulate transforms.
+                let child_transform = *world_transform * sfr_cmd.transform.to_matrix();
 
-                    // Handle replacing colors.
-                    let child_color = replace_color(sfr_cmd.color, current_color);
+                // Handle replacing colors.
+                let child_color = replace_color(sfr_cmd.color, current_color);
 
-                    // Use the original name since subfile ref commands can be all lowercase.
-                    let subfile_name = &subfile_name.name;
+                // Use the original name since subfile ref commands can be all lowercase.
+                let subfile_name = &subfile_name.name;
 
-                    load_node_instanced(
-                        subfile,
-                        subfile_name,
-                        &child_transform,
-                        source_map,
-                        geometry_descriptors,
-                        geometry_world_transforms,
-                        child_color,
-                        settings,
-                    );
-                }
+                load_node_instanced(
+                    subfile,
+                    subfile_name,
+                    &child_transform,
+                    source_map,
+                    geometry_descriptors,
+                    geometry_world_transforms,
+                    child_color,
+                    settings,
+                );
             }
         }
     }
