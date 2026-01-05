@@ -5,7 +5,7 @@ bl_info = {
     "name": "ldr_tools_blender",
     "description": "Import LDraw models in .mpd .ldr, .dat, and .io formats",
     "author": "ScanMountGoat (SMG)",
-    "version": (0, 4, 14),
+    "version": (0, 4, 15),
     "blender": (4, 1, 0),
     "location": "File > Import",
     "warning": "",
