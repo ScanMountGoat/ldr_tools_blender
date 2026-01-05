@@ -14,10 +14,8 @@ use zip::ZipArchive;
 pub use color::{LDrawColor, load_color_table, load_ldraw_color_table, load_studio_color_table};
 pub use geometry::LDrawGeometry;
 pub use glam;
-pub use ldraw::Color;
+pub use ldraw::{Color, LDrawPath};
 pub use pe_tex_info::LDrawTextureInfo;
-
-use crate::ldraw::SubFileRef;
 
 pub type ColorCode = u32;
 
@@ -38,7 +36,7 @@ pub struct LDrawNode {
     pub transform: Mat4,
     /// The name of the geometry in [geometry_cache](struct.LDrawScene.html#structfield.geometry_cache)
     /// or `None` for internal nodes.
-    pub geometry_name: Option<SubFileRef>, // TODO: Better way to share geometry?
+    pub geometry_name: Option<LDrawPath>, // TODO: Better way to share geometry?
     /// The current color set for this node.
     /// Overrides colors in the geometry if present.
     pub current_color: ColorCode,
@@ -199,22 +197,22 @@ fn read_zip_file_contents(
 #[derive(Debug, PartialEq)]
 pub struct LDrawScene {
     pub root_node: LDrawNode,
-    pub geometry_cache: HashMap<SubFileRef, LDrawGeometry>,
+    pub geometry_cache: HashMap<LDrawPath, LDrawGeometry>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct LDrawSceneInstanced {
     pub main_model_name: String,
-    pub geometry_world_transforms: HashMap<(SubFileRef, ColorCode), Vec<Mat4>>,
-    pub geometry_cache: HashMap<SubFileRef, LDrawGeometry>,
+    pub geometry_world_transforms: HashMap<(LDrawPath, ColorCode), Vec<Mat4>>,
+    pub geometry_cache: HashMap<LDrawPath, LDrawGeometry>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct LDrawSceneInstancedPoints {
     pub main_model_name: String,
     /// Decomposed instance transforms for unique part and color.
-    pub geometry_point_instances: HashMap<(SubFileRef, ColorCode), PointInstances>,
-    pub geometry_cache: HashMap<SubFileRef, LDrawGeometry>,
+    pub geometry_point_instances: HashMap<(LDrawPath, ColorCode), PointInstances>,
+    pub geometry_cache: HashMap<LDrawPath, LDrawGeometry>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -383,14 +381,14 @@ fn load_node<'a>(
     filename: &str,
     transform: &Mat4,
     source_map: &'a ldraw::SourceMap,
-    geometry_descriptors: &mut HashMap<SubFileRef, GeometryInitDescriptor<'a>>,
+    geometry_descriptors: &mut HashMap<LDrawPath, GeometryInitDescriptor<'a>>,
     current_color: ColorCode,
     settings: &GeometrySettings,
 ) -> LDrawNode {
     let mut children = Vec::new();
     let mut geometry_name = None;
 
-    let file_ref = SubFileRef::new(filename);
+    let file_ref = LDrawPath::new(filename);
 
     let is_part = is_part(source_file, filename);
     if is_part {
@@ -462,10 +460,10 @@ fn load_node<'a>(
 
 #[tracing::instrument]
 fn create_geometry_cache(
-    geometry_descriptors: HashMap<SubFileRef, GeometryInitDescriptor>,
+    geometry_descriptors: HashMap<LDrawPath, GeometryInitDescriptor>,
     source_map: &ldraw::SourceMap,
     settings: &GeometrySettings,
-) -> HashMap<SubFileRef, LDrawGeometry> {
+) -> HashMap<LDrawPath, LDrawGeometry> {
     // Create the actual geometry in parallel to improve performance.
     // TODO: The workload is incredibly uneven across threads.
     geometry_descriptors
@@ -597,12 +595,12 @@ fn load_node_instanced<'a>(
     filename: &str,
     world_transform: &Mat4,
     source_map: &'a ldraw::SourceMap,
-    geometry_descriptors: &mut HashMap<SubFileRef, GeometryInitDescriptor<'a>>,
-    geometry_world_transforms: &mut HashMap<(SubFileRef, ColorCode), Vec<Mat4>>,
+    geometry_descriptors: &mut HashMap<LDrawPath, GeometryInitDescriptor<'a>>,
+    geometry_world_transforms: &mut HashMap<(LDrawPath, ColorCode), Vec<Mat4>>,
     current_color: ColorCode,
     settings: &GeometrySettings,
 ) {
-    let file_ref = SubFileRef::new(filename);
+    let file_ref = LDrawPath::new(filename);
 
     // TODO: Find a way to avoid repetition.
     let is_part = is_part(source_file, filename);

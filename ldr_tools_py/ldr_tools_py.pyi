@@ -16,9 +16,13 @@ from .stub_helpers import (
 class LDrawNode:
     name: str
     transform: Mat4
-    geometry_name: str | None
+    geometry_name: LDrawPath | None
     current_color: int
     children: list[LDrawNode]
+
+class LDrawPath:
+    name: str
+    normalized_name: str
 
 class LDrawGeometry:
     vertices: Vec3Array
@@ -69,17 +73,17 @@ class PointInstances:
 
 class LDrawScene:
     root_node: LDrawNode
-    geometry_cache: dict[str, LDrawGeometry]
+    geometry_cache: dict[LDrawPath, LDrawGeometry]
 
 class LDrawSceneInstanced:
     main_model_name: str
-    geometry_world_transforms: dict[tuple[str, int], Mat4Array]
-    geometry_cache: dict[str, LDrawGeometry]
+    geometry_world_transforms: dict[tuple[LDrawPath, int], Mat4Array]
+    geometry_cache: dict[LDrawPath, LDrawGeometry]
 
 class LDrawSceneInstancedPoints:
     main_model_name: str
-    geometry_point_instances: dict[tuple[str, int], PointInstances]
-    geometry_cache: dict[str, LDrawGeometry]
+    geometry_point_instances: dict[tuple[LDrawPath, int], PointInstances]
+    geometry_cache: dict[LDrawPath, LDrawGeometry]
 
 def load_file(
     path: str, ldraw_path: str, additional_paths: list[str], settings: GeometrySettings

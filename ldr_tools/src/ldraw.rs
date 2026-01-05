@@ -69,7 +69,7 @@ pub fn parse<P: AsRef<Path>, R: FileRefResolver>(
     let filename = path.as_ref().to_string_lossy().to_string();
     let actual_root = load_file(
         path,
-        SubFileRef::new(&filename),
+        LDrawPath::new(&filename),
         resolver,
         source_map,
         &mut stack,
@@ -84,7 +84,7 @@ pub fn parse<P: AsRef<Path>, R: FileRefResolver>(
             None => {
                 trace!("Not yet parsed; parsing sub-file: {filename}");
                 // Normalize file references to subfiles.
-                let subfile_ref = SubFileRef::new(filename);
+                let subfile_ref = LDrawPath::new(filename);
                 load_subfile(subfile_ref, resolver, source_map, &mut stack);
             }
         }
@@ -95,14 +95,14 @@ pub fn parse<P: AsRef<Path>, R: FileRefResolver>(
 
 fn load_file<P: AsRef<Path>, R: FileRefResolver>(
     path: P,
-    filename: SubFileRef,
+    filename: LDrawPath,
     resolver: &R,
     source_map: &mut SourceMap,
     stack: &mut Vec<FileRef>,
 ) -> String {
     let raw_content = resolver.resolve(path).unwrap_or_else(|| {
         // TODO: Is there a better way to allow partial imports with resolve errors?
-        error!("Unable to resolve {filename:?}");
+        error!("Unable to resolve {:?}", filename.name);
         Vec::new()
     });
     let source_file = SourceFile {
@@ -114,7 +114,7 @@ fn load_file<P: AsRef<Path>, R: FileRefResolver>(
 }
 
 fn load_subfile<R: FileRefResolver>(
-    filename: SubFileRef,
+    filename: LDrawPath,
     resolver: &R,
     source_map: &mut SourceMap,
     stack: &mut Vec<FileRef>,
@@ -267,15 +267,17 @@ pub struct SourceFile {
     pub cmds: Vec<Command>,
 }
 
-// Cache name normalization to improve performance.
+/// An LDraw file or submodel name that normalizes
+/// case and path separators for hashing and comparison.
 #[derive(Debug, Clone)]
-pub struct SubFileRef {
+pub struct LDrawPath {
     pub name: String,
     pub normalized_name: String,
 }
 
-impl SubFileRef {
+impl LDrawPath {
     pub fn new(s: &str) -> Self {
+        // Cache name normalization to improve performance.
         Self {
             name: s.to_string(),
             normalized_name: normalize_subfile_reference(s),
@@ -283,15 +285,15 @@ impl SubFileRef {
     }
 }
 
-impl PartialEq for SubFileRef {
+impl PartialEq for LDrawPath {
     fn eq(&self, other: &Self) -> bool {
         self.normalized_name == other.normalized_name
     }
 }
 
-impl Eq for SubFileRef {}
+impl Eq for LDrawPath {}
 
-impl std::hash::Hash for SubFileRef {
+impl std::hash::Hash for LDrawPath {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.normalized_name.hash(state);
     }
@@ -309,7 +311,7 @@ fn normalize_subfile_reference(s: &str) -> String {
 #[derive(Debug)]
 pub struct SourceMap {
     /// Map of filenames to source files.
-    source_files: HashMap<SubFileRef, SourceFile>,
+    source_files: HashMap<LDrawPath, SourceFile>,
 }
 
 impl SourceMap {
@@ -321,15 +323,15 @@ impl SourceMap {
     }
 
     /// Returns a reference to the source file corresponding to `filename`.
-    pub fn get(&self, filename: &str) -> Option<(&SubFileRef, &SourceFile)> {
+    pub fn get(&self, filename: &str) -> Option<(&LDrawPath, &SourceFile)> {
         // TODO: handle normalization and case sensitivity.
-        self.source_files.get_key_value(&SubFileRef::new(filename))
+        self.source_files.get_key_value(&LDrawPath::new(filename))
     }
 
     /// Inserts a new source file into the collection.
     /// Returns a copy of the filename of `source_file`
     /// or the filename of the main file for multi-part documents (MPD).
-    pub fn insert(&mut self, filename: SubFileRef, source_file: SourceFile) -> String {
+    pub fn insert(&mut self, filename: LDrawPath, source_file: SourceFile) -> String {
         // The MPD extension allows .ldr or .mpd files to contain multiple files.
         // Add each of these so that they can be resolved by subfile commands later.
         let files = split_mpd_file(&source_file.cmds);
@@ -344,7 +346,7 @@ impl SourceMap {
             // The first block is the "main model" of the file.
             let main_model_name = files[0].0.clone();
             for (name, file) in files {
-                self.source_files.insert(SubFileRef::new(&name), file);
+                self.source_files.insert(LDrawPath::new(&name), file);
             }
             main_model_name
         }
@@ -1052,16 +1054,16 @@ mod tests {
     fn test_source_map_normalization() {
         let mut source_map = SourceMap::new();
         source_map.insert(
-            SubFileRef::new("p\\part.dat"),
+            LDrawPath::new("p\\part.dat"),
             SourceFile { cmds: Vec::new() },
         );
         assert!(source_map.get("p/part.DAT").is_some());
 
-        source_map.insert(SubFileRef::new("TEST.LDR"), SourceFile { cmds: Vec::new() });
+        source_map.insert(LDrawPath::new("TEST.LDR"), SourceFile { cmds: Vec::new() });
         assert!(source_map.get("test.LDR").is_some());
 
         source_map.insert(
-            SubFileRef::new("a//b\\\\c//d.dat"),
+            LDrawPath::new("a//b\\\\c//d.dat"),
             SourceFile { cmds: Vec::new() },
         );
         assert!(source_map.get("a/b/c/d.dat").is_some());

@@ -21,10 +21,22 @@ from bpy.types import (
 
 if typing.TYPE_CHECKING:
     import ldr_tools_py
-    from ldr_tools_py import LDrawNode, LDrawGeometry, LDrawColor, GeometrySettings
+    from ldr_tools_py import (
+        LDrawNode,
+        LDrawGeometry,
+        LDrawColor,
+        GeometrySettings,
+        LDrawPath,
+    )
 else:
     from . import ldr_tools_py
-    from .ldr_tools_py import LDrawNode, LDrawGeometry, LDrawColor, GeometrySettings
+    from .ldr_tools_py import (
+        LDrawNode,
+        LDrawGeometry,
+        LDrawColor,
+        GeometrySettings,
+        LDrawPath,
+    )
 
 from .material import get_material
 
@@ -62,7 +74,7 @@ def import_objects(
 ) -> None:
     # Create an object for each part in the scene.
     # This still uses instances the mesh data blocks for reduced memory usage.
-    blender_mesh_cache: dict[tuple[str, int], Mesh] = {}
+    blender_mesh_cache: dict[tuple[LDrawPath, int], Mesh] = {}
 
     # Don't scale any coordinates on the Rust side, just change the scale of the parent object
     scale = settings.scene_scale
@@ -85,11 +97,10 @@ def import_objects(
 def add_nodes(
     operator: bpy.types.Operator,
     node: LDrawNode,
-    geometry_cache: dict[str, LDrawGeometry],
-    blender_mesh_cache: dict[tuple[str, int], Mesh],
+    geometry_cache: dict[LDrawPath, LDrawGeometry],
+    blender_mesh_cache: dict[tuple[LDrawPath, int], Mesh],
     color_by_code: dict[int, LDrawColor],
 ) -> bpy.types.Object:
-
     if node.geometry_name is not None:
         geometry = geometry_cache[node.geometry_name]
 
@@ -148,7 +159,7 @@ def import_instanced(
         geometry = scene.geometry_cache[name]
 
         mesh = create_colored_mesh_from_geometry(
-            operator, name, color, color_by_code, geometry
+            operator, name.name, color, color_by_code, geometry
         )
 
         blender_mesh_cache[(name, color)] = mesh
@@ -161,17 +172,19 @@ def import_instanced(
 
     # Instant each unique colored part on the faces of a mesh.
     for (name, color), instances in scene.geometry_point_instances.items():
-        instancer_mesh = create_instancer_mesh(f"{name}_{color}_instancer", instances)
+        instancer_mesh = create_instancer_mesh(
+            f"{name.name}_{color}_instancer", instances
+        )
 
         instancer_object = bpy.data.objects.new(
-            f"{name}_{color}_instancer", instancer_mesh
+            f"{name.name}_{color}_instancer", instancer_mesh
         )
         instancer_object.parent = root_obj
 
         bpy.context.collection.objects.link(instancer_object)
 
         mesh = blender_mesh_cache[(name, color)]
-        instance_object = bpy.data.objects.new(f"{name}_{color}_instance", mesh)
+        instance_object = bpy.data.objects.new(f"{name.name}_{color}_instance", mesh)
         instance_object.parent = instancer_object
         bpy.context.collection.objects.link(instance_object)
 

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ldraw::{BfcCommand, Command, SubFileRef, Winding};
+use crate::ldraw::{BfcCommand, Command, LDrawPath, Winding};
 use glam::{Mat4, Vec2, Vec3};
 use log::warn;
 
@@ -117,7 +117,7 @@ impl VertexMap {
 pub fn create_geometry(
     source_file: &crate::ldraw::SourceFile,
     source_map: &crate::ldraw::SourceMap,
-    name: &SubFileRef,
+    name: &LDrawPath,
     current_color: ColorCode,
     recursive: bool,
     settings: &GeometrySettings,
@@ -655,7 +655,7 @@ mod tests {
         let geometry = create_geometry(
             source_file,
             &source_map,
-            &SubFileRef::new(""),
+            &LDrawPath::new(""),
             7,
             true,
             &GeometrySettings {
@@ -694,7 +694,7 @@ mod tests {
         let geometry = create_geometry(
             source_file,
             &source_map,
-            &SubFileRef::new(""),
+            &LDrawPath::new(""),
             16,
             true,
             &GeometrySettings {
@@ -726,7 +726,7 @@ mod tests {
         let geometry = create_geometry(
             source_file,
             &source_map,
-            &SubFileRef::new(""),
+            &LDrawPath::new(""),
             16,
             true,
             &GeometrySettings {
@@ -769,7 +769,7 @@ mod tests {
         let geometry = create_geometry(
             source_file,
             &source_map,
-            &SubFileRef::new(""),
+            &LDrawPath::new(""),
             16,
             true,
             &GeometrySettings {

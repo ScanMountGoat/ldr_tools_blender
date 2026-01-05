@@ -1,4 +1,3 @@
-use ldr_tools::ldraw::SubFileRef;
 use pyo3::prelude::*;
 
 macro_rules! python_enum {
@@ -85,33 +84,50 @@ mod ldr_tools_py {
     pub struct LDrawNode {
         name: String,
         transform: Py<PyArray2<f32>>,
-        #[map(from(map_string_from_ref), into(map_string_into_ref))]
-        geometry_name: Option<String>,
+        geometry_name: Option<LDrawPath>,
         current_color: u32,
         children: TypedList<LDrawNode>,
+    }
+
+    #[pyclass(eq, frozen, hash)]
+    #[derive(Debug, PartialEq, Eq, Hash, Clone, MapPy)]
+    #[map(ldr_tools::LDrawPath)]
+    pub struct LDrawPath(ldr_tools::LDrawPath);
+
+    #[pymethods]
+    impl LDrawPath {
+        #[getter]
+        fn name(&self) -> &str {
+            &self.0.name
+        }
+
+        #[getter]
+        fn normalized_name(&self) -> &str {
+            &self.0.normalized_name
+        }
     }
 
     #[pyclass(get_all)]
     #[derive(Debug, Clone)]
     pub struct LDrawScene {
         pub root_node: LDrawNode,
-        pub geometry_cache: HashMap<String, LDrawGeometry>,
+        pub geometry_cache: HashMap<LDrawPath, LDrawGeometry>,
     }
 
     #[pyclass(get_all)]
     #[derive(Debug, Clone)]
     pub struct LDrawSceneInstanced {
         pub main_model_name: String,
-        pub geometry_world_transforms: HashMap<(String, u32), Py<PyArray3<f32>>>,
-        pub geometry_cache: HashMap<String, LDrawGeometry>,
+        pub geometry_world_transforms: HashMap<(LDrawPath, u32), Py<PyArray3<f32>>>,
+        pub geometry_cache: HashMap<LDrawPath, LDrawGeometry>,
     }
 
     #[pyclass(get_all)]
     #[derive(Debug, Clone)]
     pub struct LDrawSceneInstancedPoints {
         pub main_model_name: String,
-        pub geometry_point_instances: HashMap<(String, u32), PointInstances>,
-        pub geometry_cache: HashMap<String, LDrawGeometry>,
+        pub geometry_point_instances: HashMap<(LDrawPath, u32), PointInstances>,
+        pub geometry_cache: HashMap<LDrawPath, LDrawGeometry>,
     }
 
     // Use numpy arrays for reduced overhead.
@@ -195,7 +211,7 @@ mod ldr_tools_py {
         let geometry_cache = scene
             .geometry_cache
             .into_iter()
-            .map(|(k, v)| Ok((k.name, v.map_py(py)?)))
+            .map(|(k, v)| Ok((k.map_py(py)?, v.map_py(py)?)))
             .collect::<PyResult<_>>()?;
         info!("load_file: {:?}", start.elapsed());
 
@@ -224,7 +240,7 @@ mod ldr_tools_py {
         let geometry_cache = scene
             .geometry_cache
             .into_iter()
-            .map(|(k, v)| Ok((k.name, v.map_py(py)?)))
+            .map(|(k, v)| Ok((k.map_py(py)?, v.map_py(py)?)))
             .collect::<PyResult<_>>()?;
 
         let geometry_world_transforms = scene
@@ -232,7 +248,7 @@ mod ldr_tools_py {
             .into_iter()
             .map(|(k, v)| {
                 let transforms = v.map_py(py)?;
-                Ok(((k.0.name, k.1), transforms))
+                Ok(((k.0.map_py(py)?, k.1), transforms))
             })
             .collect::<PyResult<_>>()?;
 
@@ -264,13 +280,13 @@ mod ldr_tools_py {
         let geometry_cache = scene
             .geometry_cache
             .into_iter()
-            .map(|(k, v)| Ok((k.name, v.map_py(py)?)))
+            .map(|(k, v)| Ok((k.map_py(py)?, v.map_py(py)?)))
             .collect::<PyResult<_>>()?;
 
         let geometry_point_instances = scene
             .geometry_point_instances
             .into_iter()
-            .map(|(k, v)| Ok(((k.0.name, k.1), v.map_py(py)?)))
+            .map(|(k, v)| Ok(((k.0.map_py(py)?, k.1), v.map_py(py)?)))
             .collect::<PyResult<_>>()?;
 
         info!("load_file_instanced_points: {:?}", start.elapsed());
@@ -288,13 +304,5 @@ mod ldr_tools_py {
             .into_iter()
             .map(|(k, v)| Ok((k, v.map_py(py)?)))
             .collect()
-    }
-
-    fn map_string_from_ref(value: Option<SubFileRef>, _py: Python) -> PyResult<Option<String>> {
-        Ok(value.map(|v| v.name))
-    }
-
-    fn map_string_into_ref(value: Option<String>, _py: Python) -> PyResult<Option<SubFileRef>> {
-        Ok(value.map(|v| SubFileRef::new(&v)))
     }
 }
