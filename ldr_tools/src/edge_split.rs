@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use glam::Vec3;
 
@@ -123,15 +123,19 @@ fn add_sharp_edges(
 fn remove_loose_vertices<T: Copy>(vertices: &[T], vertex_indices: &[u32]) -> (Vec<T>, Vec<u32>) {
     // Collect unique indices in sorted order.
     let indices: BTreeSet<u32> = vertex_indices.iter().copied().collect();
-    let old_to_new_index: BTreeMap<u32, u32> = indices
-        .iter()
-        .enumerate()
-        .map(|(i, index)| (*index, i as u32))
-        .collect();
+
+    // Assume the index values are all in a valid range for the vertices.
+    let mut old_to_new_index = vec![0; vertices.len()];
+    for (i, index) in indices.iter().enumerate() {
+        old_to_new_index[*index as usize] = i as u32;
+    }
 
     // Map indices to a consecutive range to remove unused vertices.
     let new_vertices = indices.iter().map(|i| vertices[*i as usize]).collect();
-    let new_indices = vertex_indices.iter().map(|i| old_to_new_index[i]).collect();
+    let new_indices = vertex_indices
+        .iter()
+        .map(|i| old_to_new_index[*i as usize])
+        .collect();
 
     (new_vertices, new_indices)
 }
