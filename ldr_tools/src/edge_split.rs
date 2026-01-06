@@ -4,6 +4,20 @@ use glam::Vec3;
 
 use crate::normal::face_normals;
 
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct UndirectedEdge([u32; 2]);
+
+impl UndirectedEdge {
+    fn new(v0: u32, v1: u32) -> Self {
+        // Maintain a sorted order to handle both edge directions.
+        if v0 <= v1 {
+            Self([v0, v1])
+        } else {
+            Self([v1, v0])
+        }
+    }
+}
+
 /// Calculate new vertices and indices by splitting the edges in `edges_to_split`.
 /// The geometry must be triangulated!
 ///
@@ -20,7 +34,10 @@ pub fn split_edges(
 ) -> (Vec<Vec3>, Vec<u32>) {
     let old_adjacent_faces = adjacent_faces(vertices, vertex_indices, face_starts, face_sizes);
 
-    let mut edges_to_split = edges_to_split.to_vec();
+    let mut edges_to_split: BTreeSet<_> = edges_to_split
+        .iter()
+        .map(|[v0, v1]| UndirectedEdge::new(*v0, *v1))
+        .collect();
 
     // Find sharp edges based on an angle threshold.
     let normals = face_normals(vertices, vertex_indices, face_starts, face_sizes);
@@ -35,16 +52,11 @@ pub fn split_edges(
         89f32.to_radians(),
     );
 
-    let mut should_split_vertex = vec![false; vertices.len()];
-    let mut undirected_edges = BTreeSet::new();
-    for [v0, v1] in &edges_to_split {
-        // Treat edges as undirected.
-        undirected_edges.insert([*v0, *v1]);
-        undirected_edges.insert([*v1, *v0]);
-
+    let mut vertices_to_split = BTreeSet::new();
+    for edge in &edges_to_split {
         // Mark any vertices on an edge to split for duplication.
-        should_split_vertex[*v0 as usize] = true;
-        should_split_vertex[*v1 as usize] = true;
+        vertices_to_split.insert(edge.0[0]);
+        vertices_to_split.insert(edge.0[1]);
     }
 
     let (split_vertices, mut split_vertex_indices, duplicate_edges) = split_face_verts(
@@ -53,7 +65,7 @@ pub fn split_edges(
         face_starts,
         face_sizes,
         &old_adjacent_faces,
-        &should_split_vertex,
+        &vertices_to_split,
     );
 
     // Keep track of the new vertex adjacency while merging edges.
@@ -70,7 +82,7 @@ pub fn split_edges(
         face_starts,
         face_sizes,
         duplicate_edges,
-        undirected_edges,
+        edges_to_split,
         &old_adjacent_faces,
         &mut new_adjacent_faces,
     );
@@ -81,11 +93,11 @@ pub fn split_edges(
 }
 
 fn add_sharp_edges(
-    edges_to_split: &mut Vec<[u32; 2]>,
+    edges_to_split: &mut BTreeSet<UndirectedEdge>,
     vertex_indices: &[u32],
     face_starts: &[u32],
     face_sizes: &[u32],
-    adjacent_faces: &[BTreeSet<usize>],
+    adjacent_faces: &[BTreeSet<u32>],
     normals: Vec<Vec3>,
     angle_threshold: f32,
 ) {
@@ -100,9 +112,9 @@ fn add_sharp_edges(
 
             let mut faces = v0_faces.intersection(v1_faces).copied();
             if let (Some(f0), Some(f1)) = (faces.next(), faces.next())
-                && normals[f0].angle_between(normals[f1]) >= angle_threshold
+                && normals[f0 as usize].angle_between(normals[f1 as usize]) >= angle_threshold
             {
-                edges_to_split.push([v0, v1]);
+                edges_to_split.insert(UndirectedEdge::new(v0, v1));
             }
         }
     }
@@ -129,14 +141,14 @@ fn adjacent_faces<T>(
     vertex_indices: &[u32],
     face_starts: &[u32],
     face_sizes: &[u32],
-) -> Vec<BTreeSet<usize>> {
+) -> Vec<BTreeSet<u32>> {
     // TODO: Function and tests for this since it's shared with normals?
     // Assume the position indices are fully welded.
     // This simplifies calculating the adjacent face indices for each vertex.
     let mut adjacent_faces = vec![BTreeSet::new(); vertices.len()];
     for i in 0..face_starts.len() {
         for vi in face_indices(i, vertex_indices, face_starts, face_sizes) {
-            adjacent_faces[*vi as usize].insert(i);
+            adjacent_faces[*vi as usize].insert(i as u32);
         }
     }
     adjacent_faces
@@ -147,17 +159,19 @@ fn merge_duplicate_edges(
     vertex_indices: &[u32],
     face_starts: &[u32],
     face_sizes: &[u32],
-    duplicate_edges: BTreeSet<[u32; 2]>,
-    edges_to_split: BTreeSet<[u32; 2]>,
-    old_adjacent_faces: &[BTreeSet<usize>],
-    new_adjacent_faces: &mut [BTreeSet<usize>],
+    duplicate_edges: BTreeSet<UndirectedEdge>,
+    edges_to_split: BTreeSet<UndirectedEdge>,
+    old_adjacent_faces: &[BTreeSet<u32>],
+    new_adjacent_faces: &mut [BTreeSet<u32>],
 ) {
     // The splitting step can create lots of duplicate vertices.
     // Merge any of the duplicated edges that is not an edge to split.
-    for [v0, v1] in duplicate_edges
+    for edge in duplicate_edges
         .into_iter()
         .filter(|e| !edges_to_split.contains(e))
     {
+        let [v0, v1] = edge.0;
+
         // Find the faces indicent to this edge before splitting.
         let v0_faces = &old_adjacent_faces[v0 as usize];
         let v1_faces = &old_adjacent_faces[v1 as usize];
@@ -167,8 +181,8 @@ fn merge_duplicate_edges(
             merge_verts_in_faces(
                 v0,
                 v1,
-                f0,
-                f1,
+                f0 as usize,
+                f1 as usize,
                 vertex_indices,
                 face_starts,
                 face_sizes,
@@ -188,7 +202,7 @@ fn merge_verts_in_faces(
     face_starts: &[u32],
     face_sizes: &[u32],
     split_vertex_indices: &mut [u32],
-    new_adjacent_faces: &mut [BTreeSet<usize>],
+    new_adjacent_faces: &mut [BTreeSet<u32>],
 ) {
     // Merge an edge by merging both pairs of vertices.
     // We can find the matching vertices using the old indexing.
@@ -234,8 +248,8 @@ fn merge_verts_in_faces(
     let v0_faces = &new_adjacent_faces[v0_f0 as usize];
     let v1_faces = &new_adjacent_faces[v1_f0 as usize];
     for adjacent_face in v0_faces.iter().chain(v1_faces.iter()) {
-        let start = face_starts[*adjacent_face] as usize;
-        let size = face_sizes[*adjacent_face] as usize;
+        let start = face_starts[*adjacent_face as usize] as usize;
+        let size = face_sizes[*adjacent_face as usize] as usize;
         for i in start..start + size {
             if vertex_indices[i] == v0 {
                 split_vertex_indices[i] = v0_f0;
@@ -296,14 +310,14 @@ fn find_old_vertex_in_face(
         .unwrap()
 }
 
-fn split_face_verts<T: Copy>(
-    vertices: &[T],
+fn split_face_verts(
+    vertices: &[Vec3],
     vertex_indices: &[u32],
     face_starts: &[u32],
     face_sizes: &[u32],
-    adjacent_faces: &[BTreeSet<usize>],
-    should_split_vertex: &[bool],
-) -> (Vec<T>, Vec<u32>, BTreeSet<[u32; 2]>) {
+    adjacent_faces: &[BTreeSet<u32>],
+    vertices_to_split: &BTreeSet<u32>,
+) -> (Vec<Vec3>, Vec<u32>, BTreeSet<UndirectedEdge>) {
     // Split edges by duplicating the vertices.
     // This creates some duplicate edges to be cleaned up later.
     let mut split_vertices = vertices.to_vec();
@@ -312,13 +326,15 @@ fn split_face_verts<T: Copy>(
     let mut duplicate_edges = BTreeSet::new();
 
     // Iterate over all the indices of marked vertices.
-    for vertex_index in should_split_vertex
-        .iter()
-        .enumerate()
-        .filter_map(|(v, split)| split.then_some(v))
-    {
+    for vertex_index in vertices_to_split {
+        let vertex_index = *vertex_index as usize;
         for (i, f) in adjacent_faces[vertex_index].iter().enumerate() {
-            let face = face_indices_mut(*f, &mut split_vertex_indices, face_starts, face_sizes);
+            let face = face_indices_mut(
+                *f as usize,
+                &mut split_vertex_indices,
+                face_starts,
+                face_sizes,
+            );
 
             // Duplicate the vertex in all faces except the first.
             // The first face can just use the original index.
@@ -332,7 +348,7 @@ fn split_face_verts<T: Copy>(
             }
 
             // Find any edges that may need to be merged later.
-            let original_face = face_indices(*f, vertex_indices, face_starts, face_sizes);
+            let original_face = face_indices(*f as usize, vertex_indices, face_starts, face_sizes);
             let (e0, e1) = find_incident_edges(original_face, vertex_index);
 
             duplicate_edges.insert(e0);
@@ -343,19 +359,15 @@ fn split_face_verts<T: Copy>(
     (split_vertices, split_vertex_indices, duplicate_edges)
 }
 
-fn find_incident_edges(face: &[u32], vertex_index: usize) -> ([u32; 2], [u32; 2]) {
+fn find_incident_edges(face: &[u32], vertex_index: usize) -> (UndirectedEdge, UndirectedEdge) {
     // Assume edges are [0,1], ..., [N-1,0] for N vertices.
     let i = face.iter().position(|v| *v == vertex_index as u32).unwrap();
     let prev = if i > 0 { i - 1 } else { face.len() - 1 };
     let next = (i + 1) % face.len();
-    let mut e0 = [face[i], face[prev]];
-    let mut e1 = [face[i], face[next]];
-
     // Edges are undirected, so normalize the direction for each edge.
     // This avoids redundant merge operations later.
-    e0.sort();
-    e1.sort();
-
+    let e0 = UndirectedEdge::new(face[i], face[prev]);
+    let e1 = UndirectedEdge::new(face[i], face[next]);
     (e0, e1)
 }
 
