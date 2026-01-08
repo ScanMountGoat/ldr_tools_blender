@@ -12,6 +12,7 @@ base64 = "0.22.1"
 zip = "5.1.1"
 nom = "8.0.0"
 log = "0.4"
+tinyset = { version = "0.5.2", default-features = false }
 
 [dev-dependencies]
 indoc = "2"
