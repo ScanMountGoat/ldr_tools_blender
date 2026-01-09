@@ -102,6 +102,9 @@ fn add_sharp_edges(
     normals: Vec<Vec3>,
     angle_threshold: f32,
 ) {
+    // dot(a, b) == cos(a.angle_between(b)) for unit normals.
+    let threshold = angle_threshold.cos();
+
     for i in 0..face_starts.len() {
         let face = face_indices(i, vertex_indices, face_starts, face_sizes);
         for j in 0..face.len().saturating_sub(1) {
@@ -109,7 +112,7 @@ fn add_sharp_edges(
             let v1 = face[(j + 1) % face.len()];
             // Assume vertices are fully welded.
             if let Some((f0, f1)) = edge_faces(&adjacent_faces, v0, v1)
-                && normals[f0 as usize].angle_between(normals[f1 as usize]) >= angle_threshold
+                && normals[f0 as usize].dot(normals[f1 as usize]) < threshold
             {
                 edges_to_split.insert(UndirectedEdge::new(v0, v1));
             }
