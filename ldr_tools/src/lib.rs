@@ -125,11 +125,18 @@ impl IoFileResolver {
             if file_name.ends_with(".ldr") || file_name.ends_with(".dat") {
                 let contents = read_zip_file_contents(&mut archive, file_name.clone())?;
 
+                // TODO: Take LDraw path for the resolver instead?
                 if file_name == "model.ldr" {
                     // Resolving the .io file itself should resolve the main model file.
-                    io_files.insert(PathBuf::from(&io_path), contents.clone());
+                    io_files.insert(
+                        PathBuf::from(&LDrawPath::new(&io_path).normalized_name),
+                        contents.clone(),
+                    );
                 }
-                io_files.insert(PathBuf::from(file_name), contents);
+                io_files.insert(
+                    PathBuf::from(&LDrawPath::new(&file_name).normalized_name),
+                    contents,
+                );
             }
         }
 

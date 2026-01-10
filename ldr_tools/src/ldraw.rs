@@ -67,13 +67,7 @@ pub fn parse<P: AsRef<Path>, R: FileRefResolver>(
     // The provided path should refer to a file from the resolver.
     // Use the path directly without any normalization.
     let filename = path.as_ref().to_string_lossy().to_string();
-    let actual_root = load_file(
-        path,
-        LDrawPath::new(&filename),
-        resolver,
-        source_map,
-        &mut stack,
-    );
+    let actual_root = load_file(LDrawPath::new(&filename), resolver, source_map, &mut stack);
 
     // Recursively load files referenced by the root file.
     while let Some(file) = stack.pop() {
@@ -85,7 +79,7 @@ pub fn parse<P: AsRef<Path>, R: FileRefResolver>(
                 trace!("Not yet parsed; parsing sub-file: {filename}");
                 // Normalize file references to subfiles.
                 let subfile_ref = LDrawPath::new(filename);
-                load_subfile(subfile_ref, resolver, source_map, &mut stack);
+                load_file(subfile_ref, resolver, source_map, &mut stack);
             }
         }
     }
@@ -93,16 +87,16 @@ pub fn parse<P: AsRef<Path>, R: FileRefResolver>(
     actual_root
 }
 
-fn load_file<P: AsRef<Path>, R: FileRefResolver>(
-    path: P,
-    filename: LDrawPath,
+fn load_file<R: FileRefResolver>(
+    path: LDrawPath,
     resolver: &R,
     source_map: &mut SourceMap,
     stack: &mut Vec<FileRef>,
 ) -> String {
-    let raw_content = resolver.resolve(path).unwrap_or_else(|| {
+    // Resolve with the normalized path to work properly on Unix systems.
+    let raw_content = resolver.resolve(&path.normalized_name).unwrap_or_else(|| {
         // TODO: Is there a better way to allow partial imports with resolve errors?
-        error!("Unable to resolve {:?}", filename.name);
+        error!("Unable to resolve {path:?}");
         Vec::new()
     });
     let source_file = SourceFile {
@@ -110,17 +104,7 @@ fn load_file<P: AsRef<Path>, R: FileRefResolver>(
     };
 
     source_map.queue_subfiles(&source_file, stack);
-    source_map.insert(filename, source_file)
-}
-
-fn load_subfile<R: FileRefResolver>(
-    filename: LDrawPath,
-    resolver: &R,
-    source_map: &mut SourceMap,
-    stack: &mut Vec<FileRef>,
-) -> String {
-    let name = filename.clone();
-    load_file(&filename.name, name, resolver, source_map, stack)
+    source_map.insert(path, source_file)
 }
 
 /// [Line Type 0](https://www.ldraw.org/article/218.html#lt0) META command:

@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 * Improved import times.
 
+## Fixed
+* Fixed a regression introduced in 0.4.15 where importing would fail with multiple resolve errors on Linux and MacOS.
+
 ## 0.4.15 - 2026-01-05
 ### Changed
 * Changed importing to preserve the case of names of files and submodels instead of converting to all lowercase.
