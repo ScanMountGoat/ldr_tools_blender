@@ -70,6 +70,7 @@ pub fn split_edges(
     );
 
     // Keep track of the new vertex adjacency while merging edges.
+    // TODO: faster to clone adjacent_faces and modify during splitting?
     let mut new_adjacent_faces = adjacent_faces(
         &split_vertices,
         &split_vertex_indices,
@@ -89,7 +90,6 @@ pub fn split_edges(
     );
 
     // Reindex and keep only unique vertices to remove loose vertices.
-    // TODO: Why are there loose vertices?
     remove_loose_vertices(&split_vertices, &split_vertex_indices)
 }
 
@@ -111,7 +111,7 @@ fn add_sharp_edges(
             let v0 = face[j];
             let v1 = face[(j + 1) % face.len()];
             // Assume vertices are fully welded.
-            if let Some((f0, f1)) = edge_faces(&adjacent_faces, v0, v1)
+            if let Some((f0, f1)) = edge_faces(adjacent_faces, v0, v1)
                 && normals[f0 as usize].dot(normals[f1 as usize]) < threshold
             {
                 edges_to_split.insert(UndirectedEdge::new(v0, v1));
@@ -175,8 +175,8 @@ fn merge_duplicate_edges(
     {
         let [v0, v1] = edge.0;
 
-        // Find the faces indicent to this edge before splitting.
-        if let Some((f0, f1)) = edge_faces(&old_adjacent_faces, v0, v1) {
+        // Find the faces indicent to this edge in the fully welded mesh.
+        if let Some((f0, f1)) = edge_faces(old_adjacent_faces, v0, v1) {
             merge_verts_in_faces(
                 v0,
                 v1,
@@ -335,20 +335,22 @@ fn split_face_verts(
     for vertex_index in vertices_to_split {
         let vertex_index = *vertex_index as usize;
         for (i, f) in adjacent_faces[vertex_index].iter().enumerate() {
-            let face = face_indices_mut(
-                f as usize,
-                &mut split_vertex_indices,
-                face_starts,
-                face_sizes,
-            );
-
             // Duplicate the vertex in all faces except the first.
             // The first face can just use the original index.
             if i > 0 {
+                let new_vertex_index = split_vertices.len() as u32;
+                split_vertices.push(split_vertices[vertex_index]);
+
+                let face = face_indices_mut(
+                    f as usize,
+                    &mut split_vertex_indices,
+                    face_starts,
+                    face_sizes,
+                );
+
                 for face_vert in face.iter_mut() {
                     if *face_vert == vertex_index as u32 {
-                        *face_vert = split_vertices.len() as u32;
-                        split_vertices.push(split_vertices[vertex_index]);
+                        *face_vert = new_vertex_index;
                     }
                 }
             }
