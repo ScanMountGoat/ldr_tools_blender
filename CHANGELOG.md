@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## unreleased
+### Changed
+* Changed supported Blender version to 5.1 or later.
+
 ## 0.4.16 - 2026-01-10
 ### Changed
 * Improved import times.
