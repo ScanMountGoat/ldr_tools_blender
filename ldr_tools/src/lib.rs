@@ -92,8 +92,8 @@ impl FileRefResolver for DiskResolver {
 }
 
 struct IoFileResolver {
-    io_files: HashMap<LDrawPath, Vec<u8>>,
-    io_base_paths: Vec<LDrawPath>,
+    io_files: HashMap<PathBuf, Vec<u8>>,
+    io_base_paths: Vec<PathBuf>,
     resolver: DiskResolver,
 }
 
@@ -102,7 +102,19 @@ impl FileRefResolver for IoFileResolver {
         // The parts library in the .io file itself should take priority.
         self.io_base_paths
             .iter()
-            .find_map(|prefix| self.io_files.get(&prefix.join(filename)).cloned())
+            .find_map(|prefix| {
+                self.io_files
+                    .get(&prefix.join(&filename.normalized_name))
+                    .cloned()
+            })
+            .or_else(|| {
+                // Try without the folder like "part.dat" instead of "CustomParts/part.dat".
+                // This resolves some issues with case sensitivity in custom part paths.
+                let filename = Path::new(&filename.normalized_name).file_name()?;
+                self.io_base_paths
+                    .iter()
+                    .find_map(|prefix| self.io_files.get(&prefix.join(filename)).cloned())
+            })
             .or_else(|| self.resolver.resolve(filename))
     }
 }
@@ -125,9 +137,12 @@ impl IoFileResolver {
                 // TODO: Take LDraw path for the resolver instead?
                 if file_name == "model.ldr" {
                     // Resolving the .io file itself should resolve the main model file.
-                    io_files.insert(LDrawPath::new(&io_path), contents.clone());
+                    io_files.insert(
+                        LDrawPath::new(&io_path).normalized_name.into(),
+                        contents.clone(),
+                    );
                 }
-                io_files.insert(LDrawPath::new(&file_name), contents);
+                io_files.insert(LDrawPath::new(&file_name).normalized_name.into(), contents);
             }
         }
 
@@ -143,11 +158,6 @@ impl IoFileResolver {
             catalog_path.join("UnOfficial").join("parts").join("s"),
         ];
         add_p_resolution_paths(resolution, catalog_path, &mut io_base_paths);
-
-        let io_base_paths = io_base_paths
-            .into_iter()
-            .map(|p| LDrawPath::new(&p.to_string_lossy()))
-            .collect();
 
         Ok(Self {
             io_files,
