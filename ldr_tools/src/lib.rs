@@ -76,16 +76,14 @@ impl DiskResolver {
 }
 
 impl FileRefResolver for DiskResolver {
-    fn resolve<P: AsRef<Path>>(&self, filename: P) -> Option<Vec<u8>> {
-        let filename = filename.as_ref();
-
+    fn resolve(&self, filename: &LDrawPath) -> Option<Vec<u8>> {
         // Find the first folder that contains the given file.
         self.base_paths
             .iter()
-            .find_map(|prefix| std::fs::read(prefix.join(filename)).ok())
+            .find_map(|prefix| std::fs::read(prefix.join(&filename.normalized_name)).ok())
             .or_else(|| {
                 // Try without the folder like "part.dat" instead of "48/part.dat".
-                let filename = filename.file_name()?;
+                let filename = Path::new(&filename.normalized_name).file_name()?;
                 self.base_paths
                     .iter()
                     .find_map(|prefix| std::fs::read(prefix.join(filename)).ok())
@@ -94,18 +92,18 @@ impl FileRefResolver for DiskResolver {
 }
 
 struct IoFileResolver {
-    io_files: HashMap<PathBuf, Vec<u8>>,
-    io_base_paths: Vec<PathBuf>,
+    io_files: HashMap<LDrawPath, Vec<u8>>,
+    io_base_paths: Vec<LDrawPath>,
     resolver: DiskResolver,
 }
 
 impl FileRefResolver for IoFileResolver {
-    fn resolve<P: AsRef<Path>>(&self, filename: P) -> Option<Vec<u8>> {
+    fn resolve(&self, filename: &LDrawPath) -> Option<Vec<u8>> {
         // The parts library in the .io file itself should take priority.
         self.io_base_paths
             .iter()
-            .find_map(|prefix| self.io_files.get(&prefix.join(filename.as_ref())).cloned())
-            .or_else(|| self.resolver.resolve(filename.as_ref()))
+            .find_map(|prefix| self.io_files.get(&prefix.join(filename)).cloned())
+            .or_else(|| self.resolver.resolve(filename))
     }
 }
 
@@ -118,7 +116,6 @@ impl IoFileResolver {
         let zip_file = File::open(&io_path)?;
         let mut archive = ZipArchive::new(BufReader::new(zip_file))?;
 
-        // The "CustomParts" folder serves as an additional LDRAW library.
         let mut io_files = HashMap::new();
         let file_names: Vec<_> = archive.file_names().map(|n| n.to_string()).collect();
         for file_name in file_names {
@@ -128,18 +125,13 @@ impl IoFileResolver {
                 // TODO: Take LDraw path for the resolver instead?
                 if file_name == "model.ldr" {
                     // Resolving the .io file itself should resolve the main model file.
-                    io_files.insert(
-                        PathBuf::from(&LDrawPath::new(&io_path).normalized_name),
-                        contents.clone(),
-                    );
+                    io_files.insert(LDrawPath::new(&io_path), contents.clone());
                 }
-                io_files.insert(
-                    PathBuf::from(&LDrawPath::new(&file_name).normalized_name),
-                    contents,
-                );
+                io_files.insert(LDrawPath::new(&file_name), contents);
             }
         }
 
+        // The "CustomParts" folder serves as an additional LDRAW library.
         let catalog_path = Path::new("CustomParts");
         let mut io_base_paths = vec![
             catalog_path.to_path_buf(),
@@ -151,6 +143,11 @@ impl IoFileResolver {
             catalog_path.join("UnOfficial").join("parts").join("s"),
         ];
         add_p_resolution_paths(resolution, catalog_path, &mut io_base_paths);
+
+        let io_base_paths = io_base_paths
+            .into_iter()
+            .map(|p| LDrawPath::new(&p.to_string_lossy()))
+            .collect();
 
         Ok(Self {
             io_files,

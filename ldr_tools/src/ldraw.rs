@@ -37,12 +37,12 @@ struct FileRef {
 /// up populating the given `source_map`, which can be pre-populated manually or from a
 /// previous call with already loaded and parsed files.
 /// ```rust
-/// use ldr_tools::ldraw::{FileRefResolver, parse, SourceMap};
+/// use ldr_tools::ldraw::{FileRefResolver, LDrawPath, parse, SourceMap};
 ///
 /// struct MyCustomResolver;
 ///
 /// impl FileRefResolver for MyCustomResolver {
-///   fn resolve<P: AsRef<std::path::Path>>(&self, filename: P) -> Option<Vec<u8>> {
+///   fn resolve(&self, filename: &LDrawPath) -> Option<Vec<u8>> {
 ///     Some(Vec::new()) // replace with custom impl
 ///   }
 /// }
@@ -94,7 +94,7 @@ fn load_file<R: FileRefResolver>(
     stack: &mut Vec<FileRef>,
 ) -> String {
     // Resolve with the normalized path to work properly on Unix systems.
-    let raw_content = resolver.resolve(&path.normalized_name).unwrap_or_else(|| {
+    let raw_content = resolver.resolve(&path).unwrap_or_else(|| {
         // TODO: Is there a better way to allow partial imports with resolve errors?
         error!("Unable to resolve {path:?}");
         Vec::new()
@@ -266,6 +266,10 @@ impl LDrawPath {
             name: s.to_string(),
             normalized_name: normalize_subfile_reference(s),
         }
+    }
+
+    pub fn join(&self, path: &Self) -> Self {
+        Self::new(&Path::new(&self.name).join(&path.name).to_string_lossy())
     }
 }
 
@@ -581,7 +585,7 @@ pub trait FileRefResolver {
     /// Unix style `\n` or Windows style `\r\n`.
     ///
     /// See [`parse()`] for usage.
-    fn resolve<P: AsRef<Path>>(&self, filename: P) -> Option<Vec<u8>>;
+    fn resolve(&self, filename: &LDrawPath) -> Option<Vec<u8>>;
 }
 
 impl Transform {
