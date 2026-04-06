@@ -92,7 +92,7 @@ impl FileRefResolver for DiskResolver {
 }
 
 struct IoFileResolver {
-    io_files: HashMap<PathBuf, Vec<u8>>,
+    io_files: HashMap<LDrawPath, Vec<u8>>,
     io_base_paths: Vec<PathBuf>,
     resolver: DiskResolver,
 }
@@ -104,16 +104,17 @@ impl FileRefResolver for IoFileResolver {
             .iter()
             .find_map(|prefix| {
                 self.io_files
-                    .get(&prefix.join(&filename.normalized_name))
+                    .get(&LDrawPath::new(&prefix.to_string_lossy()).join(&filename))
                     .cloned()
             })
             .or_else(|| {
                 // Try without the folder like "part.dat" instead of "CustomParts/part.dat".
                 // This resolves some issues with case sensitivity in custom part paths.
-                let filename = Path::new(&filename.normalized_name).file_name()?;
-                self.io_base_paths
-                    .iter()
-                    .find_map(|prefix| self.io_files.get(&prefix.join(filename)).cloned())
+                self.io_base_paths.iter().find_map(|prefix| {
+                    self.io_files
+                        .get(&LDrawPath::new(&prefix.to_string_lossy()).join(filename))
+                        .cloned()
+                })
             })
             .or_else(|| self.resolver.resolve(filename))
     }
@@ -137,12 +138,9 @@ impl IoFileResolver {
                 // TODO: Take LDraw path for the resolver instead?
                 if file_name == "model.ldr" {
                     // Resolving the .io file itself should resolve the main model file.
-                    io_files.insert(
-                        LDrawPath::new(&io_path).normalized_name.into(),
-                        contents.clone(),
-                    );
+                    io_files.insert(LDrawPath::new(&io_path), contents.clone());
                 }
-                io_files.insert(LDrawPath::new(&file_name).normalized_name.into(), contents);
+                io_files.insert(LDrawPath::new(&file_name), contents);
             }
         }
 
