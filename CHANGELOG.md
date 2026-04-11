@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## unreleased
 ### Fixed
 * Fixed an issue where Studio .io file custom parts would not import in some cases due to incorrect path handling.
+* Fixed an issue where parts that referenced different resolution primitives than the current import settings would not import correctly.
 
 ## 0.5.0 - 2026-03-17
 ### Changed

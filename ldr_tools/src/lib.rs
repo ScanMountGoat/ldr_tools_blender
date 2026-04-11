@@ -64,7 +64,8 @@ impl DiskResolver {
             catalog_path.join("UnOfficial").join("parts").join("s"),
             catalog_path.join("LEGO"),
         ];
-        add_p_resolution_paths(resolution, &catalog_path, &mut base_paths);
+        add_p_resolution_paths(resolution, &catalog_path, &mut base_paths, true);
+        base_paths.push(catalog_path.join("p").join("48"));
 
         // Users may want to specify additional folders for parts.
         for path in additional_paths {
@@ -155,7 +156,8 @@ impl IoFileResolver {
             catalog_path.join("UnOfficial").join("parts"),
             catalog_path.join("UnOfficial").join("parts").join("s"),
         ];
-        add_p_resolution_paths(resolution, catalog_path, &mut io_base_paths);
+        // TODO: should embedded io files also use resolution fallbacks?
+        add_p_resolution_paths(resolution, catalog_path, &mut io_base_paths, false);
 
         Ok(Self {
             io_files,
@@ -169,20 +171,28 @@ fn add_p_resolution_paths(
     resolution: PrimitiveResolution,
     catalog_path: &Path,
     base_paths: &mut Vec<PathBuf>,
+    add_fallbacks: bool,
 ) {
+    // Insert at the front since earlier elements take priority.
+    // Keep the other resolution as a fallback.
     match resolution {
         PrimitiveResolution::Low => {
-            // Insert at the front since earlier elements take priority.
-            // TODO: Keep the other resolution as a fallback?
             base_paths.insert(0, catalog_path.join("p").join("8"));
+            if add_fallbacks {
+                base_paths.push(catalog_path.join("p").join("48"));
+            }
         }
         PrimitiveResolution::Normal => {
-            // TODO: Keep the other resolutions as a fallback?
+            if add_fallbacks {
+                base_paths.push(catalog_path.join("p").join("48"));
+                base_paths.push(catalog_path.join("p").join("8"));
+            }
         }
         PrimitiveResolution::High => {
-            // Insert at the front since earlier elements take priority.
-            // TODO: Keep the other resolution as a fallback?
             base_paths.insert(0, catalog_path.join("p").join("48"));
+            if add_fallbacks {
+                base_paths.push(catalog_path.join("p").join("8"));
+            }
         }
     }
 }
