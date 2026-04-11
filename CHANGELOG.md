@@ -3,7 +3,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## unreleased
+## 0.5.1 - 2026-04-11
 ### Fixed
 * Fixed an issue where Studio .io file custom parts would not import in some cases due to incorrect path handling.
 * Fixed an issue where parts that referenced different resolution primitives than the current import settings would not import correctly.
