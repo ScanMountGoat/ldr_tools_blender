@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-import os
 import json
-import bpy
-from bpy.props import StringProperty, EnumProperty, BoolProperty, FloatProperty
-from bpy_extras.io_utils import ImportHelper
+import logging
+import os
+import platform
 import typing
 from typing import Any, Self
-import platform
-import logging
+
+import bpy
+from bpy.props import BoolProperty, EnumProperty, FloatProperty, StringProperty
+from bpy_extras.io_utils import ImportHelper
 
 from .importldr import import_ldraw
 

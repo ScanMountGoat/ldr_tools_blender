@@ -6,35 +6,34 @@ if typing.TYPE_CHECKING:
 else:
     from .ldr_tools_py import LDrawColor
 
-from .colors import rgb_peeron_by_code, rgb_ldr_tools_by_code
-from .node_dsl import NodeGraph, GraphNode, NodeInput, ShaderGraph
-
 import bpy
-
 from bpy.types import (
     Material,
-    NodeTree,
-    ShaderNodeTree,
-    NodeSocketFloat,
-    NodeSocketVector,
     NodeGroupInput,
     NodeGroupOutput,
-    ShaderNodeBevel,
-    ShaderNodeTexCoord,
-    ShaderNodeTexNoise,
-    ShaderNodeBump,
-    ShaderNodeMapRange,
-    ShaderNodeBsdfPrincipled,
+    NodeSocketFloat,
+    NodeSocketVector,
+    NodeTree,
     ShaderNodeAttribute,
+    ShaderNodeBevel,
+    ShaderNodeBsdfPrincipled,
+    ShaderNodeBump,
+    ShaderNodeGroup,
+    ShaderNodeMapRange,
     ShaderNodeMath,
     ShaderNodeMix,
     ShaderNodeOutputMaterial,
     ShaderNodeSeparateXYZ,
-    ShaderNodeGroup,
+    ShaderNodeTexCoord,
     ShaderNodeTexImage,
-    ShaderNodeVectorTransform,
+    ShaderNodeTexNoise,
+    ShaderNodeTree,
     ShaderNodeVectorMath,
+    ShaderNodeVectorTransform,
 )
+
+from .colors import rgb_ldr_tools_by_code, rgb_peeron_by_code
+from .node_dsl import GraphNode, NodeGraph, NodeInput, ShaderGraph
 
 # Materials are based on the techniques described in the following blog posts.
 # This covers how to create lego shaders with realistic surface detailing.

@@ -1,4 +1,5 @@
 import bpy
+
 from . import operator
 
 bl_info = {

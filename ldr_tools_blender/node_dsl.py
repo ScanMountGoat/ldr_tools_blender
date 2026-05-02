@@ -1,22 +1,22 @@
 from __future__ import annotations
 
 from typing import (
-    TypeVar,
-    Generic,
-    TypeAlias,
-    Iterable,
     Callable,
+    Generic,
+    Iterable,
+    TypeAlias,
+    TypeVar,
     overload,
 )
 
 import bpy.types
 from bpy.types import (
-    NodeTree,
     Node,
     NodeSocket,
-    ShaderNodeTree,
-    ShaderNodeMath,
+    NodeTree,
     ShaderNodeGroup,
+    ShaderNodeMath,
+    ShaderNodeTree,
 )
 
 X = TypeVar("X")
@@ -125,7 +125,7 @@ def _get_default_output(node: Node) -> NodeSocket:
 
 
 def _iter_items(
-    collection: list[X] | dict[str | int, X]
+    collection: list[X] | dict[str | int, X],
 ) -> Iterable[tuple[str | int, X]]:
     if isinstance(collection, list):
         return enumerate(collection)

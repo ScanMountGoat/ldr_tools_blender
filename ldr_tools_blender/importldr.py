@@ -1,45 +1,44 @@
-import bpy
-import numpy as np
-import mathutils
+import itertools
 import math
 import struct
 import typing
-import itertools
 
+import bpy
+import mathutils
+import numpy as np
 from bpy.types import (
-    Mesh,
-    NodesModifier,
-    GeometryNodeTree,
-    NodeSocketGeometry,
-    NodeGroupInput,
-    NodeGroupOutput,
-    GeometryNodeObjectInfo,
+    FunctionNodeAxisAngleToRotation,
     GeometryNodeInputNamedAttribute,
     GeometryNodeInstanceOnPoints,
-    FunctionNodeAxisAngleToRotation,
+    GeometryNodeObjectInfo,
+    GeometryNodeTree,
+    Mesh,
+    NodeGroupInput,
+    NodeGroupOutput,
+    NodesModifier,
+    NodeSocketGeometry,
 )
 
 if typing.TYPE_CHECKING:
     import ldr_tools_py
     from ldr_tools_py import (
-        LDrawNode,
-        LDrawGeometry,
-        LDrawColor,
         GeometrySettings,
+        LDrawColor,
+        LDrawGeometry,
+        LDrawNode,
         LDrawPath,
     )
 else:
     from . import ldr_tools_py
     from .ldr_tools_py import (
-        LDrawNode,
-        LDrawGeometry,
-        LDrawColor,
         GeometrySettings,
+        LDrawColor,
+        LDrawGeometry,
+        LDrawNode,
         LDrawPath,
     )
 
 from .material import get_material
-
 from .node_dsl import NodeGraph
 
 
