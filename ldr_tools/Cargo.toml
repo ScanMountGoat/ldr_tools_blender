@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-glam = "0.30.3"
+glam = "0.32.1"
 rayon = "1.7.0"
 phf =  { version = "0.13.1", features = ["macros"] }
 tracing = "0.1"

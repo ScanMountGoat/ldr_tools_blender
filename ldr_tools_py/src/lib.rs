@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 
 macro_rules! python_enum {
     ($py_ty:ident, $rust_ty:ty, $( $i:ident ),+) => {
-        #[pyclass(eq, eq_int)]
+        #[pyclass(eq, eq_int, from_py_object)]
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         pub enum $py_ty {
             $($i),*
@@ -78,7 +78,7 @@ mod ldr_tools_py {
     #[pymodule_export]
     use super::PrimitiveResolution;
 
-    #[pyclass(get_all)]
+    #[pyclass(get_all, from_py_object)]
     #[derive(Debug, Clone, MapPy)]
     #[map(ldr_tools::LDrawNode)]
     pub struct LDrawNode {
@@ -89,7 +89,7 @@ mod ldr_tools_py {
         children: TypedList<LDrawNode>,
     }
 
-    #[pyclass(eq, frozen, hash)]
+    #[pyclass(eq, frozen, hash, from_py_object)]
     #[derive(Debug, PartialEq, Eq, Hash, Clone, MapPy)]
     #[map(ldr_tools::LDrawPath)]
     pub struct LDrawPath(ldr_tools::LDrawPath);
@@ -107,14 +107,14 @@ mod ldr_tools_py {
         }
     }
 
-    #[pyclass(get_all)]
+    #[pyclass(get_all, from_py_object)]
     #[derive(Debug, Clone)]
     pub struct LDrawScene {
         pub root_node: LDrawNode,
         pub geometry_cache: HashMap<LDrawPath, LDrawGeometry>,
     }
 
-    #[pyclass(get_all)]
+    #[pyclass(get_all, from_py_object)]
     #[derive(Debug, Clone)]
     pub struct LDrawSceneInstanced {
         pub main_model_name: String,
@@ -122,7 +122,7 @@ mod ldr_tools_py {
         pub geometry_cache: HashMap<LDrawPath, LDrawGeometry>,
     }
 
-    #[pyclass(get_all)]
+    #[pyclass(get_all, from_py_object)]
     #[derive(Debug, Clone)]
     pub struct LDrawSceneInstancedPoints {
         pub main_model_name: String,
@@ -131,7 +131,7 @@ mod ldr_tools_py {
     }
 
     // Use numpy arrays for reduced overhead.
-    #[pyclass(get_all)]
+    #[pyclass(get_all, from_py_object)]
     #[derive(Debug, Clone, MapPy)]
     #[map(ldr_tools::LDrawGeometry)]
     pub struct LDrawGeometry {
@@ -146,7 +146,7 @@ mod ldr_tools_py {
         texture_info: Option<LDrawTextureInfo>,
     }
 
-    #[pyclass(get_all)]
+    #[pyclass(get_all, from_py_object)]
     #[derive(Debug, Clone, MapPy)]
     #[map(ldr_tools::LDrawTextureInfo)]
     pub struct LDrawTextureInfo {
@@ -155,7 +155,7 @@ mod ldr_tools_py {
         uvs: Py<PyArray2<f32>>,
     }
 
-    #[pyclass(get_all)]
+    #[pyclass(get_all, from_py_object)]
     #[derive(Debug, Clone, MapPy)]
     #[map(ldr_tools::LDrawColor)]
     pub struct LDrawColor {
@@ -165,7 +165,7 @@ mod ldr_tools_py {
         speckle_rgba_linear: Option<[f32; 4]>,
     }
 
-    #[pyclass(get_all, set_all)]
+    #[pyclass(get_all, set_all, from_py_object)]
     #[derive(Debug, Clone, MapPy)]
     #[map(ldr_tools::GeometrySettings)]
     pub struct GeometrySettings {
@@ -185,7 +185,7 @@ mod ldr_tools_py {
         }
     }
 
-    #[pyclass(get_all, set_all)]
+    #[pyclass(get_all, set_all, from_py_object)]
     #[derive(Debug, Clone, MapPy)]
     #[map(ldr_tools::PointInstances)]
     pub struct PointInstances {

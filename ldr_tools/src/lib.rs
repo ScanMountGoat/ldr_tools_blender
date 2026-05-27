@@ -105,7 +105,7 @@ impl FileRefResolver for IoFileResolver {
             .iter()
             .find_map(|prefix| {
                 self.io_files
-                    .get(&LDrawPath::new(&prefix.to_string_lossy()).join(&filename))
+                    .get(&LDrawPath::new(&prefix.to_string_lossy()).join(filename))
                     .cloned()
             })
             .or_else(|| {
