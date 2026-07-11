@@ -80,10 +80,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install maturin
     - name: Install Rust Toolchain
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: stable
-        target: ${{matrix.target}}
+        targets: ${{matrix.target}}
     - name: Build
       run: |
         cd ldr_tools_py 
