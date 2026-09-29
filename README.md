@@ -4,21 +4,21 @@
 
 > Cycles render of [10179-1 Millennium Falcon UCS (LDraw OMR)](https://omr.ldraw.org/files/347)
 
-An addon for importing LDraw and Studio files into Blender 4.1 or later. Check out [discussions](https://github.com/ScanMountGoat/ldr_tools_blender/discussions) for reading announcements, asking questions, or discussing new features. Report bugs or request new features in [issues](https://github.com/ScanMountGoat/ldr_tools_blender/issues). Download the latest version from [releases](https://github.com/ScanMountGoat/ldr_tools_blender/releases).
+An addon for importing LDraw and Studio files into Blender 5.1 or later. Check out [discussions](https://github.com/ScanMountGoat/ldr_tools_blender/discussions) for reading announcements, asking questions, or discussing new features. Report bugs or request new features in [issues](https://github.com/ScanMountGoat/ldr_tools_blender/issues). Download the latest version from [releases](https://github.com/ScanMountGoat/ldr_tools_blender/releases).
 
 ## Features
 The goal of this project is to provided a reliable and performant way to import digital LEGO models into modern versions of Blender for rendering. This includes importing and rendering [Bricklink Studio](https://www.bricklink.com/v3/studio/download.page) models or models built with [LDraw editing programs](https://www.ldraw.org/downloads-2/third-party-software.html). 
 
 * Compatible with LDR and MPD files. If you have a file that doesn't open correctly or an LDraw extension you'd like supported, please report it in [issues](https://github.com/ScanMountGoat/ldr_tools_blender/issues).
-* Compatible with newer versions of Bricklink Studio .io files.
+* Compatible with newer versions of BrickLink Studio .io files.
 * Easily load LEGO models with hundreds of thousands of parts. For extremely large scenes, see [performance](#performance).
 * Create photorealistic renders taking full advantage of Blender Cycles with generated materials with accurate colors and procedurally generated surface detail. 
 
 ## Bricklink Studio Compatibility
-Bricklink Studio models from newer versions of the program can be imported directly from .io files. Older Studio models that fail to import as .io files should be resaved with a newer version of Studio. This avoids an issue with password protection on older .io files. Studio can also export files as LDraw under File > Export As before importing into Blender. 
+BrickLink Studio models from newer versions of the program can be imported directly from .io files. Older Studio models that fail to import as .io files should be resaved with a newer version of Studio. This avoids an issue with password protection on older .io files. Studio can also export files as LDraw under File > Export As before importing into Blender. 
 
 ## Getting Started
-1. Install the [LDraw parts library](https://www.ldraw.org/help/getting-started.html) if you haven't already. Bricklink Studio bundles its own LDraw library and should be detected automatically by the addon.
+1. Install the [LDraw parts library](https://www.ldraw.org/help/getting-started.html) if you haven't already. BrickLink Studio bundles its own LDraw library and should be detected automatically by the addon.
 2. Download the appropriate version of the addon for your system from [releases](https://github.com/ScanMountGoat/ldr_tools_blender/releases). For older Blender versions, download one of the previous releases.
 3. In Blender, navigate to Edit > Preferences > Addon and click Install. Select the zip downloaded in step 2. Do not extract the zip file!
 4. The addons menu should now allow you to check the ldr_tools_blender addon to enable it.
@@ -50,6 +50,7 @@ The Blender addon for importing LDraw files making use of ldr_tools_py. This is 
 
 ## Building
 The easiest way to see the steps used to create a new release is to check the [release.yaml](https://github.com/ScanMountGoat/ldr_tools_blender/blob/main/.github/workflows/release.yml) script that runs using Github actions. See [development](https://github.com/ScanMountGoat/ldr_tools_blender/blob/main/DEVELOPMENT.md) for working on your personal machine.  See [contributing](https://github.com/ScanMountGoat/ldr_tools_blender/blob/main/CONTRIBUTING.md) for contributing to this project.
+
 ## Copyrights
 LDraw™ is a trademark owned and licensed by the Jessiman Estate, which does not sponsor, endorse, or authorize this project.  
 
