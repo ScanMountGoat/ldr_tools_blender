@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## unreleased
+### Fixed
+* Fixed an issue where Studio .io file custom parts would not import in some cases and crash Blender.
+
 ## 0.5.1 - 2026-04-11
 ### Fixed
 * Fixed an issue where Studio .io file custom parts would not import in some cases due to incorrect path handling.

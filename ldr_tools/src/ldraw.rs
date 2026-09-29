@@ -331,12 +331,19 @@ impl SourceMap {
         if files.is_empty() {
             filename.name
         } else {
-            // The first block is the "main model" of the file.
-            let main_model_name = files[0].0.clone();
-            for (name, file) in files {
-                self.source_files.insert(LDrawPath::new(&name), file);
+            if files.len() == 1 && files[0].0 != filename.normalized_name {
+                // Check if file contains a single file with a different name.
+                // This avoids cases where a file loads itself as a subfile.
+                // Keep the file path name to avoid cycles when loading.
+                filename.name
+            } else {
+                // The first block is the "main model" of the file.
+                let main_model_name = files[0].0.clone();
+                for (name, file) in files {
+                    self.source_files.insert(LDrawPath::new(&name), file);
+                }
+                main_model_name
             }
-            main_model_name
         }
     }
 
@@ -1055,5 +1062,87 @@ mod tests {
             SourceFile { cmds: Vec::new() },
         );
         assert!(source_map.get("a/b/c/d.dat").is_some());
+    }
+
+    #[test]
+    fn test_source_map_insert_potential_subfile_cycle() {
+        // Avoid creating an infinite loop loading 32133.dat.
+        let data = b"0 FILE 32133.dat
+        0 Projectile Arrow, Liftarm Shaft with Solid Lime Rubber End
+        0 Name: 32133
+        0 Author: Marc Klein [marckl]
+        0 FlexibleBrickControlPointUnitLength -1
+        0 FlexibleBrickLockedControlPoint 
+        1 16 0.0 0.0 0.0 0.0 1.0 0.0 1.0 0.0 0.0 0.0 0.0 -1.0 32133.dat
+        1 16 0.0 0.0 -65.0 0.0 1.0 0.0 1.0 0.0 0.0 0.0 0.0 -1.0 32080.dat
+        1 256 0.0 0.0 -61.0 0.0 1.0 0.0 1.0 0.0 0.0 0.0 0.0 -1.0 32134.dat
+        0 NOFILE";
+        let source_file = SourceFile {
+            cmds: parse_commands(data),
+        };
+
+        let mut source_map = SourceMap::new();
+        source_map.insert(LDrawPath::new("76110.dat"), source_file);
+        assert_eq!(
+            source_map.source_files,
+            [(
+                LDrawPath::new("76110.dat"),
+                SourceFile {
+                    cmds: vec![
+                        Command::File(FileCmd {
+                            file: "32133.dat".to_string()
+                        }),
+                        Command::Comment(CommentCmd {
+                            text: "Projectile Arrow, Liftarm Shaft with Solid Lime Rubber End"
+                                .to_string(),
+                        }),
+                        Command::Comment(CommentCmd {
+                            text: "Name: 32133".to_string(),
+                        }),
+                        Command::Comment(CommentCmd {
+                            text: "Author: Marc Klein [marckl]".to_string(),
+                        }),
+                        Command::Comment(CommentCmd {
+                            text: "FlexibleBrickControlPointUnitLength -1".to_string(),
+                        }),
+                        Command::Comment(CommentCmd {
+                            text: "FlexibleBrickLockedControlPoint ".to_string(),
+                        }),
+                        Command::SubFileRef(SubFileRefCmd {
+                            color: 16,
+                            transform: Transform {
+                                pos: vec3(0.0, 0.0, 0.0),
+                                row0: vec3(0.0, 1.0, 0.0),
+                                row1: vec3(1.0, 0.0, 0.0),
+                                row2: vec3(0.0, 0.0, -1.0),
+                            },
+                            file: "32133.dat".to_string(),
+                        }),
+                        Command::SubFileRef(SubFileRefCmd {
+                            color: 16,
+                            transform: Transform {
+                                pos: vec3(0.0, 0.0, -65.0),
+                                row0: vec3(0.0, 1.0, 0.0),
+                                row1: vec3(1.0, 0.0, 0.0),
+                                row2: vec3(0.0, 0.0, -1.0),
+                            },
+                            file: "32080.dat".to_string(),
+                        }),
+                        Command::SubFileRef(SubFileRefCmd {
+                            color: 256,
+                            transform: Transform {
+                                pos: vec3(0.0, 0.0, -61.0),
+                                row0: vec3(0.0, 1.0, 0.0),
+                                row1: vec3(1.0, 0.0, 0.0),
+                                row2: vec3(0.0, 0.0, -1.0),
+                            },
+                            file: "32134.dat".to_string(),
+                        }),
+                        Command::NoFile,
+                    ]
+                }
+            )]
+            .into()
+        );
     }
 }
