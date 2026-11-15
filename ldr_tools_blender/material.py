@@ -422,7 +422,7 @@ def object_scale_node_group(graph: ShaderGraph) -> None:
         vector_type="VECTOR",
         convert_from="OBJECT",
         convert_to="WORLD",
-        inputs=[(1.0, 0.0, 0.0)],
+        inputs={"Vector": (1.0, 0.0, 0.0)},
     )
     transform.node.location = (0, 0)
 
