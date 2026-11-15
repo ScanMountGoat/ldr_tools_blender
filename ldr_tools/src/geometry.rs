@@ -600,16 +600,9 @@ mod tests {
     use glam::vec3;
     use indoc::indoc;
 
+    #[derive(Default)]
     struct DummyResolver {
         files: HashMap<&'static str, Vec<u8>>,
-    }
-
-    impl DummyResolver {
-        fn new() -> Self {
-            Self {
-                files: HashMap::new(),
-            }
-        }
     }
 
     impl crate::ldraw::FileRefResolver for DummyResolver {
@@ -645,7 +638,7 @@ mod tests {
             4 5 -1 -1 0 -1 1 0 -1 1 0 1 1 0
         "};
 
-        let mut resolver = DummyResolver::new();
+        let mut resolver = DummyResolver::default();
         resolver.files.insert("root", document.as_bytes().to_vec());
 
         let main_model_name = crate::ldraw::parse("root", &resolver, &mut source_map);
@@ -684,7 +677,7 @@ mod tests {
             3 16 1 0 0 0 1 0 0 0 1
         "};
 
-        let mut resolver = DummyResolver::new();
+        let mut resolver = DummyResolver::default();
         resolver.files.insert("root", document.as_bytes().to_vec());
 
         let main_model_name = crate::ldraw::parse("root", &resolver, &mut source_map);
@@ -716,7 +709,7 @@ mod tests {
             3 16 1 0 0 0 1 0 0 0 1
         "};
 
-        let mut resolver = DummyResolver::new();
+        let mut resolver = DummyResolver::default();
         resolver.files.insert("root", document.as_bytes().to_vec());
 
         let main_model_name = crate::ldraw::parse("root", &resolver, &mut source_map);
@@ -759,7 +752,7 @@ mod tests {
             3 16 1 0 0 0 1 0 0 0 1
         "};
 
-        let mut resolver = DummyResolver::new();
+        let mut resolver = DummyResolver::default();
         resolver.files.insert("root", document.as_bytes().to_vec());
 
         let main_model_name = crate::ldraw::parse("root", &resolver, &mut source_map);

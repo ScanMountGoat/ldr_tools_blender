@@ -131,7 +131,10 @@ impl IoFileResolver {
         let mut archive = ZipArchive::new(BufReader::new(zip_file))?;
 
         let mut io_files = HashMap::new();
-        let file_names: Vec<_> = archive.file_names().map(|n| n.to_string()).collect();
+        let file_names: Vec<_> = archive
+            .file_names()
+            .filter_map(|n| n.ok().map(|n| n.to_string()))
+            .collect();
         for file_name in file_names {
             if file_name.ends_with(".ldr") || file_name.ends_with(".dat") {
                 let contents = read_zip_file_contents(&mut archive, file_name.clone())?;
@@ -332,6 +335,8 @@ pub fn load_file(
         CURRENT_COLOR,
         settings,
     );
+
+    // TODO: detect cycles?
 
     let geometry_cache = create_geometry_cache(geometry_descriptors, &source_map, settings);
 
@@ -591,6 +596,8 @@ pub fn load_file_instanced(
         CURRENT_COLOR,
         settings,
     );
+
+    // TODO: detect cycles?
 
     let geometry_cache = create_geometry_cache(geometry_descriptors, &source_map, settings);
 
